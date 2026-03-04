@@ -1,0 +1,52 @@
+# ============================================================
+#  360도 Virtual Staging 파이프라인 의존성
+#  환경: RTX 4060 Ti (8GB VRAM), CUDA 12.1, Python 3.10+
+# ============================================================
+
+# ── Step 1: PyTorch (CUDA 12.1 빌드) ─────────────────────────
+#  아래 명령어로 먼저 설치 (requirements.txt 와 별도로 실행):
+#
+#    pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+#
+#  이후 나머지 패키지를 설치:
+#    pip install -r requirements.txt
+#
+# PyPI 에서 CUDA 빌드를 자동 선택하려면:
+#    pip install torch torchvision --extra-index-url https://download.pytorch.org/whl/cu121
+# ─────────────────────────────────────────────────────────────
+torch>=2.1.0
+torchvision>=0.16.0
+
+# ── Diffusers 생태계 ─────────────────────────────────────────
+# diffusers: StableDiffusionInpaintPipeline, LoRA 로드
+diffusers>=0.27.0
+
+# transformers: CLIP 텍스트 인코더, 토크나이저
+transformers>=4.38.0
+
+# accelerate: enable_model_cpu_offload() 의존성
+accelerate>=0.28.0
+
+# safetensors: .safetensors 형식 LoRA / 모델 가중치 로드
+safetensors>=0.4.2
+
+# peft: LoRA 어댑터 관리 (set_adapters, adapter_weights)
+peft>=0.10.0
+
+# ── xformers (선택 권장: VRAM ~30% 추가 절감) ──────────────────
+#  PyTorch 버전과 정확히 일치하는 빌드가 필요하다.
+#  설치 명령:
+#    pip install xformers --index-url https://download.pytorch.org/whl/cu121
+#
+#  설치되지 않아도 파이프라인은 동작하며 로그에 경고만 출력된다.
+xformers>=0.0.24
+
+# ── 이미지 처리 ─────────────────────────────────────────────
+# opencv-python: 등장방형도법 ↔ 큐브맵 변환 (cv2.remap)
+opencv-python>=4.9.0
+
+# Pillow: SD 파이프라인 이미지 입출력 (PIL.Image)
+Pillow>=10.2.0
+
+# numpy: 벡터화 좌표 변환 / 보간 연산
+numpy>=1.26.0
