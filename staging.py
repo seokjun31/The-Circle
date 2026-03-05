@@ -73,8 +73,17 @@ class StagingPipeline:
         # ── VRAM 최적화 1: CPU 오프로드 ──────────────────────────────
         # UNet/VAE/TextEncoder 를 필요할 때만 GPU 로 이동시킴
         # 단일 GPU 8GB 환경에서 OOM 방지에 핵심적인 설정
-        self.pipe.enable_model_cpu_offload()
-        logger.info("enable_model_cpu_offload() 적용됨")
+        try:
+            self.pipe.enable_model_cpu_offload()
+            logger.info("enable_model_cpu_offload() 적용됨")
+        except RuntimeError as e:
+            logger.warning(
+                "enable_model_cpu_offload() 실패 (%s). "
+                "accelerate 미설치로 인해 pipe.to(device) 로 대체합니다. "
+                "pip install accelerate 로 설치하면 VRAM 을 추가 절약할 수 있습니다.",
+                e,
+            )
+            self.pipe = self.pipe.to(self.device)
 
         # ── VRAM 최적화 2: VAE 슬라이싱 ──────────────────────────────
         # 고해상도 이미지 디코딩 시 VRAM 사용량 감소
