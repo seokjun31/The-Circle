@@ -268,6 +268,9 @@ class StagingPipeline:
                 continue
 
             logger.info("[%s] 인페인팅 시작 ...", face_name)
+            # 면마다 고유 시드 사용: seed + idx * 1000 으로 재현성 유지하면서
+            # 동일 면에 대해 항상 같은 결과를 보장
+            face_seed = seed + idx * 1000
             staged = self.stage_face(
                 face_bgr=faces[idx],
                 mask_gray=masks[idx],
@@ -276,7 +279,7 @@ class StagingPipeline:
                 strength=strength,
                 num_inference_steps=num_inference_steps,
                 guidance_scale=guidance_scale,
-                seed=seed,
+                seed=face_seed,
                 infer_size=infer_size,
             )
             result_faces[idx] = staged
@@ -318,6 +321,7 @@ def generate_default_masks(
     """
     masks: List[np.ndarray] = []
     cutoff = int(face_size * (1.0 - staging_ratio))  # 이 행 위로는 검정
+    feather = max(face_size // 16, 4)
 
     for idx in range(6):
         mask = np.zeros((face_size, face_size), dtype=np.uint8)
@@ -326,13 +330,17 @@ def generate_default_masks(
             # 천장: 전부 검정 (스테이징 안 함)
             pass
         elif idx == 5:
-            # 바닥: 전부 흰색
-            mask[:] = 255
+            # 바닥(bottom): 상단부만 약하게 스테이징 (원본 구조 최대한 보존)
+            # 전체 흰색으로 하면 원본 공간과 전혀 다른 이미지가 생성되어 왜곡됨
+            bottom_cutoff = int(face_size * 0.3)  # 상단 30% 만 스테이징
+            mask[bottom_cutoff:, :] = 255
+            for row in range(max(bottom_cutoff - feather, 0), min(bottom_cutoff + feather, face_size)):
+                alpha = (row - (bottom_cutoff - feather)) / (2 * feather)
+                mask[row, :] = int(np.clip(alpha, 0.0, 1.0) * 255)
         else:
             # 수평 4면: 상단은 검정(벽/천장), 하단은 흰색(가구 영역)
             mask[cutoff:, :] = 255
             # 상단~하단 경계를 부드럽게 블렌딩 (자연스러운 전환)
-            feather = max(face_size // 16, 4)
             for row in range(max(cutoff - feather, 0), min(cutoff + feather, face_size)):
                 alpha = (row - (cutoff - feather)) / (2 * feather)
                 alpha = float(np.clip(alpha, 0.0, 1.0))

@@ -68,7 +68,9 @@ DEFAULT_PROMPT = (
 DEFAULT_NEGATIVE_PROMPT = (
     "blurry, distorted, warped, fisheye distortion, bad anatomy, "
     "bad quality, low resolution, disfigured, deformed, cartoon, anime, "
-    "illustration, painting, watermark, text, signature"
+    "illustration, painting, watermark, text, signature, "
+    "duplicate furniture, multiple sofas, inconsistent style, "
+    "upside down, floating objects, unrealistic perspective"
 )
 
 
@@ -163,9 +165,9 @@ def parse_args() -> argparse.Namespace:
     inpaint_grp.add_argument(
         "--strength",
         type=float,
-        default=0.85,
+        default=0.65,
         metavar="FLOAT",
-        help="인페인팅 강도 0.0~1.0 (기본값: 0.85, 높을수록 원본 무시)",
+        help="인페인팅 강도 0.0~1.0 (기본값: 0.65, 높을수록 원본 무시)",
     )
     inpaint_grp.add_argument(
         "--steps",
@@ -177,9 +179,9 @@ def parse_args() -> argparse.Namespace:
     inpaint_grp.add_argument(
         "--guidance-scale",
         type=float,
-        default=10.0,
+        default=12.0,
         metavar="FLOAT",
-        help="Guidance scale (기본값: 10.0, 높을수록 프롬프트 충실도↑)",
+        help="Guidance scale (기본값: 12.0, 높을수록 프롬프트 충실도↑)",
     )
     inpaint_grp.add_argument(
         "--seed",
@@ -211,12 +213,12 @@ def parse_args() -> argparse.Namespace:
     )
     cube_grp.add_argument(
         "--faces",
-        default="front,back,right,left,bottom",
+        default="front,back,right,left",
         metavar="NAMES",
         help=(
             "스테이징할 면 이름 (쉼표 구분). "
             "선택 가능: front,back,right,left,top,bottom "
-            "(기본값: front,back,right,left,bottom)"
+            "(기본값: front,back,right,left — top/bottom 제외)"
         ),
     )
     cube_grp.add_argument(
@@ -238,9 +240,9 @@ def parse_args() -> argparse.Namespace:
     mask_grp.add_argument(
         "--staging-ratio",
         type=float,
-        default=0.65,
+        default=0.45,
         metavar="FLOAT",
-        help="자동 마스크에서 수평 면 하단 인페인팅 비율 (기본값: 0.65)",
+        help="자동 마스크에서 수평 면 하단 인페인팅 비율 (기본값: 0.45)",
     )
 
     return parser.parse_args()
