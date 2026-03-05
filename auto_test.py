@@ -173,6 +173,9 @@ def build_command(
     run_cfg: Dict[str, Any],
     save_faces_dir: Optional[str],
     no_lora: bool,
+    lora_path: Optional[str] = None,
+    lora_scale: Optional[float] = None,
+    prompt: Optional[str] = None,
 ) -> List[str]:
     cmd = [sys.executable, "main.py", "-i", input_path, "-o", output_path]
 
@@ -184,6 +187,14 @@ def build_command(
 
     if no_lora:
         cmd.append("--no-lora")
+    else:
+        if lora_path:
+            cmd.extend(["--lora", lora_path])
+        if lora_scale is not None:
+            cmd.extend(["--lora-scale", str(lora_scale)])
+
+    if prompt:
+        cmd.extend(["--prompt", prompt])
 
     return cmd
 
@@ -196,6 +207,9 @@ def run_test(
     save_faces: bool,
     no_lora: bool,
     log: logging.Logger,
+    lora_path: Optional[str] = None,
+    lora_scale: Optional[float] = None,
+    prompt: Optional[str] = None,
 ) -> Dict[str, Any]:
     name = run_cfg["name"]
     desc = run_cfg["desc"]
@@ -208,7 +222,8 @@ def run_test(
     log.info("  출력: %s", output_path)
     log.info("  파라미터: %s", run_cfg["params"])
 
-    cmd = build_command(input_path, output_path, run_cfg, faces_dir, no_lora)
+    cmd = build_command(input_path, output_path, run_cfg, faces_dir, no_lora,
+                        lora_path, lora_scale, prompt)
     log.info("  명령어: %s", " ".join(cmd))
 
     t0 = time.time()
@@ -243,8 +258,14 @@ def main() -> None:
                         help="실행할 run 인덱스 (쉼표 구분, 예: 0,2,5). 미지정 시 전체 실행")
     parser.add_argument("--save-faces", action="store_true",
                         help="각 run의 중간 큐브맵 면 이미지도 저장")
+    parser.add_argument("--lora", metavar="PATH",
+                        help="LoRA 파일 경로 (예: korean_apartment_v1.safetensors)")
+    parser.add_argument("--lora-scale", type=float, metavar="FLOAT",
+                        help="LoRA 적용 강도 0.0~1.0 (기본값: main.py 의 0.8)")
     parser.add_argument("--no-lora", action="store_true",
-                        help="LoRA 없이 테스트")
+                        help="LoRA 없이 테스트 (--lora 보다 우선)")
+    parser.add_argument("--prompt", metavar="TEXT",
+                        help="모든 run에 공통 적용할 프롬프트 (미지정 시 main.py 기본값 사용)")
     parser.add_argument("--list", action="store_true",
                         help="테스트 조합 목록만 출력하고 종료")
     args = parser.parse_args()
@@ -292,6 +313,9 @@ def main() -> None:
             save_faces=args.save_faces,
             no_lora=args.no_lora,
             log=log,
+            lora_path=args.lora,
+            lora_scale=args.lora_scale,
+            prompt=args.prompt,
         )
         summary.append(result)
 
