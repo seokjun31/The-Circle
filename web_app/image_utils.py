@@ -7,6 +7,7 @@ image_utils.py
   - 업로드된 이미지를 API 전송 가능한 크기로 안전하게 리사이즈
   - streamlit-drawable-canvas 의 RGBA 마스크 데이터를 흑백 이진 마스크로 변환
   - PIL.Image ↔ bytes 변환 (API 전송용 in-memory buffer)
+  - IP-Adapter 결과 이미지와 원본을 마스크로 합성 (composite_with_mask)
 
 확장 포인트 (360도 파노라마 페이즈):
   - 이 모듈에 큐브맵 변환 함수를 추가하면 기존 로직과 분리하여 재사용 가능.
@@ -156,6 +157,71 @@ def load_uploaded_image(uploaded_file) -> Image.Image:
         image.height,
     )
     return image
+
+
+def composite_with_mask(
+    original: Image.Image,
+    styled: Image.Image,
+    mask: Image.Image,
+    feather_radius: int = 12,
+) -> Image.Image:
+    """
+    IP-Adapter 가 생성한 스타일 이미지를 마스크 영역에만 합성한다.
+
+    IP-Adapter 는 mask 를 직접 지원하지 않으므로, 이 함수로 인페인팅 효과를
+    소프트웨어적으로 구현한다.
+
+    합성 규칙:
+      - 흰색(255) 영역 → styled 이미지 픽셀 사용
+      - 검정(0) 영역   → original 이미지 픽셀 유지
+      - 경계 영역       → feather_radius 만큼 Gaussian blur 를 적용하여
+                          두 이미지를 부드럽게 블렌딩 (어색한 경계선 제거)
+
+    Parameters
+    ----------
+    original : PIL.Image.Image
+        원본 인테리어 이미지.
+    styled : PIL.Image.Image
+        IP-Adapter 로 스타일이 적용된 전체 이미지.
+    mask : PIL.Image.Image
+        mode='L' 흑백 마스크 (흰색=교체, 검정=보존).
+    feather_radius : int
+        경계 블러 반경(픽셀). 클수록 부드럽지만 세부 경계가 흐려짐.
+        인테리어 이미지 기준 8~16 이 적절.
+
+    Returns
+    -------
+    PIL.Image.Image
+        합성된 RGB 이미지.
+    """
+    from PIL import ImageFilter
+
+    # 크기를 original 기준으로 통일
+    target_size = original.size
+    styled_fit  = styled.resize(target_size, Image.LANCZOS)
+    mask_fit    = mask.resize(target_size, Image.LANCZOS).convert("L")
+
+    # 마스크 경계를 Gaussian blur 로 페더링 → 자연스러운 블렌딩
+    if feather_radius > 0:
+        mask_feathered = mask_fit.filter(
+            ImageFilter.GaussianBlur(radius=feather_radius)
+        )
+    else:
+        mask_feathered = mask_fit
+
+    # PIL.Image.composite:
+    #   result[x,y] = styled[x,y]   if mask[x,y]=255 (white)
+    #               = original[x,y] if mask[x,y]=0   (black)
+    #   중간값이면 선형 보간 (alpha blend)
+    result = Image.composite(styled_fit, original.convert("RGB"), mask_feathered)
+
+    logger.debug(
+        "마스크 합성 완료: original=%dx%d, styled=%dx%d, feather=%d",
+        original.width, original.height,
+        styled_fit.width, styled_fit.height,
+        feather_radius,
+    )
+    return result.convert("RGB")
 
 
 def make_before_after(

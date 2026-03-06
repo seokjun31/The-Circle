@@ -6,11 +6,12 @@ Streamlit UI 컴포넌트 모듈.
 각 함수는 독립적인 UI 섹션을 렌더링하며, app.py 에서 조립하여 사용한다.
 
 함수 목록:
-  - render_sidebar()        → API 토큰·모델·고급설정 사이드바
-  - render_upload_section() → 이미지 업로드 UI
-  - render_canvas_section() → 마스킹 캔버스 UI
-  - render_prompt_section() → 프롬프트·LoRA URL 입력 UI
-  - render_result_section() → Before/After 결과 출력 UI
+  - render_sidebar()           → API 토큰·모델·고급설정 사이드바
+  - render_upload_section()    → 이미지 업로드 UI
+  - render_canvas_section()    → 마스킹 캔버스 UI
+  - render_reference_section() → 스타일 참고 사진 업로드 UI (IP-Adapter)
+  - render_prompt_section()    → 프롬프트·LoRA URL 입력 UI
+  - render_result_section()    → Before/After 결과 출력 UI
 
 확장 포인트 (360도 파노라마 페이즈):
   - render_cubemap_section() 함수를 이 파일에 추가하면 앱 흐름에 쉽게 통합 가능.
@@ -24,7 +25,7 @@ from typing import Optional, Tuple
 import streamlit as st
 from PIL import Image
 
-from api_client import MODELS, DEFAULT_MODEL_KEY, InpaintingParams
+from api_client import MODELS, DEFAULT_MODEL_KEY, InpaintingParams, StyleMode
 
 
 # ──────────────────────────────────────────────
@@ -111,6 +112,22 @@ def render_sidebar() -> Tuple[str, str, InpaintingParams]:
                 help="LoRA 스타일의 적용 세기 (0=적용 안 함, 1=최대 적용).",
             )
 
+            st.markdown("---")
+            st.markdown("**🖼️ IP-Adapter (레퍼런스 이미지 모드)**")
+            ip_adapter_scale = st.slider(
+                "IP-Adapter 강도",
+                min_value=0.1,
+                max_value=1.0,
+                value=0.6,
+                step=0.05,
+                help=(
+                    "레퍼런스 사진 스타일을 얼마나 강하게 따를지 조절합니다.\n"
+                    "• 0.3~0.5: 원본 구조 유지 + 스타일 은은하게 반영\n"
+                    "• 0.6~0.8: 스타일과 구조의 균형 (권장)\n"
+                    "• 0.9~1.0: 레퍼런스 스타일 강하게 반영"
+                ),
+            )
+
         st.divider()
         st.caption(
             "Virtual Staging MVP · Replicate API 기반\n\n"
@@ -124,6 +141,7 @@ def render_sidebar() -> Tuple[str, str, InpaintingParams]:
         strength=float(strength),
         seed=int(seed),
         lora_scale=float(lora_scale),
+        ip_adapter_scale=float(ip_adapter_scale),
     )
     return api_token, model_key, params
 
@@ -172,7 +190,7 @@ def render_canvas_section(image: Image.Image):
     canvas_result : ComponentValue | None
         캔버스 컴포넌트의 결과 객체. image_data 속성에 numpy 배열이 담겨 있음.
     """
-    st.subheader("🖌️ Step 2 · 변경할 영역 마스킹")
+    st.subheader("🖌️ Step 2 · 변경할 영역 마스킹 (브러쉬)")
     st.info(
         "**브러쉬로 변경하고 싶은 부분을 색칠하세요.**  \n"
         "예: 벽지를 바꾸고 싶다면 벽면 전체를 덮어 칠하세요.  \n"
@@ -223,7 +241,74 @@ def render_canvas_section(image: Image.Image):
 
 
 # ──────────────────────────────────────────────
-# 4. 프롬프트 & LoRA 입력
+# 4. 스타일 참고 사진 (Reference Image / IP-Adapter)
+# ──────────────────────────────────────────────
+
+# 스타일 모드별 UI 뱃지 정의
+_MODE_BADGES = {
+    "TEXT_ONLY":      ("📝", "텍스트 전용",          "normal"),
+    "REFERENCE_ONLY": ("🖼️", "레퍼런스 이미지 전용", "warning"),
+    "COMBINED":       ("✨", "텍스트 + 레퍼런스 혼합", "success"),
+}
+
+
+def render_reference_section() -> Optional[Image.Image]:
+    """
+    스타일 참고 사진 업로드 영역을 렌더링한다.
+
+    사용자가 원하는 인테리어 스타일 사진을 업로드하면 IP-Adapter 모드로
+    해당 사진의 색감·재질·톤을 그대로 본따서 변환한다.
+    업로드하지 않으면 None 을 반환하며 텍스트 전용 모드로 동작한다.
+
+    Returns
+    -------
+    PIL.Image.Image | None
+        업로드된 레퍼런스 이미지 (RGB, 768px 이하). 없으면 None.
+    """
+    st.subheader("🖼️ Step 3 · 스타일 참고 사진 업로드 (선택)")
+
+    # 모드 안내 카드
+    col_none, col_ref, col_both = st.columns(3)
+    with col_none:
+        st.info("**📝 텍스트만**\n\n참고 사진 없이\n텍스트 프롬프트로만\n스타일 지정")
+    with col_ref:
+        st.warning("**🖼️ 사진만**\n\n참고 사진의 색감·\n재질·톤을 그대로\n자동 적용")
+    with col_both:
+        st.success("**✨ 텍스트 + 사진**\n\n두 가지를 함께 사용해\n가장 정밀하게\n스타일 제어")
+
+    st.caption(
+        "💡 **참고 사진 예시**: 원하는 인테리어 스타일의 잡지 사진, "
+        "Pinterest 이미지, 다른 방 사진 등을 올리면 그 분위기를 따라 변환합니다."
+    )
+
+    uploaded_ref = st.file_uploader(
+        "스타일 참고 사진 (없어도 됩니다)",
+        type=["jpg", "jpeg", "png"],
+        key="reference_image_uploader",
+        help=(
+            "이 사진의 색감·재질·조명·분위기를 AI 가 학습해 마스킹 영역에 적용합니다.\n"
+            "비워두면 텍스트 프롬프트(Step 4)만 사용됩니다."
+        ),
+    )
+
+    if uploaded_ref is None:
+        st.caption("→ 참고 사진 없음 · 텍스트 프롬프트만 사용 (Step 4 에서 입력)")
+        return None
+
+    from image_utils import load_uploaded_image, resize_to_fit
+
+    ref_image = load_uploaded_image(uploaded_ref)
+    # IP-Adapter 는 768px 로도 스타일 정보 충분히 추출 가능 (메모리·비용 절감)
+    ref_image = resize_to_fit(ref_image, max_side=768)
+
+    st.image(ref_image, caption=f"스타일 참고 사진 · {ref_image.width}×{ref_image.height}px",
+             use_container_width=True)
+    st.success("참고 사진 업로드 완료! IP-Adapter 모드가 활성화됩니다.")
+    return ref_image
+
+
+# ──────────────────────────────────────────────
+# 5. 프롬프트 & LoRA 입력
 # ──────────────────────────────────────────────
 
 def render_prompt_section() -> Tuple[str, str, str]:
@@ -239,7 +324,11 @@ def render_prompt_section() -> Tuple[str, str, str]:
     lora_url : str
         LoRA safetensors URL (비어 있어도 됨).
     """
-    st.subheader("✍️ Step 3 · 스타일 프롬프트 입력")
+    st.subheader("✍️ Step 4 · 텍스트 프롬프트 입력 (선택)")
+    st.caption(
+        "참고 사진(Step 3)과 함께 쓰면 더 정밀하게 제어할 수 있습니다.  \n"
+        "참고 사진 없이 텍스트만 써도 됩니다. **둘 다 비우면 변환이 시작되지 않습니다.**"
+    )
 
     prompt = st.text_area(
         "원하는 스타일을 자유롭게 입력하세요 (한국어/영어 모두 가능)",
@@ -284,6 +373,7 @@ def render_result_section(
     original: Image.Image,
     result: Image.Image,
     translated_prompt: str,
+    mode: Optional["StyleMode"] = None,
 ) -> None:
     """
     Before/After 비교 이미지와 다운로드 버튼을 렌더링한다.
@@ -296,8 +386,18 @@ def render_result_section(
         Inpainting 결과 이미지.
     translated_prompt : str
         AI 에 실제로 전달된 영어 프롬프트 (사용자 확인용).
+    mode : StyleMode | None
+        사용된 스타일 모드 (뱃지로 표시).
     """
     st.subheader("🎨 결과 · Before / After 비교")
+
+    # 모드 뱃지 표시
+    if mode is not None:
+        icon, label, badge_type = _MODE_BADGES.get(mode.name, ("", mode.name, "normal"))
+        badge_fn = {"normal": st.info, "warning": st.warning, "success": st.success}.get(
+            badge_type, st.info
+        )
+        badge_fn(f"{icon} 적용 모드: **{label}**")
 
     if translated_prompt:
         st.caption(f"🔤 AI 에 전달된 프롬프트: `{translated_prompt}`")
