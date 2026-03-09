@@ -46,10 +46,7 @@ logger = logging.getLogger(__name__)
 # ControlNet + LoRA 스타일 변환 모델
 # 출처: https://replicate.com/pnyompen/sdxl-controlnet-lora-small
 # ※ 마스크를 직접 지원하지 않으므로 결과 이미지를 마스크로 합성(composite)하여 인페인팅 효과 구현
-CONTROLNET_LORA_MODEL = (
-    "pnyompen/sdxl-controlnet-lora-small:"
-    "d4cdee63b0fd50ec2fbff69e7b20bfca8dc556ee737a957ad8c0166f34359727"
-)
+CONTROLNET_LORA_MODEL = "pnyompen/sdxl-controlnet-lora-small"
 
 # IP-Adapter 기반 스타일 참조 모델 (레퍼런스 이미지 조건화)
 # 출처: https://replicate.com/lucataco/ip-adapter-sdxl
