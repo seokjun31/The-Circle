@@ -119,9 +119,12 @@ class InpaintingParams:
     num_inference_steps: int = 40
     guidance_scale: float = 8.0
     strength: float = 0.99
-    seed: int = 42
-    lora_url: str = ""
-    lora_scale: float = 0.8
+    seed: int = 100
+    lora_url: str = (
+        "https://huggingface.co/seokjun3131/korea-apartment-style_v1"
+        "/resolve/main/lora.safetensors"
+    )
+    lora_scale: float = 0.6
     condition_scale: float = 0.5
     reference_image: Optional[Image.Image] = None
     ip_adapter_scale: float = 0.6
@@ -248,11 +251,13 @@ def _run_text_inpainting(
         "prompt":               params.prompt,
         "condition_scale":      params.condition_scale,
         "num_inference_steps":  params.num_inference_steps,
+        "lora_scale":           params.lora_scale,
+        "seed":                 params.seed,
     }
 
     if params.lora_url.strip():
         api_input["lora_weights"] = params.lora_url.strip()
-        logger.info("LoRA 적용: url=%s", params.lora_url)
+        logger.info("LoRA 적용: url=%s scale=%.2f", params.lora_url, params.lora_scale)
 
     logger.info(
         "[TEXT_ONLY] API 호출: prompt=%r, condition_scale=%.2f, steps=%d",
