@@ -76,25 +76,22 @@ def render_sidebar() -> Tuple[str, str, InpaintingParams]:
                 "추론 스텝 수",
                 min_value=10,
                 max_value=50,
-                value=30,
+                value=40,
                 step=5,
                 help="클수록 품질이 높지만 처리 시간이 길어집니다.",
             )
-            guidance = st.slider(
-                "Guidance Scale",
-                min_value=1.0,
-                max_value=20.0,
-                value=8.0,
-                step=0.5,
-                help="프롬프트 충실도. 높을수록 프롬프트를 강하게 따릅니다 (7~12 권장).",
-            )
-            strength = st.slider(
-                "Inpainting 강도",
-                min_value=0.5,
+            condition_scale = st.slider(
+                "ControlNet 강도 (Condition Scale)",
+                min_value=0.1,
                 max_value=1.0,
-                value=0.99,
-                step=0.01,
-                help="1.0 이면 마스크 영역을 완전히 재생성합니다.",
+                value=0.5,
+                step=0.05,
+                help=(
+                    "원본 이미지 구조를 얼마나 강하게 따를지 조절합니다.\n"
+                    "• 0.3~0.5: 프롬프트/LoRA 스타일 위주 (권장)\n"
+                    "• 0.6~0.8: 구조와 스타일 균형\n"
+                    "• 0.9~1.0: 원본 구조 강하게 유지"
+                ),
             )
             seed = st.number_input(
                 "랜덤 시드",
@@ -137,8 +134,7 @@ def render_sidebar() -> Tuple[str, str, InpaintingParams]:
     params = InpaintingParams(
         prompt="",           # app.py 에서 채움
         num_inference_steps=int(num_steps),
-        guidance_scale=float(guidance),
-        strength=float(strength),
+        condition_scale=float(condition_scale),
         seed=int(seed),
         lora_scale=float(lora_scale),
         ip_adapter_scale=float(ip_adapter_scale),

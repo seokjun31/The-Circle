@@ -43,17 +43,13 @@ logger = logging.getLogger(__name__)
 # 모델 목록
 # ──────────────────────────────────────────────
 
-# 텍스트 기반 Inpainting 모델 (mask 직접 지원)
-INPAINTING_MODELS = {
-    "SDXL Inpainting (고품질, 권장)": (
-        "lucataco/sdxl-inpainting:a9758cbfbd5f3c2094457d996681af52552901a2"
-        "c0f9c8c99aa965814e7e33d1a3a0"
-    ),
-    "SD 1.5 Inpainting (빠름, 경량)": (
-        "stability-ai/stable-diffusion-inpainting:"
-        "95b7223104132402a9ae91cc677285bc5eb997834bd2349fa486f53910fd68b3"
-    ),
-}
+# ControlNet + LoRA 스타일 변환 모델
+# 출처: https://replicate.com/pnyompen/sdxl-controlnet-lora-small
+# ※ 마스크를 직접 지원하지 않으므로 결과 이미지를 마스크로 합성(composite)하여 인페인팅 효과 구현
+CONTROLNET_LORA_MODEL = (
+    "pnyompen/sdxl-controlnet-lora-small:"
+    "d4cdee63b0fd50ec2fbff69e7b20bfca8dc556ee737a957ad8c0166f34359727"
+)
 
 # IP-Adapter 기반 스타일 참조 모델 (레퍼런스 이미지 조건화)
 # 출처: https://replicate.com/lucataco/ip-adapter-sdxl
@@ -64,9 +60,11 @@ IP_ADAPTER_MODEL = (
 )
 
 # UI 노출용 통합 목록 (사이드바 selectbox)
-MODELS = INPAINTING_MODELS
+MODELS = {
+    "SDXL ControlNet + LoRA (권장)": CONTROLNET_LORA_MODEL,
+}
 
-DEFAULT_MODEL_KEY = "SDXL Inpainting (고품질, 권장)"
+DEFAULT_MODEL_KEY = "SDXL ControlNet + LoRA (권장)"
 
 
 # ──────────────────────────────────────────────
@@ -118,12 +116,13 @@ class InpaintingParams:
         "ugly, blurry, low quality, distorted, watermark, text, "
         "bad anatomy, worst quality, unrealistic"
     )
-    num_inference_steps: int = 30
+    num_inference_steps: int = 40
     guidance_scale: float = 8.0
     strength: float = 0.99
     seed: int = 42
     lora_url: str = ""
     lora_scale: float = 0.8
+    condition_scale: float = 0.5
     reference_image: Optional[Image.Image] = None
     ip_adapter_scale: float = 0.6
 
@@ -233,31 +232,44 @@ def _run_text_inpainting(
     params: InpaintingParams,
     model_key: str,
 ) -> Image.Image:
-    """SDXL/SD1.5 Inpainting 모델로 텍스트 기반 마스크 인페인팅 실행."""
-    model_version = INPAINTING_MODELS.get(model_key, INPAINTING_MODELS[DEFAULT_MODEL_KEY])
-    logger.info("[TEXT_ONLY] 모델: %s", model_version)
+    """
+    SDXL ControlNet + LoRA 모델로 스타일 이미지 생성 후 마스크로 합성.
+
+    처리 흐름:
+      1. ControlNet + LoRA 모델 → 프롬프트/LoRA 기반 전체 이미지 생성
+      2. composite_with_mask() → 마스킹 영역에만 생성 결과를 합성
+    """
+    from image_utils import composite_with_mask
+
+    logger.info("[TEXT_ONLY] 모델: %s", CONTROLNET_LORA_MODEL)
 
     api_input: dict = {
-        "prompt":               params.prompt,
-        "negative_prompt":      params.negative_prompt,
         "image":                _pil_to_bytesio(image),
-        "mask":                 _pil_to_bytesio(mask),
+        "prompt":               params.prompt,
+        "condition_scale":      params.condition_scale,
         "num_inference_steps":  params.num_inference_steps,
-        "guidance_scale":       params.guidance_scale,
-        "strength":             params.strength,
-        "seed":                 params.seed if params.seed >= 0 else None,
     }
 
     if params.lora_url.strip():
-        api_input["replicate_weights"] = params.lora_url.strip()
-        api_input["lora_scale"] = params.lora_scale
-        logger.info("LoRA 적용: url=%s, scale=%.2f", params.lora_url, params.lora_scale)
+        api_input["lora_weights"] = params.lora_url.strip()
+        logger.info("LoRA 적용: url=%s", params.lora_url)
 
     logger.info(
-        "[TEXT_ONLY] API 호출: prompt=%r, steps=%d",
-        params.prompt[:80], params.num_inference_steps,
+        "[TEXT_ONLY] API 호출: prompt=%r, condition_scale=%.2f, steps=%d",
+        params.prompt[:80], params.condition_scale, params.num_inference_steps,
     )
-    return _call_replicate_and_download(model_version, api_input)
+
+    styled_full = _call_replicate_and_download(CONTROLNET_LORA_MODEL, api_input)
+    logger.info("[TEXT_ONLY] 스타일 이미지 생성 완료: %dx%d", styled_full.width, styled_full.height)
+
+    result = composite_with_mask(
+        original=image,
+        styled=styled_full,
+        mask=mask,
+        feather_radius=12,
+    )
+    logger.info("[TEXT_ONLY] 마스크 합성 완료")
+    return result
 
 
 # ──────────────────────────────────────────────
