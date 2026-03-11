@@ -1,0 +1,61 @@
+# ── Base image: RunPod ComfyUI template ──────────────────────────────────────
+FROM runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04
+
+WORKDIR /
+
+# ── System dependencies ───────────────────────────────────────────────────────
+RUN apt-get update && apt-get install -y \
+    git wget curl libglib2.0-0 libsm6 libxext6 libxrender-dev libgl1-mesa-glx \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Clone ComfyUI ─────────────────────────────────────────────────────────────
+RUN git clone https://github.com/comfyanonymous/ComfyUI.git /ComfyUI
+WORKDIR /ComfyUI
+RUN pip install --no-cache-dir -r requirements.txt
+
+# ── ComfyUI custom nodes ───────────────────────────────────────────────────────
+RUN cd custom_nodes && \
+    git clone https://github.com/Fannovel16/comfyui_controlnet_aux && \
+    git clone https://github.com/cubiq/ComfyUI_IPAdapter_plus && \
+    pip install --no-cache-dir -r comfyui_controlnet_aux/requirements.txt || true
+
+# ── Download models (update URLs/paths as needed) ────────────────────────────
+RUN mkdir -p models/checkpoints models/loras models/controlnet models/ipadapter models/clip_vision
+
+# SD 1.5 Inpainting model
+RUN wget -q -O models/checkpoints/sd-v1-5-inpainting.ckpt \
+    "https://huggingface.co/runwayml/stable-diffusion-inpainting/resolve/main/sd-v1-5-inpainting.ckpt" || \
+    echo "WARNING: Could not download SD1.5 inpainting — mount manually"
+
+# ControlNet depth
+RUN wget -q -O models/controlnet/control_v11f1p_sd15_depth.pth \
+    "https://huggingface.co/lllyasviel/ControlNet-v1-1/resolve/main/control_v11f1p_sd15_depth.pth" || \
+    echo "WARNING: Could not download ControlNet depth"
+
+# NOTE: korea-apartment-style_v1.safetensors must be provided by the user.
+# Place it in /ComfyUI/models/loras/ or set COMFYUI_LORA_PATH env var.
+# RUN wget -q -O models/loras/korea-apartment-style_v1.safetensors "YOUR_LORA_URL"
+
+# IP-Adapter
+RUN wget -q -O models/ipadapter/ip-adapter_sd15.bin \
+    "https://huggingface.co/h94/IP-Adapter/resolve/main/models/ip-adapter_sd15.bin" || \
+    echo "WARNING: Could not download IP-Adapter"
+
+RUN wget -q -O models/clip_vision/CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors \
+    "https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors" || \
+    echo "WARNING: Could not download CLIP ViT-H"
+
+# ── RunPod handler ────────────────────────────────────────────────────────────
+WORKDIR /app
+COPY comfyui_requirements.txt .
+RUN pip install --no-cache-dir -r comfyui_requirements.txt
+COPY comfyui_handler.py handler.py
+
+# ── Startup: launch ComfyUI in background, then start RunPod handler ─────────
+COPY comfyui_start.sh /start.sh
+RUN chmod +x /start.sh
+
+ENV COMFY_HOST=127.0.0.1
+ENV COMFY_PORT=8188
+
+CMD ["/start.sh"]

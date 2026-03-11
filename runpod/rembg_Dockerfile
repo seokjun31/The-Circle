@@ -1,0 +1,23 @@
+FROM runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04
+
+WORKDIR /app
+
+# Install system deps
+RUN apt-get update && apt-get install -y \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgl1-mesa-glx \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python deps
+COPY rembg_requirements.txt .
+RUN pip install --no-cache-dir -r rembg_requirements.txt
+
+# Pre-download rembg model (u2net)
+RUN python -c "from rembg import remove; from PIL import Image; import io; remove(Image.new('RGB', (10,10)))" || true
+
+COPY rembg_handler.py handler.py
+
+CMD ["python", "-u", "handler.py"]
