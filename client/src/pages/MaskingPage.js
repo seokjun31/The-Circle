@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { removeBackground, startRender, saveOrder } from '../utils/api';
+import { startRender, saveOrder } from '../utils/api';
 import { useAppState } from '../hooks/useAppState';
 import './MaskingPage.css';
 
@@ -23,7 +23,6 @@ function MaskingPage() {
   const [mode, setMode] = useState('brush');
   const [isDrawing, setIsDrawing] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
-  const [removingBg, setRemovingBg] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [lastPos, setLastPos] = useState(null);
 
@@ -158,7 +157,7 @@ function MaskingPage() {
 
   const getMaskBase64 = () => {
     const maskCanvas = maskCanvasRef.current;
-    // Create white/black mask for AI
+    // Create white/black hint mask to send as SAM2 prompt
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = maskCanvas.width;
     tempCanvas.height = maskCanvas.height;
@@ -179,28 +178,6 @@ function MaskingPage() {
     return tempCanvas.toDataURL('image/png').split(',')[1];
   };
 
-  const handleRemoveBg = async () => {
-    setRemovingBg(true);
-    try {
-      const result = await removeBackground(state.imageId);
-      // Apply returned mask to mask canvas
-      const maskCanvas = maskCanvasRef.current;
-      const mCtx = maskCanvas.getContext('2d');
-      const img = new Image();
-      img.onload = () => {
-        mCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
-        mCtx.globalCompositeOperation = 'source-over';
-        mCtx.drawImage(img, 0, 0, maskCanvas.width, maskCanvas.height);
-      };
-      img.src = `data:image/png;base64,${result.maskBase64}`;
-      toast.success('배경이 자동으로 감지되었습니다!');
-    } catch (err) {
-      toast.error(err.message);
-    } finally {
-      setRemovingBg(false);
-    }
-  };
-
   const handleRender = async () => {
     const maskBase64 = getMaskBase64();
     const isEmpty = maskCanvasRef.current
@@ -209,7 +186,7 @@ function MaskingPage() {
       .data.some((v, i) => i % 4 === 3 && v > 0);
 
     if (!isEmpty) {
-      toast.error('렌더링할 영역을 마스킹해주세요.');
+      toast.error('인테리어를 적용할 영역을 대충이라도 칠해주세요. SAM2가 알아서 정밀하게 다듬어줍니다!');
       return;
     }
 
@@ -236,7 +213,7 @@ function MaskingPage() {
       });
 
       update({ jobId, maskBase64 });
-      toast.success('렌더링을 시작했습니다!');
+      toast.success('렌더링을 시작했습니다! SAM2가 마스크를 다듬고 있어요.');
       navigate('/result');
     } catch (err) {
       toast.error(err.message);
@@ -250,7 +227,8 @@ function MaskingPage() {
       <div className="page-header">
         <h1>마스킹 영역 지정</h1>
         <p>
-          인테리어를 적용할 영역을 브러시로 칠하거나, 배경 자동 제거를 사용하세요.
+          인테리어를 적용할 바닥·벽·천장 위를 <strong>대충 칠하기만</strong> 하세요.
+          정밀한 경계선은 <strong>SAM2</strong>가 자동으로 잡아줍니다.
         </p>
       </div>
 
@@ -304,22 +282,15 @@ function MaskingPage() {
             </div>
           </div>
 
+          {/* SAM2 info badge */}
           <div className="toolbar-section">
-            <button
-              className="btn btn-outline w-full"
-              onClick={handleRemoveBg}
-              disabled={removingBg || !imageLoaded}
-            >
-              {removingBg ? (
-                <>
-                  <span className="spinner" />
-                  처리 중...
-                </>
-              ) : (
-                '🤖 배경 자동 제거'
-              )}
-            </button>
-            <p className="tool-hint">AI가 배경을 감지해 마스크로 변환합니다</p>
+            <div className="sam2-badge">
+              <span className="sam2-icon">🎯</span>
+              <div>
+                <strong>SAM2 자동 정밀화</strong>
+                <p>러프하게 칠해도 됩니다. 렌더링 시 ComfyUI 내 SAM2가 정확한 경계를 자동으로 추출합니다.</p>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -352,7 +323,10 @@ function MaskingPage() {
       <div className="masking-footer">
         <div className="masking-info card">
           <span className="info-icon">💡</span>
-          <p>빨간색으로 칠해진 영역에 인테리어가 적용됩니다. 바닥, 벽, 천장 등 원하는 부분을 선택하세요.</p>
+          <p>
+            빨간색으로 <strong>대략적으로</strong> 칠한 영역을 SAM2가 분석해 정밀 마스크로 변환한 뒤
+            인페인팅을 진행합니다. 바닥·벽·천장 어디든 원하는 부분을 칠해보세요.
+          </p>
         </div>
 
         <div className="page-actions" style={{ paddingTop: 0, borderTop: 'none', marginTop: '1rem' }}>
@@ -367,10 +341,10 @@ function MaskingPage() {
             {submitting ? (
               <>
                 <span className="spinner" />
-                렌더링 요청 중...
+                SAM2 정밀화 + 렌더링 중...
               </>
             ) : (
-              '✨ 렌더링 시작'
+              '✨ SAM2로 렌더링 시작'
             )}
           </button>
         </div>

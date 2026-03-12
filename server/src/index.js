@@ -7,7 +7,6 @@ const path = require('path');
 const fs = require('fs');
 
 const uploadRouter = require('./routes/upload');
-const removeBgRouter = require('./routes/removeBg');
 const renderRouter = require('./routes/render');
 const materialsRouter = require('./routes/materials');
 const ordersRouter = require('./routes/orders');
@@ -33,7 +32,6 @@ app.use('/uploads', express.static(path.resolve(uploadDir)));
 
 // API Routes
 app.use('/api/upload', uploadRouter);
-app.use('/api/remove-bg', removeBgRouter);
 app.use('/api/render', renderRouter);
 app.use('/api/materials', materialsRouter);
 app.use('/api/orders', ordersRouter);

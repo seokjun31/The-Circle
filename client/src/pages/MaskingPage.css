@@ -119,6 +119,37 @@
   line-height: 1.4;
 }
 
+/* ===== SAM2 badge ===== */
+.sam2-badge {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  background: var(--accent-light);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem;
+}
+
+.sam2-icon {
+  font-size: 1.3rem;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.sam2-badge strong {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--accent);
+  margin-bottom: 0.25rem;
+}
+
+.sam2-badge p {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  margin: 0;
+}
+
 /* ===== Canvas ===== */
 .canvas-container {
   background: #000;

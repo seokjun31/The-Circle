@@ -27,12 +27,6 @@ export async function uploadImage(file) {
   return data; // { imageId, imageUrl, filename }
 }
 
-// Remove background via rembg RunPod
-export async function removeBackground(imageId) {
-  const { data } = await api.post('/remove-bg', { imageId });
-  return data; // { maskUrl, maskBase64 }
-}
-
 // Get materials list
 export async function getMaterials() {
   const { data } = await api.get('/materials');
