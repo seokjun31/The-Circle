@@ -24,11 +24,11 @@ export function useAppState() {
   const [state, setState] = useState(loadState);
 
   const update = useCallback((updates) => {
-    setState(prev => {
-      const next = { ...prev, ...updates };
-      saveState(next);
-      return next;
-    });
+    // Save to localStorage synchronously so navigation sees the updated state immediately
+    const current = loadState();
+    const next = { ...current, ...updates };
+    saveState(next);
+    setState(next);
   }, []);
 
   const reset = useCallback(() => {
