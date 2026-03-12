@@ -46,21 +46,21 @@ router.post('/', async (req, res) => {
   const prompt = buildPrompt(mood, materials);
   const negativePrompt = buildNegativePrompt();
 
-  // Assemble ComfyUI workflow
-  const workflow = buildWorkflow({
-    imageBase64,
-    maskBase64,
-    prompt,
-    negativePrompt,
-    materialImageBase64: materialImage || null,
-  });
-
-  // Submit job — local ComfyUI or RunPod
+  // Submit job — local ComfyUI (file-based workflow) or RunPod
   let jobId;
   if (isLocalMode) {
-    const res2 = await comfyLocal.submitWorkflow(workflow);
+    // Local mode: comfyLocal loads interior.json, uploads image, injects values
+    const res2 = await comfyLocal.submitJob({ imageBase64, maskBase64, prompt, negativePrompt });
     jobId = res2.id;
   } else {
+    // RunPod mode: build workflow in code and send to RunPod endpoint
+    const workflow = buildWorkflow({
+      imageBase64,
+      maskBase64,
+      prompt,
+      negativePrompt,
+      materialImageBase64: materialImage || null,
+    });
     const endpointId = process.env.RUNPOD_COMFYUI_ENDPOINT_ID;
     if (!endpointId) {
       return res.status(500).json({ error: 'RUNPOD_COMFYUI_ENDPOINT_ID 환경변수가 설정되지 않았습니다.' });
