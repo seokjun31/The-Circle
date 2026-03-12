@@ -2,7 +2,11 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
-const { runAsync, getStatus } = require('../utils/runpod');
+const { runAsync, getStatus: runpodGetStatus } = require('../utils/runpod');
+const comfyLocal = require('../utils/comfyLocal');
+
+// Use local ComfyUI when COMFY_LOCAL_URL is set, otherwise use RunPod
+const isLocalMode = !!process.env.COMFY_LOCAL_URL;
 const { buildPrompt, buildNegativePrompt } = require('../utils/promptBuilder');
 const { buildWorkflow } = require('../utils/comfyWorkflow');
 const { query } = require('../db');
@@ -51,19 +55,23 @@ router.post('/', async (req, res) => {
     materialImageBase64: materialImage || null,
   });
 
-  // Submit to RunPod
-  const endpointId = process.env.RUNPOD_COMFYUI_ENDPOINT_ID;
-  if (!endpointId) {
-    return res.status(500).json({ error: 'RUNPOD_COMFYUI_ENDPOINT_ID 환경변수가 설정되지 않았습니다.' });
+  // Submit job — local ComfyUI or RunPod
+  let jobId;
+  if (isLocalMode) {
+    const res2 = await comfyLocal.submitWorkflow(workflow);
+    jobId = res2.id;
+  } else {
+    const endpointId = process.env.RUNPOD_COMFYUI_ENDPOINT_ID;
+    if (!endpointId) {
+      return res.status(500).json({ error: 'RUNPOD_COMFYUI_ENDPOINT_ID 환경변수가 설정되지 않았습니다.' });
+    }
+    const runpodRes = await runAsync(endpointId, {
+      workflow,
+      prompt,
+      negative_prompt: negativePrompt,
+    });
+    jobId = runpodRes.id;
   }
-
-  const runpodRes = await runAsync(endpointId, {
-    workflow,
-    prompt,
-    negative_prompt: negativePrompt,
-  });
-
-  const jobId = runpodRes.id;
 
   // Store in DB
   await query(
@@ -96,9 +104,14 @@ router.get('/:jobId', async (req, res) => {
     });
   }
 
-  // Poll RunPod
-  const endpointId = process.env.RUNPOD_COMFYUI_ENDPOINT_ID;
-  const runpodData = await getStatus(endpointId, jobId);
+  // Poll — local ComfyUI or RunPod
+  let runpodData;
+  if (isLocalMode) {
+    runpodData = await comfyLocal.getStatus(jobId);
+  } else {
+    const endpointId = process.env.RUNPOD_COMFYUI_ENDPOINT_ID;
+    runpodData = await runpodGetStatus(endpointId, jobId);
+  }
 
   const status = runpodData.status; // IN_QUEUE, IN_PROGRESS, COMPLETED, FAILED
   let resultUrl = null;
