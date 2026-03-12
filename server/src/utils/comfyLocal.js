@@ -56,7 +56,9 @@ async function buildInpaintImage(imageBase64, maskBase64) {
     rgba[i * 4 + 0] = rgbRaw[i * 3 + 0];
     rgba[i * 4 + 1] = rgbRaw[i * 3 + 1];
     rgba[i * 4 + 2] = rgbRaw[i * 3 + 2];
-    rgba[i * 4 + 3] = maskRaw[i];
+    // ComfyUI LoadImage: mask = 1.0 - (alpha/255)
+    // So white mask (255) must become alpha=0 → mask=1.0 (inpaint)
+    rgba[i * 4 + 3] = 255 - maskRaw[i];
   }
 
   return sharp(rgba, { raw: { width, height, channels: 4 } }).png().toBuffer();
