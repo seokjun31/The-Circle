@@ -29,7 +29,6 @@ services:
       PORT: 4000
       DATABASE_URL: postgresql://user:password@db:5432/interior_db
       RUNPOD_API_KEY: ${RUNPOD_API_KEY}
-      RUNPOD_REMBG_ENDPOINT_ID: ${RUNPOD_REMBG_ENDPOINT_ID}
       RUNPOD_COMFYUI_ENDPOINT_ID: ${RUNPOD_COMFYUI_ENDPOINT_ID}
       UPLOAD_DIR: /app/uploads
     ports:
