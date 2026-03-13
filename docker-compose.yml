@@ -39,6 +39,32 @@ services:
       db:
         condition: service_healthy
 
+  # ── FastAPI backend (Phase 1) ──────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg2://user:password@db:5432/the_circle
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      USE_S3: ${USE_S3:-false}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_REGION: ${AWS_REGION:-ap-northeast-2}
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME:-the-circle-uploads}
+      LOCAL_UPLOAD_DIR: /app/uploads
+      ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:5173"
+    ports:
+      - "8000:8000"
+    volumes:
+      - backend_uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
   client:
     build:
       context: ./client
@@ -52,3 +78,4 @@ services:
 volumes:
   postgres_data:
   uploads_data:
+  backend_uploads:
