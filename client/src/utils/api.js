@@ -243,6 +243,17 @@ export async function copyMood(projectId, payload) {
   return data;
 }
 
+// ── Projects list ─────────────────────────────────────────────────────────────
+
+export async function listProjects(page = 1, pageSize = 12) {
+  const { data } = await api.get(`/v1/projects?page=${page}&page_size=${pageSize}`);
+  return data; // { items, total, page, page_size }
+}
+
+export async function deleteProject(projectId) {
+  await api.delete(`/v1/projects/${projectId}`);
+}
+
 // ── Phase 7: Layer management ─────────────────────────────────────────────────
 
 /**

@@ -1,237 +1,220 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { useAppState } from '../hooks/useAppState';
+import useEditorStore from '../stores/editorStore';
 import { getCreditBalance, getProjectLayers } from '../utils/api';
 import StyleTransform from '../components/editor/StyleTransform';
 import MoodCopy from '../components/editor/MoodCopy';
+import MaterialPanel from '../components/editor/MaterialPanel';
+import FurniturePanel from '../components/editor/FurniturePanel';
 import FinalRender from '../components/editor/FinalRender';
 import LayerPanel from '../components/editor/LayerPanel';
+import ProcessingOverlay from '../components/editor/ProcessingOverlay';
+import RoomCanvas from '../components/editor/RoomCanvas';
 import './EditorPage.css';
 
-const TABS = [
-  {
-    id: 'circle-ai',
-    label: 'Circle.ai',
-    sublabel: '스타일 변환',
-    description: '8가지 인테리어 스타일 프리셋으로 전체 방 분위기를 한 번에 변환',
-  },
-  {
-    id: 'mood-copy',
-    label: '분위기 Copy',
-    sublabel: '레퍼런스 복사',
-    description: '원하는 인테리어 사진을 업로드하면 그 분위기를 내 방에 자동 적용',
-  },
-  {
-    id: 'final-render',
-    label: '✨ 최종 렌더링',
-    sublabel: '마무리 합성',
-    description: '모든 변경사항을 통합하여 고품질 최종 이미지를 생성합니다',
-  },
+// ── Sidebar tool definitions ──────────────────────────────────────────────────
+const TOOLS = [
+  { id: 'circle_ai',    icon: '🎨', label: 'Circle.ai',  sub: '스타일 변환'   },
+  { id: 'material',     icon: '🧱', label: '자재',        sub: '영역 텍스처'   },
+  { id: 'mood_copy',    icon: '🖼️', label: '분위기',      sub: '레퍼런스 복사' },
+  { id: 'furniture',    icon: '🪑', label: '가구',        sub: 'AI 합성'       },
+  { id: 'final_render', icon: '✨', label: '렌더링',      sub: '고품질 출력'   },
+  { id: 'layers',       icon: '📋', label: '레이어',      sub: '히스토리'      },
 ];
 
+// ─────────────────────────────────────────────────────────────────────────────
+
 function EditorPage() {
-  const navigate           = useNavigate();
+  const navigate = useNavigate();
   const { projectId: pid } = useParams();
-  const { state, update }  = useAppState();
 
-  const [activeTab, setActiveTab]         = useState('circle-ai');
-  const [creditBalance, setCreditBalance] = useState(null);
-  const [lastResult, setLastResult]       = useState(null);
-  const [layers, setLayers]               = useState([]);
+  const {
+    project,
+    activeTool,
+    isProcessing,
+    processingMessage,
+    isColdStart,
+    creditBalance,
+    lastResult,
+    layers,
+    setActiveTool,
+    setCreditBalance,
+    setLayers,
+    setLastResult,
+    setProcessing,
+    pushHistory,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+  } = useEditorStore();
+
   const [selectedLayerId, setSelectedLayerId] = useState(null);
-  const [layerPanelOpen, setLayerPanelOpen]   = useState(true);
+  const [canvasSegments, setCanvasSegments]   = useState([]);
+  const [rightPanelOpen, setRightPanelOpen]   = useState(true);
 
-  const projectId = pid ? parseInt(pid, 10) : state.projectId;
-  const imageUrl  = state.imageUrl || null;
+  const projectId = pid ? parseInt(pid, 10) : project?.id;
+  const imageUrl  = project?.original_image_url || null;
 
-  // ── Load credit balance ────────────────────────────────────────────────────
+  // ── Bootstrap ──────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!projectId) {
       toast.error('프로젝트를 먼저 생성해주세요.');
-      navigate('/');
+      navigate('/dashboard');
       return;
     }
     getCreditBalance()
-      .then((data) => setCreditBalance(data.balance))
-      .catch(() => setCreditBalance(null));
-  }, [projectId, navigate]);
+      .then((d) => setCreditBalance(d.balance))
+      .catch(() => {});
+  }, [projectId, navigate, setCreditBalance]);
 
-  // ── Load layers ────────────────────────────────────────────────────────────
   const refreshLayers = useCallback(() => {
     if (!projectId) return;
     getProjectLayers(projectId)
-      .then((data) => setLayers(data.layers || []))
+      .then((d) => setLayers(d.layers || []))
       .catch(() => {});
-  }, [projectId]);
+  }, [projectId, setLayers]);
 
-  useEffect(() => {
-    refreshLayers();
-  }, [refreshLayers]);
+  useEffect(() => { refreshLayers(); }, [refreshLayers]);
 
-  // ── Handle AI result ───────────────────────────────────────────────────────
-  const handleResult = (result) => {
+  // ── AI result handler ──────────────────────────────────────────────────────
+  const handleResult = useCallback((result) => {
     setLastResult(result);
-    update({ lastResultUrl: result.result_url });
-    if (result.remaining_balance !== undefined) {
-      setCreditBalance(result.remaining_balance);
-    }
-    // Refresh credit balance and layers after each operation
-    getCreditBalance()
-      .then((data) => setCreditBalance(data.balance))
-      .catch(() => {});
+    if (result.remaining_balance !== undefined) setCreditBalance(result.remaining_balance);
+    pushHistory();
     refreshLayers();
-  };
+    getCreditBalance().then((d) => setCreditBalance(d.balance)).catch(() => {});
+  }, [setLastResult, setCreditBalance, pushHistory, refreshLayers]);
 
-  // Handle FinalRender result (different shape)
-  const handleFinalRenderResult = ({ resultUrl, layerId, creditsUsed }) => {
+  const handleFinalRenderResult = useCallback(({ resultUrl, layerId }) => {
     setLastResult({ result_url: resultUrl, layer_id: layerId });
-    update({ lastResultUrl: resultUrl });
-    getCreditBalance()
-      .then((data) => setCreditBalance(data.balance))
-      .catch(() => {});
+    getCreditBalance().then((d) => setCreditBalance(d.balance)).catch(() => {});
     refreshLayers();
-  };
+  }, [setLastResult, setCreditBalance, refreshLayers]);
 
-  const activeTabMeta = TABS.find((t) => t.id === activeTab);
+  const activeMeta = TOOLS.find((t) => t.id === activeTool);
+
+  // ── Right panel content ────────────────────────────────────────────────────
+  const renderPanel = () => {
+    const common = { projectId, originalImageUrl: imageUrl, creditBalance, onResult: handleResult };
+    switch (activeTool) {
+      case 'circle_ai':    return <StyleTransform  {...common} />;
+      case 'material':     return <MaterialPanel   {...common} selectedSegments={canvasSegments} />;
+      case 'mood_copy':    return <MoodCopy        {...common} />;
+      case 'furniture':    return <FurniturePanel  projectId={projectId} originalImageUrl={imageUrl} creditBalance={creditBalance} onResult={handleResult} />;
+      case 'final_render': return <FinalRender     {...common} onResult={handleFinalRenderResult} />;
+      case 'layers':       return (
+        <LayerPanel
+          projectId={projectId}
+          layers={layers}
+          selected={selectedLayerId}
+          onSelect={setSelectedLayerId}
+          onLayersChange={refreshLayers}
+        />
+      );
+      default: return null;
+    }
+  };
 
   return (
-    <div className="editor-page">
-      {/* Page header */}
-      <div className="editor-header">
-        <div className="editor-header-left">
-          <button className="btn btn-secondary btn-sm ep-back-btn" onClick={() => navigate(-1)}>
-            ← 뒤로
-          </button>
-          <div>
-            <h1 className="editor-title">AI 인테리어 에디터</h1>
-            <p className="editor-subtitle">{activeTabMeta?.description}</p>
+    <div className="ep-root">
+
+      {/* ── Top bar ──────────────────────────────────────────────────────── */}
+      <header className="ep-topbar">
+        <div className="ep-topbar-left">
+          <button className="ep-back-btn" onClick={() => navigate('/dashboard')} title="대시보드로">←</button>
+          <div className="ep-title-group">
+            <span className="ep-project-name">{project?.title || 'AI 인테리어 에디터'}</span>
+            {activeMeta && <span className="ep-tool-name">{activeMeta.icon} {activeMeta.label} — {activeMeta.sub}</span>}
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div className="ep-credit-badge">
-            <span className="ep-credit-icon">💎</span>
-            <span className="ep-credit-label">
-              {creditBalance !== null ? creditBalance : '—'} 크레딧
-            </span>
-            {creditBalance !== null && creditBalance < 5 && (
-              <span className="ep-credit-low">충전 필요</span>
-            )}
+        <div className="ep-topbar-center">
+          <button className="ep-hist-btn" onClick={undo} disabled={!canUndo()} title="실행 취소">↩</button>
+          <button className="ep-hist-btn" onClick={redo} disabled={!canRedo()} title="다시 실행">↪</button>
+        </div>
+        <div className="ep-topbar-right">
+          {creditBalance !== null && creditBalance < 5 && (
+            <span className="ep-low-credit-warn">크레딧 부족</span>
+          )}
+          <div className="ep-credit-chip">
+            <span>💎</span>
+            <span>{creditBalance !== null ? creditBalance : '—'}</span>
           </div>
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={() => setLayerPanelOpen(v => !v)}
-            title="레이어 패널 토글"
-            style={{ flexShrink: 0 }}
-          >
-            {layerPanelOpen ? '◀ 레이어' : '▶ 레이어'}
+          <button className="ep-panel-toggle" onClick={() => setRightPanelOpen((v) => !v)} title="옵션 패널 토글">
+            {rightPanelOpen ? '⊳' : '⊲'}
           </button>
         </div>
-      </div>
+      </header>
 
-      {/* Insufficient credit alert */}
-      {creditBalance !== null && creditBalance < 3 && (
-        <div className="ep-alert ep-alert-warning">
-          크레딧이 부족합니다. AI 기능 사용에는 최소 <strong>3 크레딧</strong>이 필요합니다.
-          <button className="btn btn-outline btn-sm ep-charge-btn">충전하기</button>
-        </div>
-      )}
-
-      {/* Two-column layout: main + layer panel */}
+      {/* ── Workspace ────────────────────────────────────────────────────── */}
       <div className="ep-workspace">
-        {/* Left — tab content */}
-        <div className="ep-main">
-          {/* Tab navigation */}
-          <div className="ep-tabs">
-            {TABS.map((tab) => (
-              <button
-                key={tab.id}
-                className={`ep-tab ${activeTab === tab.id ? 'active' : ''}`}
-                onClick={() => setActiveTab(tab.id)}
-              >
-                <span className="ep-tab-label">{tab.label}</span>
-                <span className="ep-tab-sub">{tab.sublabel}</span>
-              </button>
-            ))}
-          </div>
 
-          {/* Tab content */}
-          <div className="ep-content">
-            {activeTab === 'circle-ai' && (
-              <StyleTransform
-                projectId={projectId}
-                originalImageUrl={imageUrl}
-                creditBalance={creditBalance}
-                onResult={handleResult}
-              />
-            )}
-            {activeTab === 'mood-copy' && (
-              <MoodCopy
-                projectId={projectId}
-                originalImageUrl={imageUrl}
-                creditBalance={creditBalance}
-                onResult={handleResult}
-              />
-            )}
-            {activeTab === 'final-render' && (
-              <FinalRender
-                projectId={projectId}
-                originalImageUrl={imageUrl}
-                creditBalance={creditBalance}
-                onResult={handleFinalRenderResult}
-              />
-            )}
-          </div>
+        {/* Left sidebar */}
+        <aside className="ep-sidebar">
+          {TOOLS.map((t) => (
+            <button
+              key={t.id}
+              className={`ep-tool-btn ${activeTool === t.id ? 'active' : ''}`}
+              onClick={() => setActiveTool(t.id)}
+              title={`${t.label} — ${t.sub}`}
+            >
+              <span className="ep-tool-icon">{t.icon}</span>
+              <span className="ep-tool-label">{t.label}</span>
+            </button>
+          ))}
+        </aside>
 
-          {/* History strip */}
-          {lastResult && (
-            <div className="ep-history card">
-              <h3 className="ep-history-title">최근 결과</h3>
-              <div className="ep-history-item">
-                <img
-                  src={lastResult.result_url}
-                  alt="최근 변환 결과"
-                  className="ep-history-thumb"
-                />
-                <div className="ep-history-meta">
-                  <span className="ep-history-type">
-                    {lastResult.style_preset
-                      ? `Circle AI — ${lastResult.style_preset}`
-                      : lastResult.layer_id
-                        ? `레이어 #${lastResult.layer_id}`
-                        : '변환 결과'}
-                  </span>
-                  <span className="ep-history-time">
-                    {lastResult.elapsed_s
-                      ? `처리 시간: ${lastResult.elapsed_s.toFixed(1)}s`
-                      : ''}
-                  </span>
-                </div>
-                <a
-                  href={lastResult.result_url}
-                  download="result.jpg"
-                  className="btn btn-outline btn-sm"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  다운로드
-                </a>
-              </div>
+        {/* Canvas */}
+        <main className="ep-canvas-area">
+          {imageUrl ? (
+            <div className="ep-canvas-wrap">
+              <RoomCanvas
+                imageSrc={imageUrl}
+                onMasksChange={setCanvasSegments}
+                onEncodingChange={({ isEncoding }) =>
+                  isEncoding ? setProcessing(true, 'SAM 이미지 분석 중...') : setProcessing(false)
+                }
+              />
+              {isProcessing && (
+                <ProcessingOverlay message={processingMessage} isColdStart={isColdStart} />
+              )}
+            </div>
+          ) : (
+            <div className="ep-canvas-placeholder">
+              <span>🏠</span>
+              <p>이미지를 불러오는 중...</p>
             </div>
           )}
-        </div>
 
-        {/* Right — layer panel */}
-        {layerPanelOpen && (
-          <div className="ep-layer-sidebar">
-            <LayerPanel
-              projectId={projectId}
-              layers={layers}
-              selected={selectedLayerId}
-              onSelect={setSelectedLayerId}
-              onLayersChange={refreshLayers}
-            />
-          </div>
+          {lastResult?.result_url && (
+            <div className="ep-result-strip">
+              <img src={lastResult.result_url} alt="최근 결과" />
+              <div className="ep-result-meta">
+                <span>
+                  {lastResult.style_preset
+                    ? `Circle AI — ${lastResult.style_preset}`
+                    : `레이어 #${lastResult.layer_id || '?'}`}
+                </span>
+                {lastResult.elapsed_s && <span>{lastResult.elapsed_s.toFixed(1)}s</span>}
+              </div>
+              <a href={lastResult.result_url} download="result.jpg" className="ep-download-btn" target="_blank" rel="noreferrer">
+                ↓ 다운로드
+              </a>
+            </div>
+          )}
+        </main>
+
+        {/* Right panel */}
+        {rightPanelOpen && (
+          <aside className="ep-options-panel">
+            <div className="ep-options-header">
+              {activeMeta && <><span>{activeMeta.icon} {activeMeta.label}</span><span className="ep-options-sub">{activeMeta.sub}</span></>}
+            </div>
+            <div className="ep-options-body">
+              {renderPanel()}
+            </div>
+          </aside>
         )}
       </div>
     </div>
