@@ -2,6 +2,7 @@
 GET  /api/v1/materials              — 자재 목록 (category / style / page 필터)
 GET  /api/v1/materials/{id}         — 자재 상세
 POST /api/v1/materials              — 자재 등록 (관리자 전용, multipart upload)
+POST /api/v1/materials/generate-prompts — Claude Vision으로 프롬프트 자동 생성
 POST /api/v1/materials/{id}/validate-tiling — 타일링 검증 단독 실행
 """
 
@@ -19,11 +20,14 @@ from app.dependencies import get_db, require_admin
 from app.models.material import Material, MaterialCategory
 from app.schemas.material import (
     MaterialCreateRequest,
+    MaterialGeneratePromptsRequest,
+    MaterialGeneratePromptsResponse,
     MaterialListResponse,
     MaterialResponse,
     MaterialTilingReport,
     MaterialUploadResponse,
 )
+from app.services.material_prompt_generator import material_prompt_generator
 from app.services.s3 import storage
 
 router = APIRouter(prefix="/materials", tags=["Materials"])
@@ -143,6 +147,51 @@ def list_materials(
     )
 
 
+@router.post(
+    "/generate-prompts",
+    response_model=MaterialGeneratePromptsResponse,
+    summary="자재 이미지 → Claude Vision 프롬프트 자동 생성 (관리자 전용)",
+    dependencies=[Depends(require_admin)],
+)
+async def generate_material_prompts(
+    body: MaterialGeneratePromptsRequest,
+):
+    """
+    자재 이미지 URL을 Claude Vision API에 전송하여
+    ComfyUI IP-Adapter 워크플로우에 최적화된 프롬프트 파라미터를 자동 생성합니다.
+
+    **사용 흐름 (자재 등록 UI 예시):**
+    1. 관리자가 타일 이미지를 업로드 → S3에 저장 후 URL 획득
+    2. 이 엔드포인트 호출 → 프롬프트 미리보기
+    3. 필요 시 수동 수정 후 POST /materials로 최종 등록
+
+    **ANTHROPIC_API_KEY 미설정 또는 API 오류 시:**
+    카테고리별 기본값을 반환합니다 (서비스 중단 없음).
+    이 경우 응답의 `generated_by_ai: false`가 됩니다.
+
+    Parameters:
+        image_url: 분석할 자재 이미지 URL.
+        category:  자재 카테고리 (wallpaper/flooring/ceiling/tile/paint).
+        name:      자재명 (한국어/영어 모두 가능).
+    """
+    from app.config import settings
+
+    # API 키 유무로 ai 생성 여부 판단
+    has_api_key = bool(settings.ANTHROPIC_API_KEY)
+
+    result = await material_prompt_generator.generate_prompts(
+        image_url = body.image_url,
+        category  = body.category,
+        name      = body.name,
+    )
+
+    return MaterialGeneratePromptsResponse(
+        **result,
+        generated_by_ai = has_api_key,
+        model           = "claude-sonnet-4-20250514" if has_api_key else None,
+    )
+
+
 @router.get(
     "/{material_id}",
     response_model=MaterialResponse,
@@ -177,6 +226,34 @@ def create_material(
     price_range: Optional[str]    = Form(None, max_length=100),
     style: Optional[str]          = Form(None, max_length=100),
     tags: Optional[str]           = Form(None, description="쉼표로 구분된 태그 목록"),
+    # ── AI generation parameters ─────────────────────────────────────────────
+    positive_prompt: str          = Form(
+        "",
+        description=(
+            "자재에 최적화된 긍정 프롬프트. "
+            "예: 'seamless large format beige porcelain tile floor, "
+            "subtle natural stone texture, clean grout lines, 8k uhd'"
+        ),
+    ),
+    negative_prompt: str          = Form(
+        "",
+        description=(
+            "자재에 최적화된 부정 프롬프트. "
+            "예: 'wood grain, glossy, reflective, blurry, low quality'"
+        ),
+    ),
+    ip_adapter_weight: float      = Form(
+        0.6,
+        ge=0.3,
+        le=0.9,
+        description="IP-Adapter 가중치 (0.3–0.9, 기본 0.6)",
+    ),
+    recommended_denoise: float    = Form(
+        0.62,
+        ge=0.5,
+        le=0.75,
+        description="KSampler denoise 강도 (0.5–0.75, 기본 0.62)",
+    ),
     # ── File uploads ─────────────────────────────────────────────────────────
     tile_image: UploadFile        = File(..., description="Seamless 타일 이미지 (PNG/JPEG, min 256×256)"),
     normal_map: Optional[UploadFile] = File(None, description="PBR Normal Map (선택)"),
@@ -235,17 +312,21 @@ def create_material(
     tag_list = [t.strip() for t in (tags or "").split(",") if t.strip()]
 
     material = Material(
-        name           = name,
-        category       = category,
-        tile_image_url = "",          # placeholder — updated below
-        normal_map_url = None,
-        tile_width_cm  = tile_width_cm,
-        tile_height_cm = tile_height_cm,
-        brand          = brand,
-        product_code   = product_code,
-        price_range    = price_range,
-        style          = style,
-        tags           = tag_list,
+        name                = name,
+        category            = category,
+        tile_image_url      = "",          # placeholder — updated below
+        normal_map_url      = None,
+        tile_width_cm       = tile_width_cm,
+        tile_height_cm      = tile_height_cm,
+        brand               = brand,
+        product_code        = product_code,
+        price_range         = price_range,
+        style               = style,
+        tags                = tag_list,
+        positive_prompt     = positive_prompt,
+        negative_prompt     = negative_prompt,
+        ip_adapter_weight   = ip_adapter_weight,
+        recommended_denoise = recommended_denoise,
     )
     db.add(material)
     db.flush()   # get material.id without committing
