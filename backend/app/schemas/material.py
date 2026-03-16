@@ -1,7 +1,7 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.material import MaterialCategory
 
@@ -44,3 +44,20 @@ class MaterialListResponse(BaseModel):
     page: int
     page_size: int
     total_pages: int
+
+
+class MaterialTilingReport(BaseModel):
+    """Result of the seamless-tiling validation check."""
+    verdict: Literal["pass", "warn", "fail"]
+    mean_diff: float              # mean absolute colour diff at seams (0–255)
+    vertical_seam_diff: float     # diff at left↔right boundary
+    horizontal_seam_diff: float   # diff at top↔bottom boundary
+    message: str                  # human-readable verdict
+    width_px: int
+    height_px: int
+
+
+class MaterialUploadResponse(BaseModel):
+    """Returned by POST /materials (admin upload endpoint)."""
+    material: MaterialResponse
+    tiling_report: MaterialTilingReport

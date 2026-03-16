@@ -1,15 +1,18 @@
 """
-POST   /api/v1/projects              — 이미지 업로드 → S3 저장 + 썸네일 생성 → Project 생성
-POST   /api/v1/projects/presign      — presigned S3 URL 발급 (직접 업로드 지원)
-PUT    /api/v1/projects/{id}/confirm — presigned 업로드 완료 후 썸네일/DB 업데이트
-GET    /api/v1/projects              — 내 프로젝트 목록 (페이지네이션)
-GET    /api/v1/projects/{id}         — 프로젝트 상세 (레이어 포함)
-DELETE /api/v1/projects/{id}         — 프로젝트 삭제
+POST   /api/v1/projects                          — 이미지 업로드 → S3 저장 + 썸네일 생성 → Project 생성
+POST   /api/v1/projects/presign                  — presigned S3 URL 발급 (직접 업로드 지원)
+PUT    /api/v1/projects/{id}/confirm             — presigned 업로드 완료 후 썸네일/DB 업데이트
+GET    /api/v1/projects                          — 내 프로젝트 목록 (페이지네이션)
+GET    /api/v1/projects/{id}                     — 프로젝트 상세 (레이어 포함)
+DELETE /api/v1/projects/{id}                     — 프로젝트 삭제
+POST   /api/v1/projects/{id}/apply-material      — 자재 적용 (IP-Adapter + ControlNet Depth)
 """
+import asyncio
 import math
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_current_user, get_db
@@ -261,6 +264,80 @@ def delete_project(
     project = _get_owned_project(project_id, current_user, db)
     db.delete(project)
     db.commit()
+
+
+# ── POST /projects/{id}/apply-material — AI 자재 적용 ─────────────────────────
+
+class ApplyMaterialRequest(BaseModel):
+    layer_id: int           = Field(..., description="마스크 레이어 ID (POST /projects/{id}/masks로 생성)")
+    material_id: int        = Field(..., description="적용할 자재 ID")
+    custom_prompt: Optional[str] = Field(None, max_length=300, description="추가 텍스트 프롬프트 (선택)")
+    ipadapter_weight: float = Field(0.80, ge=0.0, le=1.0)
+    controlnet_weight: float = Field(0.90, ge=0.0, le=1.0)
+    denoise: float          = Field(0.60, ge=0.3, le=0.9)
+
+
+class ApplyMaterialResponse(BaseModel):
+    result_url: str
+    layer_id: int
+    elapsed_s: float
+
+
+@router.post(
+    "/{project_id}/apply-material",
+    response_model=ApplyMaterialResponse,
+    summary="AI 자재 적용 — IP-Adapter + ControlNet Depth + Inpainting",
+)
+def apply_material(
+    project_id: int,
+    body: ApplyMaterialRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Apply a material texture to a masked region of a project image.
+
+    Uses IP-Adapter (texture fidelity) + ControlNet Depth (perspective-aware placement)
+    + VAEEncodeForInpaint (restricts changes to the masked area).
+
+    Expected response time: 15–30 s (RunPod Scale-to-Zero cold start included).
+    """
+    from app.services.material_apply import material_apply_service
+    from app.services.comfyui.runpod_client import RunPodError
+
+    # Verify ownership first (fast, before the slow RunPod call)
+    _get_owned_project(project_id, current_user, db)
+
+    try:
+        result = asyncio.run(
+            material_apply_service.apply_material_to_region(
+                project_id        = project_id,
+                layer_id          = body.layer_id,
+                material_id       = body.material_id,
+                user_id           = current_user.id,
+                db                = db,
+                custom_prompt     = body.custom_prompt,
+                ipadapter_weight  = body.ipadapter_weight,
+                controlnet_weight = body.controlnet_weight,
+                denoise           = body.denoise,
+            )
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": str(exc), "code": "INVALID_INPUT"},
+        ) from exc
+    except RunPodError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"message": f"AI 처리 실패: {exc}", "code": "RUNPOD_ERROR"},
+        ) from exc
+
+    return ApplyMaterialResponse(
+        result_url = result.result_url,
+        layer_id   = result.layer_id,
+        elapsed_s  = result.elapsed_s,
+    )
 
 
 # ── Helper ────────────────────────────────────────────────────────────────────

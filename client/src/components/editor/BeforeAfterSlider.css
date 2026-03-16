@@ -1,0 +1,107 @@
+/* ── BeforeAfterSlider ───────────────────────────────────────────────────── */
+
+.bas-root {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 10px;
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+  background: #000;
+}
+
+/* Shared layer styles */
+.bas-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.bas-layer img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+
+/* After layer: clipped with clipPath (set inline) */
+.bas-after {
+  /* clip-path applied inline: inset(0 0 0 <position>%) */
+}
+
+/* Labels */
+.bas-label {
+  position: absolute;
+  top: 12px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #fff;
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+
+.bas-label-before {
+  left: 12px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.bas-label-after {
+  right: 12px;
+  background: rgba(30, 144, 255, 0.75);
+}
+
+/* Drag handle */
+.bas-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  cursor: col-resize;
+  outline: none;
+}
+
+.bas-handle:focus-visible .bas-handle-grip {
+  box-shadow: 0 0 0 3px rgba(30, 144, 255, 0.6);
+}
+
+.bas-handle-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.85);
+  pointer-events: none;
+}
+
+.bas-handle-grip {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(30, 144, 255, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  transition: background 0.15s, transform 0.1s;
+  z-index: 1;
+}
+
+.bas-handle:hover .bas-handle-grip,
+.bas-handle:active .bas-handle-grip {
+  background: #1e90ff;
+  transform: scale(1.1);
+}

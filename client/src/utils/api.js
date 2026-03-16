@@ -51,4 +51,56 @@ export async function saveOrder(orderData) {
   return data; // { orderId }
 }
 
+// ── Material apply (Phase 4) ──────────────────────────────────────────────────
+
+/**
+ * Save a SAM mask to the server and get back a layerId.
+ * @param {number} projectId
+ * @param {{ maskBase64: string, label: string, layerOrder?: number }} payload
+ * @returns {{ layer_id, mask_url, label }}
+ */
+export async function saveMask(projectId, payload) {
+  const { data } = await api.post(`/v1/projects/${projectId}/masks`, {
+    mask_base64: payload.maskBase64,
+    label:       payload.label,
+    layer_order: payload.layerOrder ?? 0,
+  });
+  return data;
+}
+
+/**
+ * Apply a material to a masked region via AI (IP-Adapter + ControlNet Depth).
+ * @param {number} projectId
+ * @param {{ layerId: number, materialId: number, customPrompt?: string }} payload
+ * @returns {{ result_url, layer_id, elapsed_s }}
+ */
+export async function applyMaterial(projectId, payload) {
+  const { data } = await api.post(
+    `/v1/projects/${projectId}/apply-material`,
+    {
+      layer_id:    payload.layerId,
+      material_id: payload.materialId,
+      custom_prompt: payload.customPrompt,
+    },
+    { timeout: 120_000 },
+  );
+  return data;
+}
+
+/**
+ * Fetch material list with optional filters.
+ * @param {{ category?, style?, search?, page?, pageSize? }} params
+ * @returns {MaterialListResponse}
+ */
+export async function getMaterialList(params = {}) {
+  const q = new URLSearchParams();
+  if (params.category) q.set('category',  params.category);
+  if (params.style)    q.set('style',     params.style);
+  if (params.search)   q.set('search',    params.search);
+  q.set('page',      String(params.page     ?? 1));
+  q.set('page_size', String(params.pageSize ?? 20));
+  const { data } = await api.get(`/v1/materials?${q}`);
+  return data;
+}
+
 export default api;

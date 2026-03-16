@@ -1,0 +1,168 @@
+{
+  "_comment": "The Circle — Material Apply ComfyUI Workflow (API format)",
+  "_description": [
+    "Applies a material texture to a masked room region using:",
+    "  - IP-Adapter (texture/colour from tile image, weight=0.8)",
+    "  - ControlNet Depth (MiDaS depth map, weight=0.9 — preserves perspective)",
+    "  - VAEEncodeForInpaint (mask restricts generation to selected area)",
+    "  - KSampler: steps=25, cfg=7, denoise=0.6, dpmpp_2m + karras",
+    "",
+    "★ No perspective-warp nodes — ControlNet Depth guides perspective automatically.",
+    "",
+    "Dynamic inputs (injected at runtime by WorkflowManager):",
+    "  Node 2 image  — original room photo (base64)",
+    "  Node 3 mask   — SAM mask PNG (base64, white=inpaint area)",
+    "  Node 4 image  — material tile image (base64)",
+    "  Node 12 text  — material description prompt",
+    "  Node 14 seed  — random seed",
+    "",
+    "All image nodes use ETN_LoadImageBase64 / ETN_LoadMaskBase64",
+    "(ComfyUI_Essentials) — no file upload to ComfyUI required."
+  ],
+  "1": {
+    "class_type": "CheckpointLoaderSimple",
+    "_label": "Load SDXL Base Checkpoint",
+    "inputs": {
+      "ckpt_name": "sdxl_base_1.0.safetensors"
+    }
+  },
+  "2": {
+    "class_type": "ETN_LoadImageBase64",
+    "_label": "Load Room Image (base64)",
+    "inputs": {
+      "image": "__ROOM_IMAGE_BASE64__"
+    }
+  },
+  "3": {
+    "class_type": "ETN_LoadMaskBase64",
+    "_label": "Load Inpaint Mask (base64)",
+    "inputs": {
+      "mask": "__MASK_BASE64__"
+    }
+  },
+  "4": {
+    "class_type": "ETN_LoadImageBase64",
+    "_label": "Load Material Tile Image (IP-Adapter reference, base64)",
+    "inputs": {
+      "image": "__MATERIAL_IMAGE_BASE64__"
+    }
+  },
+  "5": {
+    "class_type": "IPAdapterModelLoader",
+    "_label": "Load IP-Adapter Model (SDXL Plus ViT-H)",
+    "inputs": {
+      "ipadapter_file": "ip-adapter-plus_sdxl_vit-h.bin"
+    }
+  },
+  "6": {
+    "class_type": "CLIPVisionLoader",
+    "_label": "Load CLIP Vision Encoder (ViT-H-14 for IP-Adapter)",
+    "inputs": {
+      "clip_name": "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors"
+    }
+  },
+  "7": {
+    "class_type": "IPAdapterApply",
+    "_label": "Apply IP-Adapter (material texture → style reference)",
+    "inputs": {
+      "ipadapter":    ["5", 0],
+      "clip_vision":  ["6", 0],
+      "image":        ["4", 0],
+      "model":        ["1", 0],
+      "weight":       0.8,
+      "noise":        0.0,
+      "weight_type":  "original",
+      "start_at":     0.0,
+      "end_at":       1.0,
+      "unfold_batch": false
+    }
+  },
+  "8": {
+    "class_type": "ControlNetLoader",
+    "_label": "Load ControlNet Depth SDXL",
+    "inputs": {
+      "control_net_name": "controlnet-depth-sdxl-1.0.safetensors"
+    }
+  },
+  "9": {
+    "class_type": "MiDaS-DepthMapPreprocessor",
+    "_label": "Generate Depth Map (MiDaS — room perspective)",
+    "inputs": {
+      "image":           ["2", 0],
+      "a":               6.283185,
+      "bg_threshold":    0.1,
+      "resolution":      1024
+    }
+  },
+  "10": {
+    "class_type": "CLIPTextEncode",
+    "_label": "Positive Prompt (material description)",
+    "inputs": {
+      "clip": ["1", 1],
+      "text": "__POSITIVE_PROMPT__"
+    }
+  },
+  "11": {
+    "class_type": "CLIPTextEncode",
+    "_label": "Negative Prompt",
+    "inputs": {
+      "clip": ["1", 1],
+      "text": "people, person, human, text, watermark, logo, blurry, low quality, artifacts, distorted, oversaturated, cartoon, anime, illustration, painting, unrealistic"
+    }
+  },
+  "12": {
+    "class_type": "ControlNetApplyAdvanced",
+    "_label": "Apply ControlNet Depth (structure + perspective preservation)",
+    "inputs": {
+      "positive":        ["10", 0],
+      "negative":        ["11", 0],
+      "control_net":     ["8",  0],
+      "image":           ["9",  0],
+      "strength":        0.9,
+      "start_percent":   0.0,
+      "end_percent":     1.0
+    }
+  },
+  "13": {
+    "class_type": "VAEEncodeForInpaint",
+    "_label": "Encode for Inpaint (mask → latent noise mask)",
+    "inputs": {
+      "pixels":         ["2", 0],
+      "vae":            ["1", 2],
+      "mask":           ["3", 0],
+      "grow_mask_by":   6
+    }
+  },
+  "14": {
+    "class_type": "KSampler",
+    "_label": "KSampler (inpainting — material texture generation)",
+    "inputs": {
+      "model":          ["7",  0],
+      "positive":       ["12", 0],
+      "negative":       ["12", 1],
+      "latent_image":   ["13", 0],
+      "seed":           42,
+      "steps":          25,
+      "cfg":            7.0,
+      "sampler_name":   "dpmpp_2m",
+      "scheduler":      "karras",
+      "denoise":        0.6
+    }
+  },
+  "15": {
+    "class_type": "VAEDecode",
+    "_label": "Decode Latent → Image",
+    "inputs": {
+      "samples": ["14", 0],
+      "vae":     ["1",  2]
+    }
+  },
+  "16": {
+    "class_type": "SaveImage",
+    "_label": "Save Result",
+    "inputs": {
+      "images":       ["15", 0],
+      "filename_prefix": "material_apply"
+    }
+  }
+}
