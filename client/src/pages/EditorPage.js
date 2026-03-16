@@ -60,6 +60,12 @@ function EditorPage() {
   // imageUrl: use store if already set, otherwise wait for fetch
   const imageUrl  = project?.original_image_url || null;
 
+  const handleEncodingChange = useCallback(
+    ({ isEncoding }) =>
+      isEncoding ? setProcessing(true, 'SAM 이미지 분석 중...') : setProcessing(false),
+    [setProcessing]
+  );
+
   // ── Bootstrap: fetch project if not in store ───────────────────────────────
   useEffect(() => {
     if (!projectId) {
@@ -191,9 +197,7 @@ function EditorPage() {
               <RoomCanvas
                 imageSrc={imageUrl}
                 onMasksChange={setCanvasSegments}
-                onEncodingChange={({ isEncoding }) =>
-                  isEncoding ? setProcessing(true, 'SAM 이미지 분석 중...') : setProcessing(false)
-                }
+                onEncodingChange={handleEncodingChange}
               />
               {isProcessing && (
                 <ProcessingOverlay message={processingMessage} isColdStart={isColdStart} />
