@@ -1,5 +1,5 @@
 .header {
-  background: rgba(15, 15, 26, 0.95);
+  background: rgba(0, 0, 0, 0.95);
   border-bottom: 1px solid var(--border);
   backdrop-filter: blur(12px);
   position: sticky;
@@ -69,7 +69,7 @@
 .step-item.active .step-num {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: #000;
 }
 
 .step-item.active .step-name {
@@ -112,8 +112,8 @@
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  background: rgba(139, 92, 246, 0.12);
-  border: 1px solid rgba(139, 92, 246, 0.35);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 20px;
   padding: 0.35rem 0.75rem;
   text-decoration: none;
@@ -121,8 +121,8 @@
 }
 
 .credit-badge:hover {
-  background: rgba(139, 92, 246, 0.22);
-  border-color: rgba(139, 92, 246, 0.55);
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.35);
 }
 
 .credit-icon {
@@ -154,6 +154,7 @@
   border-radius: 50%;
   background: var(--accent);
   border: none;
+  color: #000;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -168,7 +169,7 @@
 .user-avatar-initial {
   font-size: 0.875rem;
   font-weight: 700;
-  color: #fff;
+  color: #000;
   line-height: 1;
 }
 

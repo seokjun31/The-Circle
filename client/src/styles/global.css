@@ -6,26 +6,26 @@
 }
 
 :root {
-  --bg-primary: #0f0f1a;
-  --bg-secondary: #1a1a2e;
-  --bg-card: #16213e;
-  --bg-elevated: #1e2a45;
-  --accent: #7c6af2;
-  --accent-hover: #6a59d1;
-  --accent-light: rgba(124, 106, 242, 0.15);
+  --bg-primary: #000000;
+  --bg-secondary: #0d0d0d;
+  --bg-card: #111111;
+  --bg-elevated: #1a1a1a;
+  --accent: #ffffff;
+  --accent-hover: #cccccc;
+  --accent-light: rgba(255, 255, 255, 0.08);
   --success: #50fa7b;
   --warning: #f1fa8c;
   --error: #ff5555;
-  --text-primary: #f0f0f8;
-  --text-secondary: #a0a0c0;
-  --text-muted: #606080;
-  --border: #2a2a4a;
-  --border-hover: #4a4a7a;
+  --text-primary: #ffffff;
+  --text-secondary: #999999;
+  --text-muted: #555555;
+  --border: #2a2a2a;
+  --border-hover: #555555;
   --radius-sm: 6px;
   --radius-md: 12px;
   --radius-lg: 20px;
-  --shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.6);
+  --shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.8);
   --transition: 0.2s ease;
 }
 
@@ -96,13 +96,13 @@ p {
 
 .btn-primary {
   background: var(--accent);
-  color: #fff;
+  color: #000;
 }
 
 .btn-primary:hover:not(:disabled) {
   background: var(--accent-hover);
   transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(124, 106, 242, 0.4);
+  box-shadow: 0 4px 16px rgba(255, 255, 255, 0.2);
 }
 
 .btn-secondary {
@@ -119,11 +119,12 @@ p {
 .btn-outline {
   background: transparent;
   color: var(--accent);
-  border: 1px solid var(--accent);
+  border: 1px solid var(--border-hover);
 }
 
 .btn-outline:hover:not(:disabled) {
   background: var(--accent-light);
+  border-color: var(--accent);
 }
 
 .btn-danger {
@@ -210,7 +211,7 @@ label {
 .step.active .step-circle {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: #000;
 }
 
 .step.completed .step-circle {
