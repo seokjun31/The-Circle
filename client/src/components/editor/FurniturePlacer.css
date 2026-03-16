@@ -1,0 +1,244 @@
+/* ── FurniturePlacer ─────────────────────────────────────────────────────────── */
+
+.furniture-placer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* ── Toolbar ─────────────────────────────────────────────────────────────────── */
+
+.fpl-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+}
+
+.fpl-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.fpl-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.fpl-calib-input {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.fpl-calib-input input {
+  width: 110px;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+.fpl-calib-badge {
+  font-size: 0.78rem;
+  background: rgba(241, 250, 140, 0.15);
+  border: 1px solid rgba(241, 250, 140, 0.4);
+  color: #f1fa8c;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+}
+
+.fpl-space-input {
+  width: 90px;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+.fpl-fit-badge {
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  border: 2px solid currentColor;
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.fpl-furn-info {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-left: auto;
+}
+
+/* ── Canvas area ─────────────────────────────────────────────────────────────── */
+
+.fpl-canvas {
+  position: relative;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  min-height: 400px;
+  cursor: default;
+  user-select: none;
+}
+
+.fpl-canvas.calib-mode {
+  cursor: crosshair;
+}
+
+.fpl-room-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+}
+
+.fpl-empty-room {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 400px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+/* ── Calibration markers ─────────────────────────────────────────────────────── */
+
+.fpl-calib-point {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #f1fa8c;
+  color: #000;
+  font-size: 0.7rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+  z-index: 10;
+}
+
+.fpl-calib-line {
+  width: 100%;
+  height: 100%;
+  z-index: 9;
+}
+
+/* ── Furniture overlay ───────────────────────────────────────────────────────── */
+
+.fpl-furniture {
+  position: absolute;
+  border-radius: 4px;
+  transition: box-shadow 0.2s ease;
+}
+
+.fpl-furniture-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+  /* Transparent bg shows through for PNG furniture */
+  background: transparent;
+}
+
+.fpl-resize-handle {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  width: 14px;
+  height: 14px;
+  background: var(--accent);
+  border: 2px solid #fff;
+  border-radius: 3px;
+  cursor: se-resize;
+  z-index: 10;
+}
+
+/* ── Bottom controls ─────────────────────────────────────────────────────────── */
+
+.fpl-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 1rem;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.fpl-size-info {
+  flex: 1;
+}
+
+.fpl-bottom-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+/* ── Result ──────────────────────────────────────────────────────────────────── */
+
+.fpl-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0;
+  overflow: hidden;
+}
+
+.fpl-result-label {
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  padding: 0.6rem;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  margin: 0;
+}
+
+.fpl-compare {
+  width: 100%;
+}
+
+.fpl-result-fit {
+  text-align: center;
+  padding: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border);
+}
+
+.fpl-result-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border);
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .fpl-toolbar {
+    gap: 0.5rem;
+  }
+
+  .fpl-canvas {
+    min-height: 280px;
+  }
+
+  .fpl-bottom {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

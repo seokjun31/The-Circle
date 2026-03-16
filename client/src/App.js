@@ -7,6 +7,7 @@ import StyleSelectPage from './pages/StyleSelectPage';
 import MaskingPage from './pages/MaskingPage';
 import ResultPage from './pages/ResultPage';
 import EditorPage from './pages/EditorPage';
+import FurniturePage from './pages/FurniturePage';
 import './styles/global.css';
 
 function App() {
@@ -22,6 +23,8 @@ function App() {
             <Route path="/result" element={<ResultPage />} />
             <Route path="/editor" element={<EditorPage />} />
             <Route path="/editor/:projectId" element={<EditorPage />} />
+            <Route path="/furniture" element={<FurniturePage />} />
+            <Route path="/furniture/:projectId" element={<FurniturePage />} />
           </Routes>
         </main>
         <Toaster

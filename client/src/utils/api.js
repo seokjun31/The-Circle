@@ -103,6 +103,72 @@ export async function getMaterialList(params = {}) {
   return data;
 }
 
+// ── Phase 6: Furniture ────────────────────────────────────────────────────────
+
+/**
+ * Fetch furniture catalog with optional filters.
+ * @param {{ category?, style?, search?, page?, pageSize? }} params
+ * @returns {FurnitureListResponse}
+ */
+export async function getFurnitureList(params = {}) {
+  const q = new URLSearchParams();
+  if (params.category) q.set('category',  params.category);
+  if (params.style)    q.set('style',     params.style);
+  if (params.search)   q.set('search',    params.search);
+  q.set('page',      String(params.page     ?? 1));
+  q.set('page_size', String(params.pageSize ?? 20));
+  const { data } = await api.get(`/v1/furniture?${q}`);
+  return data;
+}
+
+/**
+ * Upload a custom furniture image (background-removed PNG).
+ * @param {File} file
+ * @returns {{ furniture_image_url, width_px, height_px, file_size_kb }}
+ */
+export async function uploadFurnitureImage(file) {
+  const form = new FormData();
+  form.append('file', file);
+  const { data } = await api.post('/v1/furniture/upload-image', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 30_000,
+  });
+  return data;
+}
+
+/**
+ * Place furniture onto a project room with AI blending.
+ * @param {number} projectId
+ * @param {{
+ *   furnitureId?: number,
+ *   furnitureImageUrl?: string,
+ *   furnitureWidthCm?: number,
+ *   furnitureHeightCm?: number,
+ *   spaceWidthCm?: number,
+ *   positionX: number,
+ *   positionY: number,
+ *   targetWidthPx: number,
+ * }} payload
+ * @returns {{ result_url, layer_id, elapsed_s, fit_check, credits_used, remaining_balance }}
+ */
+export async function placeFurniture(projectId, payload) {
+  const { data } = await api.post(
+    `/v1/projects/${projectId}/place-furniture`,
+    {
+      furniture_id:         payload.furnitureId        ?? null,
+      furniture_image_url:  payload.furnitureImageUrl  ?? null,
+      furniture_width_cm:   payload.furnitureWidthCm   ?? null,
+      furniture_height_cm:  payload.furnitureHeightCm  ?? null,
+      space_width_cm:       payload.spaceWidthCm        ?? null,
+      position_x:           payload.positionX,
+      position_y:           payload.positionY,
+      target_width_px:      payload.targetWidthPx,
+    },
+    { timeout: 120_000 },
+  );
+  return data;
+}
+
 // ── Phase 5: Circle AI & Mood Copy ───────────────────────────────────────────
 
 /**
