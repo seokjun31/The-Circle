@@ -1,264 +1,334 @@
-/* ── EditorPage ────────────────────────────────────────────────────────────── */
+/* ── Override main-content constraints for full-bleed editor ─────────────── */
+.app > main:has(.ep-root) {
+  max-width: none !important;
+  width: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
 
-.editor-page {
+/* ── EditorPage — 3-column layout ────────────────────────────────────────── */
+
+.ep-root {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  height: 100vh; /* header is hidden on /editor */
+  overflow: hidden;
+  background: var(--bg-primary);
 }
 
-/* ── Header ────────────────────────────────────────────────────────────────── */
-
-.editor-header {
+/* ── Top bar ──────────────────────────────────────────────────────────────── */
+.ep-topbar {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
+  padding: 0 1rem;
+  height: 52px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
   gap: 1rem;
-  flex-wrap: wrap;
 }
 
-.editor-header-left {
+.ep-topbar-left {
   display: flex;
-  align-items: flex-start;
-  gap: 1rem;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+  min-width: 0;
 }
 
 .ep-back-btn {
-  margin-top: 0.2rem;
-  flex-shrink: 0;
-}
-
-.editor-title {
-  font-size: 1.5rem;
-  margin: 0 0 0.2rem;
-}
-
-.editor-subtitle {
-  font-size: 0.875rem;
-  color: var(--text-muted);
-  margin: 0;
-}
-
-/* ── Credit badge ──────────────────────────────────────────────────────────── */
-
-.ep-credit-badge {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 0.45rem 0.9rem;
-  flex-shrink: 0;
-}
-
-.ep-credit-icon {
+  color: var(--text-secondary);
+  border-radius: 6px;
+  padding: 0.3rem 0.7rem;
   font-size: 1rem;
-}
-
-.ep-credit-label {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.ep-credit-low {
-  background: var(--error);
-  color: #fff;
-  font-size: 0.7rem;
-  font-weight: 700;
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-}
-
-/* ── Alert ─────────────────────────────────────────────────────────────────── */
-
-.ep-alert {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.875rem 1.25rem;
-  border-radius: var(--radius-sm);
-  font-size: 0.9rem;
-  flex-wrap: wrap;
-}
-
-.ep-alert-warning {
-  background: rgba(241, 250, 140, 0.1);
-  border: 1px solid rgba(241, 250, 140, 0.3);
-  color: var(--warning);
-}
-
-.ep-charge-btn {
-  margin-left: auto;
+  cursor: pointer;
   flex-shrink: 0;
-  border-color: var(--warning);
-  color: var(--warning);
+  transition: all var(--transition);
 }
+.ep-back-btn:hover { color: var(--text-primary); border-color: var(--border-hover); }
 
-.ep-charge-btn:hover {
-  background: rgba(241, 250, 140, 0.15);
-}
-
-/* ── Tabs ──────────────────────────────────────────────────────────────────── */
-
-.ep-tabs {
-  display: flex;
-  gap: 0.5rem;
-  border-bottom: 2px solid var(--border);
-  padding-bottom: 0;
-}
-
-.ep-tab {
+.ep-title-group {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
-  padding: 0.75rem 1.5rem;
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -2px;
-  cursor: pointer;
-  transition: all var(--transition);
-  text-align: left;
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  gap: 0.1rem;
+  min-width: 0;
 }
-
-.ep-tab:hover {
-  background: var(--bg-elevated);
-}
-
-.ep-tab.active {
-  border-bottom-color: var(--accent);
-  background: var(--bg-elevated);
-}
-
-.ep-tab-label {
-  font-size: 1rem;
+.ep-project-name {
+  font-size: 0.95rem;
   font-weight: 700;
-  color: var(--text-secondary);
-  transition: color var(--transition);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-
-.ep-tab.active .ep-tab-label {
-  color: var(--accent);
-}
-
-.ep-tab-sub {
+.ep-tool-name {
   font-size: 0.75rem;
   color: var(--text-muted);
 }
 
-/* ── Content area ──────────────────────────────────────────────────────────── */
-
-.ep-content {
-  flex: 1;
+.ep-topbar-center {
+  display: flex;
+  gap: 0.4rem;
+  flex-shrink: 0;
 }
-
-/* ── History strip ─────────────────────────────────────────────────────────── */
-
-.ep-history {
-  margin-top: 0.5rem;
+.ep-hist-btn {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  border-radius: 6px;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all var(--transition);
 }
+.ep-hist-btn:hover:not(:disabled) { color: var(--text-primary); border-color: var(--border-hover); }
+.ep-hist-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
-.ep-history-title {
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  margin-bottom: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.ep-history-item {
+.ep-topbar-right {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.6rem;
+  flex-shrink: 0;
+}
+.ep-low-credit-warn {
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: rgba(255,85,85,0.15);
+  color: var(--error);
+  border: 1px solid rgba(255,85,85,0.3);
+  border-radius: 20px;
+  padding: 0.2rem 0.6rem;
+}
+.ep-credit-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 0.25rem 0.7rem;
+}
+.ep-panel-toggle {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: 6px;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.ep-panel-toggle:hover { color: var(--text-primary); }
+
+/* ── Workspace ────────────────────────────────────────────────────────────── */
+.ep-workspace {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
 }
 
-.ep-history-thumb {
-  width: 80px;
-  height: 60px;
+/* ── Left sidebar — tool icons ────────────────────────────────────────────── */
+.ep-sidebar {
+  width: 72px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  background: var(--bg-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.75rem 0.35rem;
+  overflow-y: auto;
+}
+
+.ep-tool-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.7rem 0.25rem;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all var(--transition);
+  width: 100%;
+}
+.ep-tool-btn:hover {
+  background: var(--bg-elevated);
+  border-color: var(--border);
+}
+.ep-tool-btn.active {
+  background: var(--accent-light);
+  border-color: var(--border-hover);
+}
+.ep-tool-icon {
+  font-size: 1.3rem;
+  line-height: 1;
+}
+.ep-tool-label {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.2;
+  word-break: keep-all;
+}
+.ep-tool-btn.active .ep-tool-label { color: var(--text-secondary); }
+
+/* ── Canvas area ──────────────────────────────────────────────────────────── */
+.ep-canvas-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--bg-primary);
+  overflow: hidden;
+}
+
+.ep-canvas-wrap {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.ep-canvas-placeholder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  color: var(--text-muted);
+  font-size: 3rem;
+}
+.ep-canvas-placeholder p { font-size: 0.9rem; }
+
+/* ── Result strip ─────────────────────────────────────────────────────────── */
+.ep-result-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1rem;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.ep-result-strip img {
+  width: 72px;
+  height: 48px;
   object-fit: cover;
-  border-radius: var(--radius-sm);
+  border-radius: 6px;
   border: 1px solid var(--border);
   flex-shrink: 0;
 }
-
-.ep-history-meta {
+.ep-result-meta {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
-  flex: 1;
-}
-
-.ep-history-type {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.ep-history-time {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-}
-
-/* ── Workspace (two-column) ─────────────────────────────────────────────────── */
-
-.ep-workspace {
-  display: flex;
-  gap: 1rem;
-  align-items: flex-start;
-}
-
-.ep-main {
-  flex: 1;
+  gap: 0.15rem;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
 }
-
-.ep-layer-sidebar {
-  width: 240px;
+.ep-result-meta span {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ep-result-meta span:last-child { color: var(--text-muted); font-size: 0.72rem; }
+.ep-download-btn {
   flex-shrink: 0;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  min-height: 400px;
-  max-height: 70vh;
+  color: var(--text-secondary);
+  border-radius: 6px;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.8rem;
+  text-decoration: none;
+  transition: all var(--transition);
+}
+.ep-download-btn:hover { color: var(--text-primary); border-color: var(--border-hover); }
+
+/* ── Right options panel ──────────────────────────────────────────────────── */
+.ep-options-panel {
+  width: 300px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--border);
+  background: var(--bg-secondary);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  position: sticky;
-  top: 1rem;
 }
 
-/* ── Responsive ────────────────────────────────────────────────────────────── */
-
-@media (max-width: 900px) {
-  .ep-workspace {
-    flex-direction: column;
-  }
-  .ep-layer-sidebar {
-    width: 100%;
-    max-height: 280px;
-    position: static;
-  }
+.ep-options-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+.ep-options-sub {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--text-muted);
 }
 
+.ep-options-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.75rem;
+}
+.ep-options-body::-webkit-scrollbar { width: 4px; }
+.ep-options-body::-webkit-scrollbar-track { background: transparent; }
+.ep-options-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ── Responsive ───────────────────────────────────────────────────────────── */
+
+/* Tablet */
+@media (max-width: 1024px) {
+  .ep-options-panel { width: 260px; }
+}
+
+/* Small tablet — collapse sidebar to icons only */
 @media (max-width: 768px) {
-  .editor-header {
-    flex-direction: column;
+  .ep-root { height: auto; overflow: visible; }
+  .ep-workspace { flex-direction: column; overflow: visible; }
+  .ep-sidebar {
+    width: 100%;
+    flex-direction: row;
+    height: auto;
+    padding: 0.5rem;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
   }
-
-  .ep-credit-badge {
-    align-self: flex-start;
-  }
-
-  .ep-tab {
-    padding: 0.6rem 1rem;
-  }
-
-  .ep-tab-label {
-    font-size: 0.9rem;
+  .ep-tool-btn { width: auto; min-width: 56px; padding: 0.5rem 0.6rem; }
+  .ep-canvas-area { min-height: 300px; }
+  .ep-options-panel {
+    width: 100%;
+    max-height: 360px;
+    border-left: none;
+    border-top: 1px solid var(--border);
   }
 }
+
+/* Mobile */
+@media (max-width: 480px) {
+  .ep-tool-label { display: none; }
+  .ep-topbar-center { display: none; }
+}
+
+/* Keep legacy classes for old EditorPage inline styles that may reference them */
+.ep-workspace-legacy { display: flex; gap: 1rem; }
+.ep-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1.5rem; }
+.ep-layer-sidebar { width: 240px; flex-shrink: 0; }
