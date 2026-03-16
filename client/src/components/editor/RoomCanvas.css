@@ -1,0 +1,266 @@
+/* ── RoomCanvas layout ───────────────────────────────────────────────────── */
+
+.room-canvas-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 400px;
+  background: var(--bg-secondary, #f8f9fa);
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Two-column when sidebar has space */
+@media (min-width: 900px) {
+  .room-canvas-root {
+    flex-direction: row;
+    align-items: stretch;
+  }
+}
+
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+
+.room-canvas-sidebar {
+  width: 200px;
+  min-width: 160px;
+  flex-shrink: 0;
+  padding: 16px;
+  background: #fff;
+  border-right: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow-y: auto;
+}
+
+@media (max-width: 899px) {
+  .room-canvas-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid #e5e7eb;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+}
+
+.rcs-section { display: flex; flex-direction: column; gap: 8px; }
+
+.rcs-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6b7280;
+  margin: 0;
+}
+
+/* Label buttons */
+.rcs-labels { display: flex; flex-direction: column; gap: 6px; }
+.rcs-label-btn {
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 2px solid #e5e7eb;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  text-align: left;
+  color: #374151;
+}
+.rcs-label-btn.active {
+  border-color: var(--accent, #1e90ff);
+  background: color-mix(in srgb, var(--accent, #1e90ff) 12%, transparent);
+  color: var(--accent, #1e90ff);
+}
+.rcs-label-btn:hover:not(.active) {
+  border-color: #9ca3af;
+  background: #f9fafb;
+}
+
+/* Tips */
+.rcs-tips {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  color: #6b7280;
+}
+.rcs-tips li { display: flex; align-items: center; gap: 6px; }
+.tip-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+}
+.tip-dot.positive { background: #22c55e; }
+.tip-dot.negative { background: #ef4444; }
+
+/* Confirmed mask list */
+.rcs-mask-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  padding: 4px 0;
+}
+.rcs-mask-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.rcs-mask-label { flex: 1; color: #374151; }
+.rcs-mask-remove {
+  border: none;
+  background: none;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 0 4px;
+  font-size: 16px;
+  line-height: 1;
+}
+.rcs-mask-remove:hover { color: #ef4444; }
+
+/* ── Viewport ─────────────────────────────────────────────────────────────── */
+
+.room-canvas-viewport {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: #111;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  min-height: 320px;
+}
+
+.room-canvas-zoom-wrapper {
+  /* transform applied inline for zoom/pan */
+  user-select: none;
+}
+
+/* Layer 1: image */
+.rcs-image-canvas {
+  display: block;
+  border-radius: 4px;
+}
+
+/* Layer 3: point markers */
+.rcs-points-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.sam-point-marker {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  border: 2px solid #fff;
+  pointer-events: none;
+}
+.sam-point-marker.positive {
+  background: #22c55e;
+  color: #fff;
+}
+.sam-point-marker.negative {
+  background: #ef4444;
+  color: #fff;
+}
+
+/* ── Status banners ───────────────────────────────────────────────────────── */
+
+.rcs-status-banner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  background: rgba(0,0,0,0.75);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+
+.rcs-error-banner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  background: rgba(239, 68, 68, 0.9);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  max-width: 80%;
+  text-align: center;
+  pointer-events: none;
+}
+
+/* ── Action bar ───────────────────────────────────────────────────────────── */
+
+.rcs-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: #fff;
+  border-top: 1px solid #e5e7eb;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.rcs-action-info {
+  font-size: 13px;
+  color: #6b7280;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rcs-action-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+/* ── Spinner (reused from global) ─────────────────────────────────────────── */
+
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

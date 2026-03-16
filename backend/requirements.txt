@@ -23,6 +23,10 @@ boto3==1.34.144
 # Image processing
 Pillow==10.4.0
 
+# SAM ONNX encoder server-side fallback
+onnxruntime==1.17.3
+numpy==1.26.4
+
 # Utilities
 python-dotenv==1.0.1
 httpx==0.27.0

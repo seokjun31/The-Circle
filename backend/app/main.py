@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
-from app.routers import auth, credits, materials, projects
+from app.routers import auth, credits, materials, projects, segments
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
 @asynccontextmanager
@@ -59,6 +59,7 @@ app.include_router(auth.router,      prefix=API_PREFIX)
 app.include_router(projects.router,  prefix=API_PREFIX)
 app.include_router(materials.router, prefix=API_PREFIX)
 app.include_router(credits.router,   prefix=API_PREFIX)
+app.include_router(segments.router,  prefix=API_PREFIX)
 
 # ── Unified error handlers ────────────────────────────────────────────────────
 @app.exception_handler(RequestValidationError)
