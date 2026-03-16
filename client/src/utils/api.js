@@ -28,14 +28,20 @@ api.interceptors.response.use(
   }
 );
 
-// Upload room image
+// Upload room image — creates a project via FastAPI and returns legacy shape
 export async function uploadImage(file) {
   const form = new FormData();
-  form.append('image', file);
-  const { data } = await api.post('/upload', form, {
+  form.append('file', file);
+  form.append('title', file.name || '새 프로젝트');
+  form.append('image_type', 'single');
+  const { data } = await api.post('/v1/projects', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
-  return data; // { imageId, imageUrl, filename }
+  return {
+    imageId:  data.id,
+    imageUrl: data.original_image_url,
+    filename: file.name,
+  };
 }
 
 // Get materials list
