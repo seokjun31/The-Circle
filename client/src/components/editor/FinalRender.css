@@ -1,0 +1,341 @@
+.final-render {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 16px;
+}
+
+/* ── Section titles ── */
+.final-render h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: #a0a0b0;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0 0 10px 0;
+}
+
+/* ── Lighting selector ── */
+.lighting-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.lighting-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 8px;
+  background: #1a1a2e;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.lighting-btn:hover {
+  background: #232340;
+}
+.lighting-btn.active {
+  border-color: #7b61ff;
+  background: #1e1a3a;
+}
+.lighting-btn .icon {
+  font-size: 24px;
+  line-height: 1;
+}
+.lighting-btn .label {
+  font-size: 12px;
+  color: #c0c0d0;
+  font-weight: 500;
+}
+.lighting-btn.active .label {
+  color: #a78bfa;
+}
+
+/* ── Quality selector ── */
+.quality-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.quality-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  background: #1a1a2e;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  text-align: left;
+}
+.quality-btn:hover {
+  background: #232340;
+}
+.quality-btn.active {
+  border-color: #7b61ff;
+  background: #1e1a3a;
+}
+.quality-btn .q-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e0e0f0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.quality-btn.active .q-title {
+  color: #a78bfa;
+}
+.quality-btn .q-detail {
+  font-size: 11px;
+  color: #808090;
+}
+.quality-btn .q-credits {
+  font-size: 11px;
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+/* ── Render button ── */
+.render-btn {
+  width: 100%;
+  padding: 14px;
+  background: linear-gradient(135deg, #7b61ff, #a78bfa);
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.render-btn:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+.render-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ── Progress ── */
+.render-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  background: #1a1a2e;
+  border-radius: 12px;
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.progress-step {
+  font-size: 13px;
+  color: #c0c0d0;
+}
+.progress-pct {
+  font-size: 13px;
+  font-weight: 700;
+  color: #a78bfa;
+}
+
+.progress-bar-track {
+  height: 6px;
+  background: #2e2e4e;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #7b61ff, #a78bfa);
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+/* ── Result view ── */
+.render-result {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.result-image-wrap {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #0d0d1a;
+  cursor: zoom-in;
+}
+.result-image-wrap img {
+  width: 100%;
+  display: block;
+}
+.result-zoom-hint {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.result-actions {
+  display: flex;
+  gap: 8px;
+}
+.result-actions button {
+  flex: 1;
+  padding: 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+.result-actions button:hover {
+  opacity: 0.85;
+}
+.btn-download {
+  background: #22c55e;
+  color: #fff;
+}
+.btn-share {
+  background: #3b82f6;
+  color: #fff;
+}
+.btn-compare {
+  background: #7b61ff;
+  color: #fff;
+}
+
+.result-meta {
+  font-size: 11px;
+  color: #606070;
+  text-align: center;
+}
+
+/* ── Fullscreen overlay ── */
+.fullscreen-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.95);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.fullscreen-overlay img {
+  max-width: 96vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
+}
+.fullscreen-close {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 28px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+/* ── Before/after compare in result ── */
+.render-compare {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* ── Error box ── */
+.render-error {
+  padding: 12px 16px;
+  background: rgba(239,68,68,0.1);
+  border: 1px solid rgba(239,68,68,0.3);
+  border-radius: 10px;
+  color: #fca5a5;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Credit confirm modal ── */
+.credit-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.credit-modal {
+  background: #1e1e35;
+  border: 1px solid #3a3a5a;
+  border-radius: 16px;
+  padding: 24px;
+  width: 100%;
+  max-width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.credit-modal h4 {
+  font-size: 17px;
+  font-weight: 700;
+  color: #e0e0f0;
+  margin: 0;
+}
+.credit-modal p {
+  font-size: 14px;
+  color: #a0a0b0;
+  margin: 0;
+  line-height: 1.5;
+}
+.credit-modal-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+.credit-modal-row span:first-child { color: #808090; }
+.credit-modal-row span:last-child { color: #f59e0b; font-weight: 700; }
+.credit-modal-actions {
+  display: flex;
+  gap: 10px;
+}
+.credit-modal-actions button {
+  flex: 1;
+  padding: 10px;
+  border-radius: 8px;
+  border: none;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-cancel { background: #2e2e4e; color: #a0a0b0; }
+.btn-confirm { background: #7b61ff; color: #fff; }

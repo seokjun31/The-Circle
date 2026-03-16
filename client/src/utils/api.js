@@ -226,4 +226,101 @@ export async function copyMood(projectId, payload) {
   return data;
 }
 
+// ── Phase 7: Layer management ─────────────────────────────────────────────────
+
+/**
+ * Get all layers for a project.
+ * @param {number} projectId
+ * @returns {{ layers: EditLayerResponse[], total: number }}
+ */
+export async function getProjectLayers(projectId) {
+  const { data } = await api.get(`/v1/projects/${projectId}/layers`);
+  return data;
+}
+
+/**
+ * Update a layer's visibility or order.
+ * @param {number} projectId
+ * @param {number} layerId
+ * @param {{ is_visible?: boolean, order?: number, name?: string }} payload
+ * @returns {EditLayerResponse}
+ */
+export async function updateLayer(projectId, layerId, payload) {
+  const { data } = await api.patch(
+    `/v1/projects/${projectId}/layers/${layerId}`,
+    payload,
+  );
+  return data;
+}
+
+/**
+ * Delete a layer permanently.
+ * @param {number} projectId
+ * @param {number} layerId
+ */
+export async function deleteLayer(projectId, layerId) {
+  await api.delete(`/v1/projects/${projectId}/layers/${layerId}`);
+}
+
+/**
+ * Run final render pipeline with SSE streaming progress.
+ *
+ * Uses the native fetch API so the caller can read the response body as a
+ * stream (axios does not support SSE natively).
+ *
+ * @param {number} projectId
+ * @param {{ lighting: string, quality: string }} payload
+ * @param {function(event: object)} onEvent  — called for each SSE event object
+ * @param {AbortSignal} [signal]             — optional abort signal
+ */
+export async function runFinalRender(projectId, payload, onEvent, signal) {
+  const token = localStorage.getItem('token') || '';
+
+  const response = await fetch(`/api/v1/projects/${projectId}/final-render`, {
+    method:  'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body:   JSON.stringify({
+      lighting: payload.lighting,
+      quality:  payload.quality,
+    }),
+    signal,
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(
+      err?.detail?.message || err?.message || `렌더링 요청 실패 (${response.status})`,
+    );
+  }
+
+  // Read SSE stream line by line
+  const reader  = response.body.getReader();
+  const decoder = new TextDecoder();
+  let   buffer  = '';
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop(); // keep potentially incomplete last line
+
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        try {
+          const evt = JSON.parse(line.slice(6));
+          onEvent(evt);
+          if (evt.done || evt.error) return;
+        } catch {
+          // ignore malformed SSE event
+        }
+      }
+    }
+  }
+}
+
 export default api;
