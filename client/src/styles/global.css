@@ -56,6 +56,14 @@ body {
   width: 100%;
 }
 
+/* Full-bleed variant: used for editor & landing page */
+.main-content--full {
+  max-width: none;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+}
+
 /* ===== Typography ===== */
 h1, h2, h3, h4 {
   font-weight: 700;

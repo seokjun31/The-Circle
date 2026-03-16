@@ -1,8 +1,9 @@
-/* ── Override main-content padding for full-bleed editor ─────────────────── */
+/* ── Override main-content constraints for full-bleed editor ─────────────── */
 .app > main:has(.ep-root) {
-  max-width: 100%;
-  padding: 0;
-  margin: 0;
+  max-width: none !important;
+  width: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
 }
 
 /* ── EditorPage — 3-column layout ────────────────────────────────────────── */

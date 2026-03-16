@@ -245,6 +245,11 @@ export async function copyMood(projectId, payload) {
 
 // ── Projects list ─────────────────────────────────────────────────────────────
 
+export async function getProject(projectId) {
+  const { data } = await api.get(`/v1/projects/${projectId}`);
+  return data; // full project object
+}
+
 export async function listProjects(page = 1, pageSize = 12) {
   const { data } = await api.get(`/v1/projects?page=${page}&page_size=${pageSize}`);
   return data; // { items, total, page, page_size }

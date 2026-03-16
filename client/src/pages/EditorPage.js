@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import useEditorStore from '../stores/editorStore';
-import { getCreditBalance, getProjectLayers } from '../utils/api';
+import { getCreditBalance, getProject, getProjectLayers } from '../utils/api';
 import StyleTransform from '../components/editor/StyleTransform';
 import MoodCopy from '../components/editor/MoodCopy';
 import MaterialPanel from '../components/editor/MaterialPanel';
@@ -38,6 +38,7 @@ function EditorPage() {
     creditBalance,
     lastResult,
     layers,
+    setProject,
     setActiveTool,
     setCreditBalance,
     setLayers,
@@ -53,21 +54,39 @@ function EditorPage() {
   const [selectedLayerId, setSelectedLayerId] = useState(null);
   const [canvasSegments, setCanvasSegments]   = useState([]);
   const [rightPanelOpen, setRightPanelOpen]   = useState(true);
+  const [loadingProject, setLoadingProject]   = useState(false);
 
   const projectId = pid ? parseInt(pid, 10) : project?.id;
+  // imageUrl: use store if already set, otherwise wait for fetch
   const imageUrl  = project?.original_image_url || null;
 
-  // ── Bootstrap ──────────────────────────────────────────────────────────────
+  // ── Bootstrap: fetch project if not in store ───────────────────────────────
   useEffect(() => {
     if (!projectId) {
       toast.error('프로젝트를 먼저 생성해주세요.');
       navigate('/dashboard');
       return;
     }
-    getCreditBalance()
-      .then((d) => setCreditBalance(d.balance))
-      .catch(() => {});
-  }, [projectId, navigate, setCreditBalance]);
+
+    // Already loaded in store for this project
+    if (project?.id === projectId) {
+      getCreditBalance().then((d) => setCreditBalance(d.balance)).catch(() => {});
+      return;
+    }
+
+    // Fetch from server
+    setLoadingProject(true);
+    getProject(projectId)
+      .then((proj) => {
+        setProject(proj);
+        getCreditBalance().then((d) => setCreditBalance(d.balance)).catch(() => {});
+      })
+      .catch(() => {
+        toast.error('프로젝트를 불러오지 못했습니다.');
+        navigate('/dashboard');
+      })
+      .finally(() => setLoadingProject(false));
+  }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const refreshLayers = useCallback(() => {
     if (!projectId) return;
@@ -182,8 +201,11 @@ function EditorPage() {
             </div>
           ) : (
             <div className="ep-canvas-placeholder">
-              <span>🏠</span>
-              <p>이미지를 불러오는 중...</p>
+              {loadingProject ? (
+                <><span className="spinner spinner-lg" /><p>프로젝트 불러오는 중...</p></>
+              ) : (
+                <><span>🏠</span><p>이미지를 불러오는 중...</p></>
+              )}
             </div>
           )}
 
