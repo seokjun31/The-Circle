@@ -177,6 +177,34 @@ def create_material(
     price_range: Optional[str]    = Form(None, max_length=100),
     style: Optional[str]          = Form(None, max_length=100),
     tags: Optional[str]           = Form(None, description="쉼표로 구분된 태그 목록"),
+    # ── AI generation parameters ─────────────────────────────────────────────
+    positive_prompt: str          = Form(
+        "",
+        description=(
+            "자재에 최적화된 긍정 프롬프트. "
+            "예: 'seamless large format beige porcelain tile floor, "
+            "subtle natural stone texture, clean grout lines, 8k uhd'"
+        ),
+    ),
+    negative_prompt: str          = Form(
+        "",
+        description=(
+            "자재에 최적화된 부정 프롬프트. "
+            "예: 'wood grain, glossy, reflective, blurry, low quality'"
+        ),
+    ),
+    ip_adapter_weight: float      = Form(
+        0.6,
+        ge=0.3,
+        le=0.9,
+        description="IP-Adapter 가중치 (0.3–0.9, 기본 0.6)",
+    ),
+    recommended_denoise: float    = Form(
+        0.62,
+        ge=0.5,
+        le=0.75,
+        description="KSampler denoise 강도 (0.5–0.75, 기본 0.62)",
+    ),
     # ── File uploads ─────────────────────────────────────────────────────────
     tile_image: UploadFile        = File(..., description="Seamless 타일 이미지 (PNG/JPEG, min 256×256)"),
     normal_map: Optional[UploadFile] = File(None, description="PBR Normal Map (선택)"),
@@ -235,17 +263,21 @@ def create_material(
     tag_list = [t.strip() for t in (tags or "").split(",") if t.strip()]
 
     material = Material(
-        name           = name,
-        category       = category,
-        tile_image_url = "",          # placeholder — updated below
-        normal_map_url = None,
-        tile_width_cm  = tile_width_cm,
-        tile_height_cm = tile_height_cm,
-        brand          = brand,
-        product_code   = product_code,
-        price_range    = price_range,
-        style          = style,
-        tags           = tag_list,
+        name                = name,
+        category            = category,
+        tile_image_url      = "",          # placeholder — updated below
+        normal_map_url      = None,
+        tile_width_cm       = tile_width_cm,
+        tile_height_cm      = tile_height_cm,
+        brand               = brand,
+        product_code        = product_code,
+        price_range         = price_range,
+        style               = style,
+        tags                = tag_list,
+        positive_prompt     = positive_prompt,
+        negative_prompt     = negative_prompt,
+        ip_adapter_weight   = ip_adapter_weight,
+        recommended_denoise = recommended_denoise,
     )
     db.add(material)
     db.flush()   # get material.id without committing

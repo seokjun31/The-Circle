@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, Float, Integer, String, func
+from sqlalchemy import DateTime, Enum, Float, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -40,6 +40,28 @@ class Material(Base):
     brand: Mapped[str | None] = mapped_column(String(100))
     product_code: Mapped[str | None] = mapped_column(String(100))
     price_range: Mapped[str | None] = mapped_column(String(100))
+
+    # ── AI generation parameters ──────────────────────────────────────────────
+    # Optimised positive prompt for this specific material.
+    # e.g. "seamless large format beige porcelain tile floor, cotton beige tone, ..."
+    positive_prompt: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # Optimised negative prompt — suppress attributes that don't belong.
+    # e.g. "wood grain, glossy, reflective, wet, cracked, ..."
+    negative_prompt: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # IP-Adapter weight tuned per material type (range 0.3–0.9, default 0.6).
+    # - Patterned materials (marble, wood grain): 0.5–0.65
+    # - Solid / matte materials (paint, plain tile): 0.4–0.55
+    # - Complex patterns (mosaic, herringbone): 0.6–0.75
+    ip_adapter_weight: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.6
+    )
+    # KSampler denoise strength tuned per material (range 0.5–0.75, default 0.62).
+    # - Similar tone to original: 0.5–0.58
+    # - Different tone: 0.60–0.68
+    # - Major tone change (light → dark): 0.65–0.75
+    recommended_denoise: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.62
+    )
 
     # Metadata for search / filtering
     tags: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)

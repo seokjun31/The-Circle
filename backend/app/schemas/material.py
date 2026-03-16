@@ -18,6 +18,47 @@ class MaterialCreateRequest(BaseModel):
     price_range: Optional[str] = None
     tags: List[str] = []
     style: Optional[str] = None
+    # ── AI generation parameters ─────────────────────────────────────────────
+    positive_prompt: str = Field(
+        default="",
+        description=(
+            "자재에 최적화된 긍정 프롬프트. "
+            "예: 'seamless large format beige porcelain tile floor, "
+            "cotton beige tone, subtle natural stone texture, "
+            "clean grout lines, uniform matte finish, "
+            "photorealistic interior floor, 8k uhd'"
+        ),
+    )
+    negative_prompt: str = Field(
+        default="",
+        description=(
+            "자재에 최적화된 부정 프롬프트. "
+            "예: 'wood grain, wood planks, glossy, reflective, wet, cracked, "
+            "dirty, blurry, low quality, distorted, cartoon, painting'"
+        ),
+    )
+    ip_adapter_weight: float = Field(
+        default=0.6,
+        ge=0.3,
+        le=0.9,
+        description=(
+            "IP-Adapter 가중치 (범위 0.3–0.9). "
+            "패턴이 뚜렷한 자재(대리석, 나무결): 0.5–0.65 | "
+            "단색/무지(페인트, 무광 타일): 0.4–0.55 | "
+            "복잡한 패턴(모자이크, 헤링본): 0.6–0.75"
+        ),
+    )
+    recommended_denoise: float = Field(
+        default=0.62,
+        ge=0.5,
+        le=0.75,
+        description=(
+            "KSampler denoise 강도 (범위 0.5–0.75). "
+            "원본과 비슷한 톤: 0.5–0.58 | "
+            "다른 톤: 0.60–0.68 | "
+            "대폭 변경(밝은색→어두운색): 0.65–0.75"
+        ),
+    )
 
 
 class MaterialResponse(BaseModel):
@@ -35,6 +76,11 @@ class MaterialResponse(BaseModel):
     price_range: Optional[str]
     tags: List[str]
     style: Optional[str]
+    # AI generation parameters
+    positive_prompt: str
+    negative_prompt: str
+    ip_adapter_weight: float
+    recommended_denoise: float
     created_at: datetime
 
 

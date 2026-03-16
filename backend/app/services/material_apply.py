@@ -87,9 +87,9 @@ class MaterialApplyService:
         user_id: int,
         db: Session,
         custom_prompt: Optional[str] = None,
-        ipadapter_weight: float = _DEFAULT_IPADAPTER_W,
+        ipadapter_weight: Optional[float] = None,
         controlnet_weight: float = _DEFAULT_CN_DEPTH_W,
-        denoise: float = _DEFAULT_DENOISE,
+        denoise: Optional[float] = None,
         steps: int = _DEFAULT_STEPS,
         cfg: float = _DEFAULT_CFG,
     ) -> ApplyResult:
@@ -103,10 +103,12 @@ class MaterialApplyService:
             material_id:       Material to apply.
             user_id:           Owner of the project (for S3 key).
             db:                SQLAlchemy session.
-            custom_prompt:     Optional extra text appended to the auto-generated prompt.
-            ipadapter_weight:  IP-Adapter weight (0.0–1.0; default 0.80).
+            custom_prompt:     Optional extra text appended to the material's prompt.
+            ipadapter_weight:  IP-Adapter weight override. If None, uses
+                               ``material.ip_adapter_weight`` (per-material tuned value).
             controlnet_weight: ControlNet Depth weight (0.0–1.0; default 0.90).
-            denoise:           KSampler denoise strength (0.5–0.7 recommended).
+            denoise:           KSampler denoise override. If None, uses
+                               ``material.recommended_denoise`` (per-material tuned value).
             steps:             KSampler denoising steps.
             cfg:               Classifier-free guidance scale.
 
@@ -142,36 +144,62 @@ class MaterialApplyService:
         if not material.tile_image_url:
             raise ValueError(f"Material {material_id} has no tile_image_url")
 
-        # ── 2. Build text prompt ──────────────────────────────────────────────
-        category_desc = _CATEGORY_PROMPTS.get(material.category.value, "material texture on the surface")
-        mat_name_en   = material.name   # ideally stored in English; works as-is
-        base_prompt   = (
-            f"{mat_name_en}, {category_desc}, "
-            "high quality, photorealistic, professionally installed, "
-            "consistent lighting with the room, sharp detail"
+        # ── 2. Resolve per-material AI parameters ────────────────────────────
+        # Prefer the material's own tuned values; caller may override explicitly.
+        effective_ipadapter_weight = (
+            ipadapter_weight if ipadapter_weight is not None
+            else material.ip_adapter_weight
         )
+        effective_denoise = (
+            denoise if denoise is not None
+            else material.recommended_denoise
+        )
+
+        # ── 3. Build text prompt ──────────────────────────────────────────────
+        # If the material has a custom positive_prompt, use it as the base.
+        # Otherwise fall back to the auto-generated category description.
+        if material.positive_prompt:
+            base_prompt = material.positive_prompt
+        else:
+            category_desc = _CATEGORY_PROMPTS.get(
+                material.category.value, "material texture on the surface"
+            )
+            base_prompt = (
+                f"{material.name}, {category_desc}, "
+                "high quality, photorealistic, professionally installed, "
+                "consistent lighting with the room, sharp detail"
+            )
         if custom_prompt:
             base_prompt = f"{base_prompt}, {custom_prompt.strip()}"
 
+        # Negative prompt: material-specific if set, otherwise empty (WorkflowManager uses its own default)
+        negative_prompt = material.negative_prompt or None
+
         logger.info(
-            "apply_material: project=%d layer=%d material=%d(%s) prompt=%r",
-            project_id, layer_id, material_id, material.name, base_prompt[:80],
+            "apply_material: project=%d layer=%d material=%d(%s) "
+            "ipadapter=%.2f denoise=%.2f prompt=%r",
+            project_id, layer_id, material_id, material.name,
+            effective_ipadapter_weight, effective_denoise, base_prompt[:80],
         )
 
-        # ── 3. Build ComfyUI workflow ─────────────────────────────────────────
-        workflow = self._wm.build_material_apply_workflow(
+        # ── 4. Build ComfyUI workflow ─────────────────────────────────────────
+        wf_kwargs: dict = dict(
             image_url            = project.original_image_url,
             mask_data            = mask_url,
             material_texture_url = material.tile_image_url,
-            positive_prompt      = base_prompt,
-            ipadapter_weight     = ipadapter_weight,
-            controlnet_weight    = controlnet_weight,
-            denoise              = denoise,
+            prompt               = base_prompt,
+            ipadapter_weight     = effective_ipadapter_weight,
+            controlnet_strength  = controlnet_weight,
+            denoise              = effective_denoise,
             steps                = steps,
             cfg                  = cfg,
         )
+        if negative_prompt:
+            wf_kwargs["negative_prompt"] = negative_prompt
 
-        # ── 4. Submit to RunPod ───────────────────────────────────────────────
+        workflow = self._wm.build_material_apply_workflow(**wf_kwargs)
+
+        # ── 5. Submit to RunPod ───────────────────────────────────────────────
         # Mark project as processing
         project.status = ProjectStatus.processing
         db.commit()
@@ -187,7 +215,7 @@ class MaterialApplyService:
             db.commit()
             raise
 
-        # ── 5. Decode + save result image ─────────────────────────────────────
+        # ── 6. Decode + save result image ─────────────────────────────────────
         img_b64: Optional[str] = output.get("image_base64")
         if not img_b64:
             project.status = ProjectStatus.draft
@@ -206,14 +234,16 @@ class MaterialApplyService:
             public       = True,
         )
 
-        # ── 6. Update DB ──────────────────────────────────────────────────────
+        # ── 7. Update DB ──────────────────────────────────────────────────────
         layer.result_image_url = result_url
         layer.parameters = {
             **layer.parameters,
-            "material_id":   material_id,
-            "material_name": material.name,
-            "result_url":    result_url,
-            "prompt":        base_prompt,
+            "material_id":        material_id,
+            "material_name":      material.name,
+            "result_url":         result_url,
+            "prompt":             base_prompt,
+            "ipadapter_weight":   effective_ipadapter_weight,
+            "denoise":            effective_denoise,
         }
         project.status = ProjectStatus.completed
         db.commit()
