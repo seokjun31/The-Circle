@@ -1,0 +1,222 @@
+/* ── EditorPage ────────────────────────────────────────────────────────────── */
+
+.editor-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* ── Header ────────────────────────────────────────────────────────────────── */
+
+.editor-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.editor-header-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.ep-back-btn {
+  margin-top: 0.2rem;
+  flex-shrink: 0;
+}
+
+.editor-title {
+  font-size: 1.5rem;
+  margin: 0 0 0.2rem;
+}
+
+.editor-subtitle {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* ── Credit badge ──────────────────────────────────────────────────────────── */
+
+.ep-credit-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.45rem 0.9rem;
+  flex-shrink: 0;
+}
+
+.ep-credit-icon {
+  font-size: 1rem;
+}
+
+.ep-credit-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ep-credit-low {
+  background: var(--error);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+}
+
+/* ── Alert ─────────────────────────────────────────────────────────────────── */
+
+.ep-alert {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.875rem 1.25rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  flex-wrap: wrap;
+}
+
+.ep-alert-warning {
+  background: rgba(241, 250, 140, 0.1);
+  border: 1px solid rgba(241, 250, 140, 0.3);
+  color: var(--warning);
+}
+
+.ep-charge-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.ep-charge-btn:hover {
+  background: rgba(241, 250, 140, 0.15);
+}
+
+/* ── Tabs ──────────────────────────────────────────────────────────────────── */
+
+.ep-tabs {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 2px solid var(--border);
+  padding-bottom: 0;
+}
+
+.ep-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.75rem 1.5rem;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  transition: all var(--transition);
+  text-align: left;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+
+.ep-tab:hover {
+  background: var(--bg-elevated);
+}
+
+.ep-tab.active {
+  border-bottom-color: var(--accent);
+  background: var(--bg-elevated);
+}
+
+.ep-tab-label {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  transition: color var(--transition);
+}
+
+.ep-tab.active .ep-tab-label {
+  color: var(--accent);
+}
+
+.ep-tab-sub {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* ── Content area ──────────────────────────────────────────────────────────── */
+
+.ep-content {
+  flex: 1;
+}
+
+/* ── History strip ─────────────────────────────────────────────────────────── */
+
+.ep-history {
+  margin-top: 0.5rem;
+}
+
+.ep-history-title {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ep-history-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.ep-history-thumb {
+  width: 80px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.ep-history-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  flex: 1;
+}
+
+.ep-history-type {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ep-history-time {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* ── Responsive ────────────────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .editor-header {
+    flex-direction: column;
+  }
+
+  .ep-credit-badge {
+    align-self: flex-start;
+  }
+
+  .ep-tab {
+    padding: 0.6rem 1rem;
+  }
+
+  .ep-tab-label {
+    font-size: 0.9rem;
+  }
+}

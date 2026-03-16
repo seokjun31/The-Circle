@@ -6,6 +6,7 @@ import UploadPage from './pages/UploadPage';
 import StyleSelectPage from './pages/StyleSelectPage';
 import MaskingPage from './pages/MaskingPage';
 import ResultPage from './pages/ResultPage';
+import EditorPage from './pages/EditorPage';
 import './styles/global.css';
 
 function App() {
@@ -19,6 +20,8 @@ function App() {
             <Route path="/style" element={<StyleSelectPage />} />
             <Route path="/mask" element={<MaskingPage />} />
             <Route path="/result" element={<ResultPage />} />
+            <Route path="/editor" element={<EditorPage />} />
+            <Route path="/editor/:projectId" element={<EditorPage />} />
           </Routes>
         </main>
         <Toaster

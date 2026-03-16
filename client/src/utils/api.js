@@ -103,4 +103,61 @@ export async function getMaterialList(params = {}) {
   return data;
 }
 
+// ── Phase 5: Circle AI & Mood Copy ───────────────────────────────────────────
+
+/**
+ * Fetch current user's credit balance.
+ * @returns {{ balance: number, user_id: number }}
+ */
+export async function getCreditBalance() {
+  const { data } = await api.get('/v1/credits/balance');
+  return data;
+}
+
+/**
+ * Fetch all available Circle AI style presets.
+ * @returns {StylePresetInfo[]}
+ */
+export async function getStylePresets() {
+  const { data } = await api.get('/v1/circle-ai/styles');
+  return data;
+}
+
+/**
+ * Transform the full room using a style preset (Circle AI).
+ * @param {number} projectId
+ * @param {{ stylePreset: string, strength: number }} payload
+ * @returns {{ result_url, layer_id, elapsed_s, style_preset, credits_used, remaining_balance }}
+ */
+export async function applyCircleAI(projectId, payload) {
+  const { data } = await api.post(
+    `/v1/projects/${projectId}/circle-ai`,
+    {
+      style_preset: payload.stylePreset,
+      strength:     payload.strength,
+    },
+    { timeout: 180_000 },
+  );
+  return data;
+}
+
+/**
+ * Copy the mood / atmosphere of a reference image onto the project room.
+ * @param {number} projectId
+ * @param {{ referenceImage: string, strength: number }} payload
+ *   referenceImage — HTTP URL, base64 data URL, or raw base64 string
+ * @returns {{ result_url, layer_id, elapsed_s, credits_used, remaining_balance }}
+ */
+export async function copyMood(projectId, payload) {
+  const { data } = await api.post(
+    `/v1/projects/${projectId}/mood-copy`,
+    {
+      reference_image: payload.referenceImage,
+      strength:        payload.strength,
+    },
+    { timeout: 180_000 },
+  );
+  return data;
+}
+
 export default api;
