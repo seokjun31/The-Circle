@@ -1,60 +1,62 @@
-version: "3.9"
+# =============================================================================
+#  The Circle — 프로덕션 Docker Compose
+#
+#  실행:   docker compose up -d
+#  종료:   docker compose down
+#  로그:   docker compose logs -f backend
+#  재빌드: docker compose up -d --build
+#
+#  로컬 개발은 docker-compose.dev.yml 사용 (DB + Redis만 실행)
+# =============================================================================
 
 services:
+
+  # ── PostgreSQL 15 ──────────────────────────────────────────────────────────
   db:
-    image: postgres:16-alpine
+    image: postgres:15-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: interior_db
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
+      POSTGRES_DB: the_circle
+      POSTGRES_USER: ${DB_USER:-circle_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-circle_pass}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./server/src/db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
-      - ./server/src/db/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user -d interior_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-circle_user} -d the_circle"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  server:
-    build:
-      context: ./server
-      dockerfile: Dockerfile
+  # ── Redis 7 (Celery 브로커 + 캐시) ────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
     restart: unless-stopped
-    environment:
-      PORT: 4000
-      DATABASE_URL: postgresql://user:password@db:5432/interior_db
-      RUNPOD_API_KEY: ${RUNPOD_API_KEY}
-      RUNPOD_COMFYUI_ENDPOINT_ID: ${RUNPOD_COMFYUI_ENDPOINT_ID}
-      UPLOAD_DIR: /app/uploads
     ports:
-      - "4000:4000"
+      - "6379:6379"
     volumes:
-      - uploads_data:/app/uploads
-    depends_on:
-      db:
-        condition: service_healthy
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    command: redis-server --appendonly yes
 
-  # ── FastAPI backend (Phase 1) ──────────────────────────────────────────────
+  # ── FastAPI 백엔드 ─────────────────────────────────────────────────────────
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     restart: unless-stopped
+    env_file:
+      - ./backend/.env
     environment:
-      DATABASE_URL: postgresql+psycopg2://user:password@db:5432/the_circle
-      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
-      USE_S3: ${USE_S3:-false}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
-      AWS_REGION: ${AWS_REGION:-ap-northeast-2}
-      S3_BUCKET_NAME: ${S3_BUCKET_NAME:-the-circle-uploads}
-      LOCAL_UPLOAD_DIR: /app/uploads
-      ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:5173"
+      DATABASE_URL: postgresql+psycopg2://${DB_USER:-circle_user}:${DB_PASSWORD:-circle_pass}@db:5432/the_circle
+      REDIS_URL: redis://redis:6379/0
+      HOST: 0.0.0.0
+      PORT: "8000"
     ports:
       - "8000:8000"
     volumes:
@@ -62,9 +64,33 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     command: >
-      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2"
 
+  # ── Celery Worker (비동기 렌더링 작업) ────────────────────────────────────
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${DB_USER:-circle_user}:${DB_PASSWORD:-circle_pass}@db:5432/the_circle
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - backend_uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A app.celery_app worker --loglevel=info --concurrency=2
+
+  # ── React 프론트엔드 (Nginx) ───────────────────────────────────────────────
   client:
     build:
       context: ./client
@@ -73,9 +99,9 @@ services:
     ports:
       - "3000:80"
     depends_on:
-      - server
+      - backend
 
 volumes:
   postgres_data:
-  uploads_data:
+  redis_data:
   backend_uploads:

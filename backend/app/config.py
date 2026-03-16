@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     # Where the frontend lives — used for OAuth redirect after login
     FRONTEND_URL: str = "http://localhost:3000"
 
+    # ── Redis / Celery ────────────────────────────────────────────────────────
+    REDIS_URL: str = "redis://localhost:6379/0"
+
     # ── Server ────────────────────────────────────────────────────────────────
     HOST: str = "0.0.0.0"
     PORT: int = 8000
