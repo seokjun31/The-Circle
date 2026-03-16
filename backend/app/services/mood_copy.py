@@ -36,7 +36,7 @@ from app.services.s3 import storage
 logger = logging.getLogger("the_circle.mood_copy")
 
 # ── Constants ─────────────────────────────────────────────────────────────────
-CREDITS_PER_MOOD_COPY  = 5
+CREDITS_PER_MOOD_COPY  = 3
 _MOOD_COPY_TIMEOUT_S   = 120
 
 

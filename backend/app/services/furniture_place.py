@@ -46,7 +46,7 @@ from app.services.s3 import storage
 
 logger = logging.getLogger("the_circle.furniture_place")
 
-CREDITS_PER_PLACEMENT = 3
+CREDITS_PER_PLACEMENT = 1
 _PLACE_TIMEOUT_S      = 90
 
 

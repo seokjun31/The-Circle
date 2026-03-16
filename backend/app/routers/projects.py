@@ -301,12 +301,38 @@ def apply_material(
     + VAEEncodeForInpaint (restricts changes to the masked area).
 
     Expected response time: 15–30 s (RunPod Scale-to-Zero cold start included).
+    Costs 1 credit per area.
     """
+    from app.models.credit_transaction import CreditTransaction, CreditType
     from app.services.material_apply import material_apply_service
     from app.services.comfyui.runpod_client import RunPodError
 
+    CREDITS_PER_MATERIAL_APPLY = 1
+
     # Verify ownership first (fast, before the slow RunPod call)
     _get_owned_project(project_id, current_user, db)
+
+    # Deduct credit before starting the job
+    if current_user.credit_balance < CREDITS_PER_MATERIAL_APPLY:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail={
+                "message": f"크레딧이 부족합니다. (잔액: {current_user.credit_balance}, 필요: {CREDITS_PER_MATERIAL_APPLY})",
+                "code": "INSUFFICIENT_CREDITS",
+                "balance": current_user.credit_balance,
+                "required": CREDITS_PER_MATERIAL_APPLY,
+            },
+        )
+    credit_tx = CreditTransaction(
+        user_id=current_user.id,
+        amount=-CREDITS_PER_MATERIAL_APPLY,
+        type=CreditType.usage,
+        description="[material_apply] 자재 적용",
+        feature_used="material_apply",
+    )
+    db.add(credit_tx)
+    current_user.credit_balance -= CREDITS_PER_MATERIAL_APPLY
+    db.flush()
 
     try:
         result = asyncio.run(

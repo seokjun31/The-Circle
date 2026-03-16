@@ -99,6 +99,190 @@
   background: var(--success);
 }
 
+/* ── Right-side header controls ─────────────────────────────────────── */
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+/* Credit balance badge */
+.credit-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: rgba(139, 92, 246, 0.12);
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  border-radius: 20px;
+  padding: 0.35rem 0.75rem;
+  text-decoration: none;
+  transition: background var(--transition), border-color var(--transition);
+}
+
+.credit-badge:hover {
+  background: rgba(139, 92, 246, 0.22);
+  border-color: rgba(139, 92, 246, 0.55);
+}
+
+.credit-icon {
+  color: var(--accent);
+  font-size: 0.9rem;
+}
+
+.credit-value {
+  font-weight: 700;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  min-width: 14px;
+  text-align: right;
+}
+
+.credit-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* User avatar button */
+.user-menu-wrap {
+  position: relative;
+}
+
+.user-avatar-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity var(--transition);
+}
+
+.user-avatar-btn:hover {
+  opacity: 0.85;
+}
+
+.user-avatar-initial {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1;
+}
+
+/* Dropdown backdrop */
+.dropdown-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+}
+
+/* Dropdown panel */
+.user-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  min-width: 200px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 200;
+  overflow: hidden;
+}
+
+.dropdown-user-info {
+  padding: 0.9rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.dropdown-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.dropdown-email {
+  font-size: 0.775rem;
+  color: var(--text-muted);
+}
+
+.dropdown-divider {
+  height: 1px;
+  background: var(--border);
+}
+
+.dropdown-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.65rem 1rem;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  text-decoration: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+
+.dropdown-item:hover {
+  background: var(--bg-hover, rgba(255,255,255,0.05));
+  color: var(--text-primary);
+}
+
+.dropdown-logout {
+  color: var(--error, #f38ba8);
+}
+
+.dropdown-logout:hover {
+  color: #ff6b6b;
+}
+
+/* Non-authenticated links */
+.auth-links {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-ghost-sm {
+  padding: 0.4rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all var(--transition);
+}
+
+.btn-ghost-sm:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.btn-primary-sm {
+  padding: 0.4rem 0.9rem;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: opacity var(--transition);
+}
+
+.btn-primary-sm:hover {
+  opacity: 0.88;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .step-name {
     display: none;
@@ -110,6 +294,10 @@
 
   .header-inner {
     padding: 0.75rem 1rem;
+  }
+
+  .credit-label {
+    display: none;
   }
 }
 

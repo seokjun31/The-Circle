@@ -8,6 +8,7 @@ from app.models.credit_transaction import CreditType
 class CreditBalanceResponse(BaseModel):
     balance: int
     user_id: int
+    used_this_month: int = 0
 
 
 class CreditUseRequest(BaseModel):

@@ -1,0 +1,338 @@
+/* ── CreditsPage ─────────────────────────────────────────────────────── */
+
+.credits-page {
+  min-height: calc(100vh - 64px);
+  padding: 2.5rem 1.5rem;
+  background: var(--bg-primary);
+}
+
+.credits-inner {
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.credits-heading {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 1.75rem;
+}
+
+.section-heading {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 2rem 0 1rem;
+}
+
+/* ── Balance summary cards ───────────────────────────────────────────── */
+.balance-cards {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.balance-card {
+  flex: 1;
+  min-width: 160px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.balance-icon {
+  font-size: 1.6rem;
+  color: var(--accent);
+}
+
+.balance-icon.used {
+  color: var(--error, #f38ba8);
+}
+
+.balance-icon.tx {
+  color: var(--text-muted);
+}
+
+.balance-value {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.1;
+}
+
+.balance-sub {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+}
+
+/* ── Plan cards ──────────────────────────────────────────────────────── */
+.credits-plans-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 1rem;
+}
+
+.credits-plan-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1.5rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  position: relative;
+  transition: border-color var(--transition);
+}
+
+.credits-plan-card:hover {
+  border-color: var(--accent);
+}
+
+.credits-plan-highlight {
+  border-color: var(--accent);
+  background: rgba(139, 92, 246, 0.06);
+}
+
+.credits-plan-badge {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.2rem 0.7rem;
+  border-radius: 20px;
+}
+
+.cplan-name {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.cplan-price {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.cplan-period {
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.cplan-credits {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.cplan-features {
+  list-style: none;
+  padding: 0;
+  margin: 0.25rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  flex: 1;
+}
+
+.cplan-features li {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.cplan-check {
+  color: var(--success, #a6e3a1);
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
+.cplan-cta {
+  width: 100%;
+  padding: 0.6rem;
+  border-radius: 9px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  margin-top: 0.5rem;
+  transition: opacity var(--transition), border-color var(--transition);
+}
+
+.cplan-cta:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cplan-cta-primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.cplan-cta-primary:hover:not(:disabled) {
+  opacity: 0.88;
+}
+
+.cplan-cta-secondary {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.cplan-cta-secondary:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+/* ── Transaction history ─────────────────────────────────────────────── */
+.history-loading,
+.history-empty {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 2.5rem;
+  font-size: 0.9rem;
+}
+
+.history-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-secondary);
+}
+
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.history-table th {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.history-table td {
+  padding: 0.7rem 1rem;
+  color: var(--text-secondary);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  vertical-align: middle;
+}
+
+.history-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.history-table tbody tr:hover td {
+  background: rgba(255,255,255,0.03);
+}
+
+.tx-date {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.tx-type-badge {
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.tx-desc {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tx-feature {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.tx-amount {
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.tx-amount.positive {
+  color: var(--success, #a6e3a1);
+}
+
+.tx-amount.negative {
+  color: var(--error, #f38ba8);
+}
+
+.amount-col {
+  text-align: right;
+}
+
+/* ── Pagination ──────────────────────────────────────────────────────── */
+.history-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.page-btn {
+  padding: 0.45rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.page-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.page-info {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .balance-cards {
+    flex-direction: column;
+  }
+
+  .credits-plans-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .tx-desc,
+  .tx-feature {
+    display: none;
+  }
+}

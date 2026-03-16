@@ -36,6 +36,16 @@ class Settings(BaseSettings):
     RUNPOD_TIMEOUT_DEFAULT: int = 120        # seconds for standard workflows
     RUNPOD_TIMEOUT_FINAL_RENDER: int = 300   # seconds for 2-stage SDXL render
 
+    # ── OAuth ─────────────────────────────────────────────────────────────────
+    # Google OAuth 2.0
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    # Kakao OAuth 2.0
+    KAKAO_CLIENT_ID: str = ""
+    KAKAO_CLIENT_SECRET: str = ""
+    # Where the frontend lives — used for OAuth redirect after login
+    FRONTEND_URL: str = "http://localhost:3000"
+
     # ── Server ────────────────────────────────────────────────────────────────
     HOST: str = "0.0.0.0"
     PORT: int = 8000

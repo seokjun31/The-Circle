@@ -73,7 +73,7 @@ STYLE_PRESETS: dict[str, str] = {
 }
 
 # ── Constants ─────────────────────────────────────────────────────────────────
-CREDITS_PER_CIRCLE_AI = 5
+CREDITS_PER_CIRCLE_AI = 2
 _TRANSFORM_TIMEOUT_S  = 120
 
 

@@ -5,10 +5,21 @@ const api = axios.create({
   timeout: 60000,
 });
 
+// Attach saved JWT on every request
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('auth_token');
+  if (token && !config.headers.Authorization) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 api.interceptors.response.use(
   (res) => res,
   (err) => {
+    const detail = err.response?.data?.detail;
     const msg =
+      (typeof detail === 'object' ? detail?.message : detail) ||
       err.response?.data?.error ||
       err.response?.data?.message ||
       err.message ||
