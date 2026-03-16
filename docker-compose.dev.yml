@@ -1,0 +1,27 @@
+# 로컬 개발용 — DB만 Docker로 실행
+# 백엔드/프론트엔드는 로컬에서 직접 실행
+#
+# 실행: docker compose -f docker-compose.dev.yml up -d
+# 종료: docker compose -f docker-compose.dev.yml down
+# 완전 삭제 (데이터 포함): docker compose -f docker-compose.dev.yml down -v
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: the_circle
+      POSTGRES_USER: circle_user
+      POSTGRES_PASSWORD: circle_pass
+    ports:
+      - "5432:5432"       # 로컬 5432 → 컨테이너 5432
+    volumes:
+      - the_circle_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U circle_user -d the_circle"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  the_circle_dev_data:
