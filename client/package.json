@@ -21,7 +21,7 @@
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "postinstall": "mkdir -p public/models && node -e \"const fs=require('fs');const src='node_modules/onnxruntime-web/dist';if(fs.existsSync(src))fs.readdirSync(src).filter(f=>f.endsWith('.wasm')).forEach(f=>{try{fs.copyFileSync(src+'/'+f,'public/'+f)}catch(e){}})\" || true"
+    "postinstall": "node -e \"const fs=require('fs');try{fs.mkdirSync('public/models',{recursive:true})}catch(e){};const src='node_modules/onnxruntime-web/dist';if(fs.existsSync(src))fs.readdirSync(src).filter(f=>f.endsWith('.wasm')).forEach(f=>{try{fs.copyFileSync(src+'/'+f,'public/'+f)}catch(e){}})\""
   },
   "eslintConfig": {
     "extends": [
