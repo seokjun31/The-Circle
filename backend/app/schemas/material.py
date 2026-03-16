@@ -107,3 +107,47 @@ class MaterialUploadResponse(BaseModel):
     """Returned by POST /materials (admin upload endpoint)."""
     material: MaterialResponse
     tiling_report: MaterialTilingReport
+
+
+# ── Claude Vision 프롬프트 자동 생성 ──────────────────────────────────────────
+
+class MaterialGeneratePromptsRequest(BaseModel):
+    """POST /materials/generate-prompts 요청 바디."""
+    image_url: str = Field(
+        description="분석할 자재 타일 이미지 URL (S3 URL 또는 공개 HTTP URL)",
+    )
+    category: str = Field(
+        description="자재 카테고리 (wallpaper/flooring/ceiling/tile/paint)",
+    )
+    name: str = Field(
+        min_length=1,
+        max_length=200,
+        description="자재명 (한국어/영어 모두 가능). 프롬프트 품질에 영향.",
+    )
+
+
+class MaterialGeneratePromptsResponse(BaseModel):
+    """POST /materials/generate-prompts 응답 바디."""
+    positive_prompt: str = Field(
+        description="자재에 최적화된 ComfyUI 긍정 프롬프트",
+    )
+    negative_prompt: str = Field(
+        description="자재에 최적화된 ComfyUI 부정 프롬프트",
+    )
+    ip_adapter_weight: float = Field(
+        ge=0.3,
+        le=0.9,
+        description="IP-Adapter 권장 가중치 (0.3–0.9)",
+    )
+    recommended_denoise: float = Field(
+        ge=0.5,
+        le=0.75,
+        description="KSampler 권장 denoise 강도 (0.5–0.75)",
+    )
+    generated_by_ai: bool = Field(
+        description="True: Claude Vision으로 생성. False: ANTHROPIC_API_KEY 미설정 또는 오류 → 카테고리 기본값 반환.",
+    )
+    model: Optional[str] = Field(
+        default=None,
+        description="사용된 Claude 모델 ID (generated_by_ai=False 이면 null)",
+    )
