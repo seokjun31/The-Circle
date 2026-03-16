@@ -25,31 +25,40 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # ── ENUM types ────────────────────────────────────────────────────────────
+    # create_type=False: create_table 시 SQLAlchemy가 중복 생성하지 않도록 방지
+    # 아래 루프에서 checkfirst=True 로 직접 생성
     image_type_enum = postgresql.ENUM(
         "single", "panorama_equirectangular", "panorama_cubemap",
         name="imagetype",
+        create_type=False,
     )
     project_status_enum = postgresql.ENUM(
         "draft", "processing", "completed",
         name="projectstatus",
+        create_type=False,
     )
     layer_type_enum = postgresql.ENUM(
         "wall", "floor", "ceiling", "furniture", "style",
         name="layertype",
+        create_type=False,
     )
     material_category_enum = postgresql.ENUM(
         "wallpaper", "flooring", "ceiling", "tile", "paint",
         name="materialcategory",
+        create_type=False,
     )
     furniture_category_enum = postgresql.ENUM(
         "sofa", "table", "chair", "bed", "shelf", "desk", "lighting", "etc",
         name="furniturecategory",
+        create_type=False,
     )
     credit_type_enum = postgresql.ENUM(
         "purchase", "usage", "bonus", "refund",
         name="credittype",
+        create_type=False,
     )
 
+    # 각 enum을 명시적으로 생성 (이미 존재하면 건너뜀)
     for enum in [
         image_type_enum, project_status_enum, layer_type_enum,
         material_category_enum, furniture_category_enum, credit_type_enum,
