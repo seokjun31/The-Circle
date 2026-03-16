@@ -27,6 +27,15 @@ class Settings(BaseSettings):
     MAX_IMAGE_DIMENSION: int = 2048
     THUMBNAIL_SIZE: int = 400
 
+    # ── RunPod Serverless ─────────────────────────────────────────────────────
+    RUNPOD_API_KEY: str = ""
+    RUNPOD_ENDPOINT_ID: str = ""
+    # MVP: 0 (Scale to Zero — $0 when idle, ~30-60s cold start)
+    # Production: 1 (1 warm worker — instant response, ~$0.50/hr)
+    RUNPOD_MIN_WORKERS: int = 0
+    RUNPOD_TIMEOUT_DEFAULT: int = 120        # seconds for standard workflows
+    RUNPOD_TIMEOUT_FINAL_RENDER: int = 300   # seconds for 2-stage SDXL render
+
     # ── Server ────────────────────────────────────────────────────────────────
     HOST: str = "0.0.0.0"
     PORT: int = 8000

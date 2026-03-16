@@ -1,0 +1,15 @@
+# RunPod Serverless SDK
+runpod==1.7.0
+
+# Async HTTP (image download + ComfyUI API)
+aiohttp==3.9.5
+aiofiles==23.2.1
+
+# AWS S3 result upload
+boto3==1.34.144
+
+# Image processing fallback
+Pillow==10.4.0
+
+# Utilities
+python-dotenv==1.0.1

@@ -1,0 +1,26 @@
+# ComfyUI extra model paths — reads models from RunPod Network Volume.
+#
+# RunPod Network Volume is mounted at /runpod-volume.
+# Pre-populate with download_models.sh before attaching to the endpoint.
+#
+# ComfyUI merges all paths, so both this directory AND the built-in
+# /ComfyUI/models/ are searched. Network Volume paths take priority.
+
+the_circle:
+  base_path: /runpod-volume/models
+
+  checkpoints: checkpoints/
+  vae: vae/
+  clip: clip/
+  clip_vision: clip_vision/
+  unet: unet/
+  controlnet: controlnet/
+  style_models: style_models/
+  embeddings: embeddings/
+  diffusers: diffusers/
+  loras: loras/
+  upscale_models: upscale_models/
+  ipadapter: ipadapter/
+
+  # SAM segment_anything models
+  sams: segment_anything/
