@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { uploadImage } from '../utils/api';
 import { useAppState } from '../hooks/useAppState';
+import useEditorStore from '../stores/editorStore';
 import './UploadPage.css';
 
 function UploadPage() {
   const navigate = useNavigate();
   const { update } = useAppState();
+  const setProject = useEditorStore((s) => s.setProject);
   const [preview, setPreview] = useState(null);
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -62,8 +64,14 @@ function UploadPage() {
         imageUrl: result.imageUrl,
         originalFilename: result.filename,
       });
+      // 새 에디터 스토어에도 project 세팅
+      setProject({
+        id: result.imageId,
+        title: file.name,
+        original_image_url: result.imageUrl,
+      });
       toast.success('이미지가 업로드되었습니다.');
-      navigate('/style');
+      navigate(`/editor/${result.imageId}`);
     } catch (err) {
       toast.error(err.message);
     } finally {

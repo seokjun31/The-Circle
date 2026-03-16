@@ -4,12 +4,18 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import './Header.css';
 
-const steps = [
-  { path: '/',       label: '사진 업로드', step: 1 },
+const LEGACY_STEPS = [
+  { path: '/upload', label: '사진 업로드', step: 1 },
   { path: '/style',  label: '스타일 선택', step: 2 },
   { path: '/mask',   label: '마스킹',      step: 3 },
   { path: '/result', label: '결과 확인',   step: 4 },
 ];
+
+// Routes where the header itself is hidden entirely
+const HIDDEN_HEADER_PATHS = ['/editor'];
+
+// Routes where the step-nav is hidden (landing, dashboard, auth pages)
+const NO_STEPNAV_PATHS = ['/', '/dashboard', '/login', '/register', '/auth'];
 
 function Header() {
   const location = useLocation();
@@ -17,7 +23,12 @@ function Header() {
   const { user, creditBalance, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const currentStep = steps.findIndex((s) => s.path === location.pathname);
+  // Hide entire header on editor route (editor has its own top bar)
+  const hideHeader = HIDDEN_HEADER_PATHS.some((p) => location.pathname.startsWith(p));
+  if (hideHeader) return null;
+
+  const showStepNav = !NO_STEPNAV_PATHS.some((p) => location.pathname.startsWith(p));
+  const currentStep = LEGACY_STEPS.findIndex((s) => s.path === location.pathname);
 
   function handleLogout() {
     logout();
@@ -35,24 +46,26 @@ function Header() {
           <span>AI 인테리어 렌더링</span>
         </Link>
 
-        {/* ── Step progress nav ──────────────────────────────────────────── */}
-        <nav className="step-nav">
-          {steps.map((s, i) => (
-            <React.Fragment key={s.path}>
-              <div
-                className={`step-item ${i === currentStep ? 'active' : ''} ${
-                  i < currentStep ? 'completed' : ''
-                }`}
-              >
-                <div className="step-num">{i < currentStep ? '✓' : s.step}</div>
-                <span className="step-name">{s.label}</span>
-              </div>
-              {i < steps.length - 1 && (
-                <div className={`step-line ${i < currentStep ? 'completed' : ''}`} />
-              )}
-            </React.Fragment>
-          ))}
-        </nav>
+        {/* ── Step progress nav (legacy flow only) ──────────────────────── */}
+        {showStepNav && (
+          <nav className="step-nav">
+            {LEGACY_STEPS.map((s, i) => (
+              <React.Fragment key={s.path}>
+                <div
+                  className={`step-item ${i === currentStep ? 'active' : ''} ${
+                    i < currentStep ? 'completed' : ''
+                  }`}
+                >
+                  <div className="step-num">{i < currentStep ? '✓' : s.step}</div>
+                  <span className="step-name">{s.label}</span>
+                </div>
+                {i < LEGACY_STEPS.length - 1 && (
+                  <div className={`step-line ${i < currentStep ? 'completed' : ''}`} />
+                )}
+              </React.Fragment>
+            ))}
+          </nav>
+        )}
 
         {/* ── Right side: credit badge + auth ───────────────────────────── */}
         <div className="header-right">

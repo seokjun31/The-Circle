@@ -11,7 +11,7 @@
 .ep-root {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 57px); /* subtract header */
+  height: 100vh; /* header is hidden on /editor */
   overflow: hidden;
   background: var(--bg-primary);
 }
