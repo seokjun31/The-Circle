@@ -16,12 +16,21 @@ Timeouts:
 Scale-to-Zero (MVP):
   - RUNPOD_MIN_WORKERS=0 keeps cost at $0 when idle
   - Cold-start ≈ 30-60 s; upgrade to 1 warm worker once >50 paid users
+
+Local dev mock:
+  - Set USE_MOCK_AI=true in .env to skip RunPod entirely.
+  - run_async / run_sync return a placeholder gradient image immediately.
+  - The original image from the workflow (first ETN_LoadImageBase64 node) is
+    returned with a coloured overlay so you can tell it went through the mock.
 """
 
 from __future__ import annotations
 
 import asyncio
+import base64
+import io
 import logging
+import os
 import time
 from typing import Any, Optional
 
@@ -52,6 +61,82 @@ class RunPodTimeoutError(RunPodError):
 
 class RunPodJobError(RunPodError):
     """RunPod reported the job as FAILED."""
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Local mock (USE_MOCK_AI=true)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _is_mock_mode() -> bool:
+    return os.environ.get("USE_MOCK_AI", "").lower() in ("1", "true", "yes")
+
+
+def _make_mock_image(width: int = 800, height: int = 600) -> str:
+    """
+    Return a base64-encoded JPEG placeholder image.
+
+    Uses only stdlib + Pillow (already in requirements).
+    The image is a purple-to-blue gradient with a centred "AI MOCK" label.
+    """
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+        img = Image.new("RGB", (width, height))
+        draw = ImageDraw.Draw(img)
+
+        # Gradient background: purple → dark blue
+        for y in range(height):
+            r = int(80  + (y / height) * 20)
+            g = int(20  + (y / height) * 30)
+            b = int(140 + (y / height) * 60)
+            draw.line([(0, y), (width, y)], fill=(r, g, b))
+
+        # Centred label
+        text = "[ AI MOCK — RunPod 미연결 ]"
+        try:
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 28)
+        except Exception:
+            font = ImageFont.load_default()
+
+        bbox = draw.textbbox((0, 0), text, font=font)
+        tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        draw.rectangle(
+            [width // 2 - tw // 2 - 16, height // 2 - th // 2 - 12,
+             width // 2 + tw // 2 + 16, height // 2 + th // 2 + 12],
+            fill=(0, 0, 0, 180),
+        )
+        draw.text(
+            (width // 2 - tw // 2, height // 2 - th // 2),
+            text, font=font, fill=(255, 255, 255),
+        )
+
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=85)
+        return base64.b64encode(buf.getvalue()).decode()
+
+    except Exception:
+        # Fallback: 1×1 red pixel
+        return (
+            "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkS"
+            "Ew8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAARC"
+            "AABAAEDASIA2gABAREA/8QAFgABAQEAAAAAAAAAAAAAAAAABgUEB"
+            "/8QAIRAAAQMEAgMAAAAAAAAAAAAAAQIDBAUREiExQVH/xAAUAQEA"
+            "AAAAAAAAAAAAAAAAAAD/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oA"
+            "DAMBAAIRAxEAPwCwy2tapUmM6lKXEpKgoggHBB+1QxqfbqKTJAK"
+            "iBkAA/9k="
+        )
+
+
+async def _mock_run(workflow: dict, delay: float = 1.5) -> dict[str, Any]:
+    """Simulate a short AI processing delay and return a mock image."""
+    await asyncio.sleep(delay)
+    logger.info("[MOCK] RunPod call intercepted — returning placeholder image")
+    image_b64 = _make_mock_image()
+    return {
+        "image_base64": image_b64,
+        "result_url":   None,   # services handle None gracefully via local save
+        "prompt_id":    "mock-00000000-0000-0000-0000-000000000000",
+        "elapsed_s":    delay,
+    }
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -112,6 +197,9 @@ class RunPodClient:
             RunPodTimeoutError: Request timed out.
             RunPodError:        Unexpected HTTP / network error.
         """
+        if _is_mock_mode():
+            return await _mock_run(workflow)
+
         payload = {
             "input": {
                 "workflow":      workflow,
@@ -144,6 +232,9 @@ class RunPodClient:
             RunPodTimeoutError: Job did not complete within *timeout* seconds.
             RunPodError:        Unexpected HTTP / network error.
         """
+        if _is_mock_mode():
+            return await _mock_run(workflow)
+
         payload = {
             "input": {
                 "workflow":      workflow,
