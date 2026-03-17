@@ -54,6 +54,23 @@ function CreditConfirmModal({ style, strength, creditCost, onConfirm, onCancel }
   );
 }
 
+async function downloadBlob(url, filename) {
+  try {
+    const res  = await fetch(url);
+    const blob = await res.blob();
+    const href = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = href;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(href);
+  } catch {
+    window.open(url, '_blank');
+  }
+}
+
 function StyleTransform({ projectId, originalImageUrl, creditBalance, onResult }) {
   const [presets, setPresets]           = useState([]);
   const [selectedPreset, setSelected]   = useState(null);
@@ -216,15 +233,12 @@ function StyleTransform({ projectId, originalImageUrl, creditBalance, onResult }
                 >
                   다시 설정
                 </button>
-                <a
-                  href={resultUrl}
-                  download="circle_ai_result.jpg"
+                <button
                   className="btn btn-outline btn-sm"
-                  target="_blank"
-                  rel="noreferrer"
+                  onClick={() => downloadBlob(resultUrl, 'circle_ai_result.jpg')}
                 >
                   다운로드
-                </a>
+                </button>
               </div>
             </div>
           ) : !loading && (

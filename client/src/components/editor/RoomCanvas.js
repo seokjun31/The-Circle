@@ -31,6 +31,20 @@ import { useSamSegmentation } from '../../hooks/useSamSegmentation';
 import { maskToBinary } from '../../lib/sam/samUtils';
 import './RoomCanvas.css';
 
+// ── Rescale binary mask from original image dims to canvas dims ────────────────
+function rescaleMask(binary, srcW, srcH, dstW, dstH) {
+  if (srcW === dstW && srcH === dstH) return binary;
+  const out = new Uint8Array(dstW * dstH);
+  for (let y = 0; y < dstH; y++) {
+    for (let x = 0; x < dstW; x++) {
+      const sx = Math.min(Math.round(x * srcW / dstW), srcW - 1);
+      const sy = Math.min(Math.round(y * srcH / dstH), srcH - 1);
+      out[y * dstW + x] = binary[sy * srcW + sx];
+    }
+  }
+  return out;
+}
+
 // ── Region label options ───────────────────────────────────────────────────────
 const LABEL_OPTIONS = ['벽', '바닥', '천장', '기타'];
 const LABEL_COLORS  = { '벽': '#1e90ff', '바닥': '#22c55e', '천장': '#f59e0b', '기타': '#ec4899' };
@@ -183,7 +197,11 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
   const handleConfirm = useCallback(() => {
     if (!currentMask) return;
 
-    const binary = maskToBinary(currentMask);
+    const img    = imageElRef.current;
+    const raw    = maskToBinary(currentMask);
+    const binary = img
+      ? rescaleMask(raw, img.naturalWidth, img.naturalHeight, canvasSize.w, canvasSize.h)
+      : raw;
     const color  = LABEL_COLORS[pendingLabel] || '#1e90ff';
     setConfirmedMasks(prev => [...prev, { binary, label: pendingLabel, color }]);
     setClickPoints([]);
@@ -234,16 +252,21 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
 
   // ── Overlay masks: current (pending) + all confirmed ──────────────────────
   const overlayMasks = useMemo(() => {
-    const all = [...confirmedMasks];
+    const all = [...confirmedMasks]; // already rescaled at confirm time
     if (currentMask) {
+      const img = imageElRef.current;
+      const raw = maskToBinary(currentMask);
+      const binary = img
+        ? rescaleMask(raw, img.naturalWidth, img.naturalHeight, canvasSize.w, canvasSize.h)
+        : raw;
       all.push({
-        binary: maskToBinary(currentMask),
+        binary,
         label: pendingLabel,
         color: LABEL_COLORS[pendingLabel] || '#1e90ff',
       });
     }
     return all;
-  }, [confirmedMasks, currentMask, pendingLabel]);
+  }, [confirmedMasks, currentMask, pendingLabel, canvasSize]);
 
   // ── Point markers (drawn on an overlay div using SVG) ─────────────────────
   const pointMarkers = useMemo(() => clickPoints.map((pt, i) => {
@@ -314,108 +337,109 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
         )}
       </div>
 
-      {/* ── Main canvas area ── */}
-      <div
-        className="room-canvas-viewport"
-        ref={containerRef}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-      >
-        {/* Loading / encoding banner */}
-        {(isModelLoading || isEncoding) && (
-          <div className="rcs-status-banner">
-            <span className="spinner" />
-            {isModelLoading ? 'SAM 모델 로딩 중...' : '이미지를 분석하고 있습니다...'}
-          </div>
-        )}
-        {samError && (
-          <div className="rcs-error-banner">{samError}</div>
-        )}
-
-        {/* Zoom/pan wrapper */}
+      {/* ── Main area: viewport + action bar stacked vertically ── */}
+      <div className="room-canvas-main">
         <div
-          ref={wrapperRef}
-          className="room-canvas-zoom-wrapper"
-          style={{
-            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-            transformOrigin: '0 0',
-            position: 'relative',
-            display: 'inline-block',
-          }}
+          className="room-canvas-viewport"
+          ref={containerRef}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
         >
-          {/* Layer 1: base image */}
-          <canvas
-            ref={imageCanvasRef}
-            className="rcs-image-canvas"
-            width={canvasSize.w}
-            height={canvasSize.h}
-          />
+          {/* Loading / encoding banner */}
+          {(isModelLoading || isEncoding) && (
+            <div className="rcs-status-banner">
+              <span className="spinner" />
+              {isModelLoading ? 'SAM 모델 로딩 중...' : '이미지를 분석하고 있습니다...'}
+            </div>
+          )}
+          {samError && (
+            <div className="rcs-error-banner">{samError}</div>
+          )}
 
-          {/* Layer 2: marching-ants mask overlay */}
-          {canvasSize.w > 0 && (
-            <SegmentOverlay
-              masks={overlayMasks}
+          {/* Zoom/pan wrapper */}
+          <div
+            ref={wrapperRef}
+            className="room-canvas-zoom-wrapper"
+            style={{
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+              transformOrigin: '0 0',
+              position: 'relative',
+              display: 'inline-block',
+            }}
+          >
+            {/* Layer 1: base image */}
+            <canvas
+              ref={imageCanvasRef}
+              className="rcs-image-canvas"
               width={canvasSize.w}
               height={canvasSize.h}
             />
-          )}
 
-          {/* Layer 3: click point markers */}
-          <div className="rcs-points-layer" style={{ width: canvasSize.w, height: canvasSize.h }}>
-            {pointMarkers}
-          </div>
-
-          {/* Layer 4: invisible hit canvas for mouse events */}
-          <div
-            className="rcs-hit-area"
-            style={{ width: canvasSize.w, height: canvasSize.h }}
-            onClick={handleCanvasClick}
-            onContextMenu={handleContextMenu}
-            role="button"
-            tabIndex={0}
-            aria-label="이미지 클릭으로 영역 선택"
-            style={{
-              cursor: isEncoding || isModelLoading || isSegmenting
-                ? 'wait'
-                : 'crosshair',
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: canvasSize.w,
-              height: canvasSize.h,
-            }}
-          />
-        </div>
-      </div>
-
-      {/* ── Action bar ── */}
-      {clickPoints.length > 0 && (
-        <div className="rcs-action-bar">
-          <div className="rcs-action-info">
-            {isSegmenting ? (
-              <><span className="spinner" /> 마스크 생성 중...</>
-            ) : currentMask ? (
-              <>영역이 선택됐습니다. 확인하거나 클릭을 추가하세요.</>
-            ) : (
-              <>클릭 포인트가 추가됐습니다.</>
+            {/* Layer 2: marching-ants mask overlay */}
+            {canvasSize.w > 0 && (
+              <SegmentOverlay
+                masks={overlayMasks}
+                width={canvasSize.w}
+                height={canvasSize.h}
+              />
             )}
-          </div>
-          <div className="rcs-action-buttons">
-            <button className="btn btn-secondary" onClick={handleCancel}>
-              취소
-            </button>
-            <button
-              className="btn btn-primary"
-              onClick={handleConfirm}
-              disabled={!currentMask || isSegmenting}
-            >
-              이 영역 확정
-            </button>
+
+            {/* Layer 3: click point markers */}
+            <div className="rcs-points-layer" style={{ width: canvasSize.w, height: canvasSize.h }}>
+              {pointMarkers}
+            </div>
+
+            {/* Layer 4: invisible hit area for mouse events */}
+            <div
+              className="rcs-hit-area"
+              onClick={handleCanvasClick}
+              onContextMenu={handleContextMenu}
+              role="button"
+              tabIndex={0}
+              aria-label="이미지 클릭으로 영역 선택"
+              style={{
+                cursor: isEncoding || isModelLoading || isSegmenting
+                  ? 'wait'
+                  : 'crosshair',
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: canvasSize.w,
+                height: canvasSize.h,
+              }}
+            />
           </div>
         </div>
-      )}
+
+        {/* ── Action bar (below viewport, not beside it) ── */}
+        {clickPoints.length > 0 && (
+          <div className="rcs-action-bar">
+            <div className="rcs-action-info">
+              {isSegmenting ? (
+                <><span className="spinner" /> 마스크 생성 중...</>
+              ) : currentMask ? (
+                <>영역이 선택됐습니다. 확인하거나 클릭을 추가하세요.</>
+              ) : (
+                <>클릭 포인트가 추가됐습니다.</>
+              )}
+            </div>
+            <div className="rcs-action-buttons">
+              <button className="btn btn-secondary" onClick={handleCancel}>
+                취소
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={handleConfirm}
+                disabled={!currentMask || isSegmenting}
+              >
+                이 영역 확정
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
