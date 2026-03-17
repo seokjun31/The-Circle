@@ -57,8 +57,12 @@ function Write-Header {
 function Get-SavedPid {
     param([string]$Key)
     if (-not (Test-Path $PidFile)) { return $null }
-    $line = Get-Content $PidFile | Where-Object { $_ -match "^${Key}=" } | Select-Object -First 1
-    if ($line) { return [int]($line -split "=",2)[1] }
+    $line = Get-Content $PidFile -Encoding UTF8 | Where-Object { $_ -match "^${Key}=\d+$" } | Select-Object -First 1
+    if ($line) {
+        $val = ($line -split "=",2)[1].Trim()
+        $parsed = 0
+        if ([int]::TryParse($val, [ref]$parsed)) { return $parsed }
+    }
     return $null
 }
 
@@ -66,17 +70,17 @@ function Save-Pid {
     param([string]$Key, [int]$ProcId)
     $lines = @()
     if (Test-Path $PidFile) {
-        $lines = Get-Content $PidFile | Where-Object { $_ -notmatch "^${Key}=" }
+        $lines = Get-Content $PidFile -Encoding UTF8 | Where-Object { $_ -match "^\w+=\d+$" -and $_ -notmatch "^${Key}=" }
     }
     $lines += "${Key}=${ProcId}"
-    $lines | Set-Content $PidFile -Encoding UTF8
+    [System.IO.File]::WriteAllLines($PidFile, $lines, [System.Text.UTF8Encoding]::new($false))
 }
 
 function Remove-SavedPid {
     param([string]$Key)
     if (-not (Test-Path $PidFile)) { return }
-    $lines = Get-Content $PidFile | Where-Object { $_ -notmatch "^${Key}=" }
-    if ($lines) { $lines | Set-Content $PidFile -Encoding UTF8 }
+    $lines = Get-Content $PidFile -Encoding UTF8 | Where-Object { $_ -match "^\w+=\d+$" -and $_ -notmatch "^${Key}=" }
+    if ($lines) { [System.IO.File]::WriteAllLines($PidFile, $lines, [System.Text.UTF8Encoding]::new($false)) }
     else { Remove-Item $PidFile -Force -ErrorAction SilentlyContinue }
 }
 
