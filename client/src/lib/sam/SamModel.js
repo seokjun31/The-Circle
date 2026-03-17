@@ -11,7 +11,8 @@
 
 import * as ort from 'onnxruntime-web';
 
-// ── CDN WASM paths (avoids webpack/CRA copy issues) ───────────────────────────
+// ── WASM paths: local public/ort-wasm/ first, CDN fallback ───────────────────
+const LOCAL_WASM_BASE = `${(process.env.PUBLIC_URL || '').replace(/\/$/, '')}/ort-wasm/`;
 const ORT_VERSION = '1.17.3';
 const CDN_BASE = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist/`;
 
@@ -28,7 +29,8 @@ let ortConfigured = false;
  */
 export function configureOrtPaths() {
   if (ortConfigured) return;
-  ort.env.wasm.wasmPaths = CDN_BASE;
+  // Local WASM files (public/ort-wasm/) — no CDN dependency
+  ort.env.wasm.wasmPaths = LOCAL_WASM_BASE;
   // Disable multi-threaded WASM in CRA (SharedArrayBuffer restrictions)
   ort.env.wasm.numThreads = 1;
   ortConfigured = true;
