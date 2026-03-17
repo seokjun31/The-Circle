@@ -257,6 +257,14 @@ function Start-Frontend {
         return
     }
 
+    # 포트 3000이 잔존 중이면 강제 정리 (이전 실행 좀비 방지)
+    $lingering = Get-PidOnPort $FePort
+    if ($lingering) {
+        Write-Info "포트 $FePort 잔존 프로세스 (PID $lingering) 종료..."
+        Stop-Process -Id $lingering -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Milliseconds 500
+    }
+
     if (-not (Test-Path $FrontendDir)) {
         Write-Err "client/ 디렉토리를 찾을 수 없습니다"; exit 1
     }
@@ -287,7 +295,8 @@ function Start-Frontend {
         Write-Err "npm을 찾을 수 없습니다. Node.js 설치 후 재시도하세요."; exit 1
     }
 
-    # BROWSER=none 을 환경변수로 직접 주입, Node 22+ 불필요한 deprecation 경고 숨김
+    # CRA 환경변수: 포트 고정, 브라우저 자동실행 방지, deprecation 경고 숨김
+    $env:PORT    = "$FePort"
     $env:BROWSER = "none"
     $env:NODE_OPTIONS = "--no-deprecation"
     $proc = Start-Process -FilePath "cmd.exe" `
