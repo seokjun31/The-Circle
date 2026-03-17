@@ -197,10 +197,11 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
   const handleConfirm = useCallback(() => {
     if (!currentMask) return;
 
-    const img    = imageElRef.current;
     const raw    = maskToBinary(currentMask);
-    const binary = img
-      ? rescaleMask(raw, img.naturalWidth, img.naturalHeight, canvasSize.w, canvasSize.h)
+    const maskW  = currentMask.dims[3]; // actual tensor width (may differ from naturalWidth)
+    const maskH  = currentMask.dims[2]; // actual tensor height
+    const binary = (maskW !== canvasSize.w || maskH !== canvasSize.h)
+      ? rescaleMask(raw, maskW, maskH, canvasSize.w, canvasSize.h)
       : raw;
     const color  = LABEL_COLORS[pendingLabel] || '#1e90ff';
     setConfirmedMasks(prev => [...prev, { binary, label: pendingLabel, color }]);
@@ -254,10 +255,11 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
   const overlayMasks = useMemo(() => {
     const all = [...confirmedMasks]; // already rescaled at confirm time
     if (currentMask) {
-      const img = imageElRef.current;
-      const raw = maskToBinary(currentMask);
-      const binary = img
-        ? rescaleMask(raw, img.naturalWidth, img.naturalHeight, canvasSize.w, canvasSize.h)
+      const raw   = maskToBinary(currentMask);
+      const maskW = currentMask.dims[3];
+      const maskH = currentMask.dims[2];
+      const binary = (maskW !== canvasSize.w || maskH !== canvasSize.h)
+        ? rescaleMask(raw, maskW, maskH, canvasSize.w, canvasSize.h)
         : raw;
       all.push({
         binary,
