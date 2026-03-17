@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 #  dev.ps1 — The Circle 로컬 개발 서버 통합 실행 스크립트 (Windows)
 #
 #  사용법 (PowerShell):
@@ -259,8 +259,9 @@ function Start-Frontend {
     Write-Info "프론트엔드 시작 중 (포트 $FePort)..."
 
     # npm start — BROWSER=none으로 자동 브라우저 열기 방지
-    $npmPath = (Get-Command npm -ErrorAction SilentlyContinue)?.Source
-    if (-not $npmPath) { Write-Err "npm을 찾을 수 없습니다. Node.js 설치 후 재시도하세요."; exit 1 }
+    $npmCmd = Get-Command npm -ErrorAction SilentlyContinue
+    if (-not $npmCmd) { Write-Err "npm을 찾을 수 없습니다. Node.js 설치 후 재시도하세요."; exit 1 }
+    $npmPath = $npmCmd.Source
 
     $env:BROWSER = "none"
     $proc = Start-Process -FilePath $npmPath `
