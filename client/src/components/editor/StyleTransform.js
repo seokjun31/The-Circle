@@ -56,7 +56,11 @@ function CreditConfirmModal({ style, strength, creditCost, onConfirm, onCancel }
 
 async function downloadBlob(url, filename) {
   try {
-    const res  = await fetch(url);
+    const token = localStorage.getItem('auth_token');
+    const res  = await fetch(url, {
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
     const blob = await res.blob();
     const href = URL.createObjectURL(blob);
     const a    = document.createElement('a');

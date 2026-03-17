@@ -228,7 +228,11 @@ function EditorPage() {
                 className="ep-download-btn"
                 onClick={async () => {
                   try {
-                    const res  = await fetch(lastResult.result_url);
+                    const token = localStorage.getItem('auth_token');
+                    const res  = await fetch(lastResult.result_url, {
+                      credentials: 'include',
+                      headers: token ? { Authorization: `Bearer ${token}` } : {},
+                    });
                     const blob = await res.blob();
                     const href = URL.createObjectURL(blob);
                     const a    = document.createElement('a');
