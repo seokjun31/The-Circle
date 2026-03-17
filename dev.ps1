@@ -63,12 +63,12 @@ function Get-SavedPid {
 }
 
 function Save-Pid {
-    param([string]$Key, [int]$Pid)
+    param([string]$Key, [int]$ProcId)
     $lines = @()
     if (Test-Path $PidFile) {
         $lines = Get-Content $PidFile | Where-Object { $_ -notmatch "^${Key}=" }
     }
-    $lines += "${Key}=${Pid}"
+    $lines += "${Key}=${ProcId}"
     $lines | Set-Content $PidFile -Encoding UTF8
 }
 
@@ -82,9 +82,9 @@ function Remove-SavedPid {
 
 # ── 프로세스/포트 유틸 ────────────────────────────────────────────────────────
 function Test-ProcessAlive {
-    param([int]$Pid)
-    if (-not $Pid) { return $false }
-    return $null -ne (Get-Process -Id $Pid -ErrorAction SilentlyContinue)
+    param([int]$ProcId)
+    if (-not $ProcId) { return $false }
+    return $null -ne (Get-Process -Id $ProcId -ErrorAction SilentlyContinue)
 }
 
 function Test-PortInUse {
@@ -101,12 +101,12 @@ function Get-PidOnPort {
 }
 
 function Stop-ProcessTree {
-    param([int]$Pid)
-    if (-not $Pid) { return }
+    param([int]$ProcId)
+    if (-not $ProcId) { return }
     # 자식 프로세스까지 모두 종료
-    $children = Get-CimInstance Win32_Process | Where-Object { $_.ParentProcessId -eq $Pid }
-    foreach ($child in $children) { Stop-ProcessTree -Pid $child.ProcessId }
-    Stop-Process -Id $Pid -Force -ErrorAction SilentlyContinue
+    $children = Get-CimInstance Win32_Process | Where-Object { $_.ParentProcessId -eq $ProcId }
+    foreach ($child in $children) { Stop-ProcessTree -ProcId $child.ProcessId }
+    Stop-Process -Id $ProcId -Force -ErrorAction SilentlyContinue
 }
 
 function Ensure-LogDir {
@@ -314,7 +314,7 @@ function Stop-Backend {
     $savedPid = Get-SavedPid "BE"
     if (Test-ProcessAlive $savedPid) {
         Write-Info "백엔드 종료 중 (PID $savedPid)..."
-        Stop-ProcessTree -Pid $savedPid
+        Stop-ProcessTree -ProcId $savedPid
         Write-Ok "백엔드 종료됨"
     } else {
         Write-Info "백엔드 실행 중이 아닙니다"
@@ -330,7 +330,7 @@ function Stop-Frontend {
     $savedPid = Get-SavedPid "FE"
     if (Test-ProcessAlive $savedPid) {
         Write-Info "프론트엔드 종료 중 (PID $savedPid)..."
-        Stop-ProcessTree -Pid $savedPid
+        Stop-ProcessTree -ProcId $savedPid
         Write-Ok "프론트엔드 종료됨"
     } else {
         Write-Info "프론트엔드 실행 중이 아닙니다"
