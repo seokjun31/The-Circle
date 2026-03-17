@@ -283,8 +283,9 @@ function Start-Frontend {
         Write-Err "npm을 찾을 수 없습니다. Node.js 설치 후 재시도하세요."; exit 1
     }
 
-    # BROWSER=none 을 환경변수로 직접 주입
+    # BROWSER=none 을 환경변수로 직접 주입, Node 22+ 불필요한 deprecation 경고 숨김
     $env:BROWSER = "none"
+    $env:NODE_OPTIONS = "--no-deprecation"
     $proc = Start-Process -FilePath "cmd.exe" `
         -ArgumentList "/c", "npm start" `
         -WorkingDirectory $FrontendDir `
