@@ -180,13 +180,22 @@ start_frontend() {
     (cd "$FRONTEND_DIR" && npm install --silent) || die "npm install 실패"
   fi
 
+  # .env 없으면 .env.example에서 복사 (BROWSER=none 포함)
+  if [[ ! -f "$FRONTEND_DIR/.env" ]] && [[ -f "$FRONTEND_DIR/.env.example" ]]; then
+    cp "$FRONTEND_DIR/.env.example" "$FRONTEND_DIR/.env"
+    info "client/.env 생성됨 (from .env.example)"
+  fi
+
   _mk_logs
   info "프론트엔드 시작 중 (포트 $FE_PORT)..."
 
   (
     cd "$FRONTEND_DIR"
     export BROWSER=none        # 자동 브라우저 열기 방지
+    export REACT_APP_BROWSER=none
     export FORCE_COLOR=1       # 컬러 로그 유지
+    # VS Code 터미널에서 내부 브라우저로 열리는 것 방지
+    unset VSCODE_GIT_IPC_HANDLE 2>/dev/null || true
     npm start 2>&1
   ) >> "$FE_LOG" 2>&1 &
 
