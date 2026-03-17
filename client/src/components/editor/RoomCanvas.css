@@ -128,6 +128,16 @@
 }
 .rcs-mask-remove:hover { color: #ef4444; }
 
+/* ── Main column: viewport + action bar stacked ───────────────────────────── */
+
+.room-canvas-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
 /* ── Viewport ─────────────────────────────────────────────────────────────── */
 
 .room-canvas-viewport {

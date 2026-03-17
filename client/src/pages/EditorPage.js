@@ -224,9 +224,22 @@ function EditorPage() {
                 </span>
                 {lastResult.elapsed_s && <span>{lastResult.elapsed_s.toFixed(1)}s</span>}
               </div>
-              <a href={lastResult.result_url} download="result.jpg" className="ep-download-btn" target="_blank" rel="noreferrer">
+              <button
+                className="ep-download-btn"
+                onClick={async () => {
+                  try {
+                    const res  = await fetch(lastResult.result_url);
+                    const blob = await res.blob();
+                    const href = URL.createObjectURL(blob);
+                    const a    = document.createElement('a');
+                    a.href = href; a.download = 'result.jpg';
+                    document.body.appendChild(a); a.click();
+                    document.body.removeChild(a); URL.revokeObjectURL(href);
+                  } catch { window.open(lastResult.result_url, '_blank'); }
+                }}
+              >
                 ↓ 다운로드
-              </a>
+              </button>
             </div>
           )}
         </main>
