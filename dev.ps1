@@ -477,6 +477,16 @@ function Show-Help {
 switch ($Command.ToLower()) {
     "start" {
         Write-Header "시작"
+
+        # SAM 모델 파일 존재 여부 체크
+        $samEncoder = Join-Path $FrontendDir "public\models\sam_encoder.onnx"
+        $samDecoder = Join-Path $FrontendDir "public\models\sam_decoder.onnx"
+        if (-not (Test-Path $samEncoder) -or -not (Test-Path $samDecoder)) {
+            Write-Warn "SAM ONNX 모델 파일이 없습니다. 세그멘테이션이 작동하지 않습니다."
+            Write-Warn "  → .\scripts\download_sam_onnx.ps1  실행 후 재시작하세요."
+            Write-Host ""
+        }
+
         Start-Db
         Write-Host ""
         Start-Backend
