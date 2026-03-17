@@ -57,8 +57,12 @@ function Write-Header {
 function Get-SavedPid {
     param([string]$Key)
     if (-not (Test-Path $PidFile)) { return $null }
-    $line = Get-Content $PidFile | Where-Object { $_ -match "^${Key}=" } | Select-Object -First 1
-    if ($line) { return [int]($line -split "=",2)[1] }
+    $line = Get-Content $PidFile -Encoding UTF8 | Where-Object { $_ -match "^${Key}=\d+$" } | Select-Object -First 1
+    if ($line) {
+        $val = ($line -split "=",2)[1].Trim()
+        $parsed = 0
+        if ([int]::TryParse($val, [ref]$parsed)) { return $parsed }
+    }
     return $null
 }
 
@@ -66,17 +70,17 @@ function Save-Pid {
     param([string]$Key, [int]$ProcId)
     $lines = @()
     if (Test-Path $PidFile) {
-        $lines = Get-Content $PidFile | Where-Object { $_ -notmatch "^${Key}=" }
+        $lines = Get-Content $PidFile -Encoding UTF8 | Where-Object { $_ -match "^\w+=\d+$" -and $_ -notmatch "^${Key}=" }
     }
     $lines += "${Key}=${ProcId}"
-    $lines | Set-Content $PidFile -Encoding UTF8
+    [System.IO.File]::WriteAllLines($PidFile, $lines, [System.Text.UTF8Encoding]::new($false))
 }
 
 function Remove-SavedPid {
     param([string]$Key)
     if (-not (Test-Path $PidFile)) { return }
-    $lines = Get-Content $PidFile | Where-Object { $_ -notmatch "^${Key}=" }
-    if ($lines) { $lines | Set-Content $PidFile -Encoding UTF8 }
+    $lines = Get-Content $PidFile -Encoding UTF8 | Where-Object { $_ -match "^\w+=\d+$" -and $_ -notmatch "^${Key}=" }
+    if ($lines) { [System.IO.File]::WriteAllLines($PidFile, $lines, [System.Text.UTF8Encoding]::new($false)) }
     else { Remove-Item $PidFile -Force -ErrorAction SilentlyContinue }
 }
 
@@ -283,8 +287,11 @@ function Start-Frontend {
         Write-Err "npm을 찾을 수 없습니다. Node.js 설치 후 재시도하세요."; exit 1
     }
 
+    # BROWSER=none 을 환경변수로 직접 주입, Node 22+ 불필요한 deprecation 경고 숨김
+    $env:BROWSER = "none"
+    $env:NODE_OPTIONS = "--no-deprecation"
     $proc = Start-Process -FilePath "cmd.exe" `
-        -ArgumentList "/c", "set BROWSER=none && npm start" `
+        -ArgumentList "/c", "npm start" `
         -WorkingDirectory $FrontendDir `
         -RedirectStandardOutput $FeLog `
         -RedirectStandardError "$LogDir\frontend_err.log" `
@@ -293,12 +300,12 @@ function Start-Frontend {
 
     Save-Pid "FE" $proc.Id
 
-    # 기동 확인 (최대 60초 — CRA는 느림)
+    # 기동 확인 (최대 120초 — CRA 첫 빌드는 느림)
     Write-Host "  CRA 빌드 중" -NoNewline
-    for ($i = 0; $i -lt 60; $i++) {
+    for ($i = 0; $i -lt 120; $i++) {
         if (Test-PortInUse $FePort) { break }
         Start-Sleep -Seconds 1
-        if ($i % 5 -eq 4) { Write-Host "." -NoNewline }
+        if ($i % 3 -eq 2) { Write-Host "." -NoNewline }
     }
     Write-Host ""
 
