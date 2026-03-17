@@ -22,7 +22,7 @@ param(
     [Parameter(Position=1)] [string]$SubCommand = ""
 )
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 
 # ── 경로 설정 ──────────────────────────────────────────────────────────────────
 $ScriptDir   = $PSScriptRoot
@@ -146,6 +146,13 @@ function Import-DotEnv {
     }
 }
 
+# ── Docker 데몬 실행 확인 ─────────────────────────────────────────────────────
+function Test-DockerRunning {
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { return $false }
+    $info = docker info 2>&1
+    return $LASTEXITCODE -eq 0
+}
+
 # ── DB 시작 ───────────────────────────────────────────────────────────────────
 function Start-Db {
     Write-Info "DB(PostgreSQL) 시작 중..."
@@ -158,13 +165,25 @@ function Start-Db {
         Write-Warn "docker-compose.dev.yml 없음 — DB 건너뜀"
         return
     }
+    if (-not (Test-DockerRunning)) {
+        Write-Warn "Docker 데몬이 실행되지 않았습니다."
+        Write-Warn "Docker Desktop을 시작한 후 다시 실행하세요."
+        Write-Warn "DB 없이 계속 진행합니다 (백엔드가 DB에 연결되지 않을 수 있음)"
+        return
+    }
 
-    docker compose -f $ComposeFile up -d --quiet-pull 2>&1 | ForEach-Object { Write-Host "  [docker] $_" -ForegroundColor DarkGray }
+    $output = docker compose -f $ComposeFile up -d --quiet-pull 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warn "docker compose 실패 (종료코드: $LASTEXITCODE)"
+        $output | ForEach-Object { Write-Host "  [docker] $_" -ForegroundColor DarkGray }
+        return
+    }
+    $output | ForEach-Object { Write-Host "  [docker] $_" -ForegroundColor DarkGray }
 
     # 헬스체크 (최대 20초)
     $ok = $false
     for ($i = 0; $i -lt 20; $i++) {
-        $result = docker compose -f $ComposeFile exec -T db pg_isready -U circle_user -d the_circle 2>&1
+        $null = docker compose -f $ComposeFile exec -T db pg_isready -U circle_user -d the_circle 2>&1
         if ($LASTEXITCODE -eq 0) { $ok = $true; break }
         Start-Sleep -Seconds 1
         Write-Host "." -NoNewline
@@ -325,9 +344,15 @@ function Stop-Frontend {
 function Stop-Db {
     if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { return }
     if (-not (Test-Path $ComposeFile)) { return }
+    if (-not (Test-DockerRunning)) {
+        Write-Warn "Docker 데몬이 실행되지 않아 DB 종료를 건너뜁니다"
+        return
+    }
     Write-Info "DB 종료 중..."
-    docker compose -f $ComposeFile down 2>&1 | ForEach-Object { Write-Host "  [docker] $_" -ForegroundColor DarkGray }
-    Write-Ok "DB 종료됨"
+    $output = docker compose -f $ComposeFile down 2>&1
+    $output | ForEach-Object { Write-Host "  [docker] $_" -ForegroundColor DarkGray }
+    if ($LASTEXITCODE -eq 0) { Write-Ok "DB 종료됨" }
+    else { Write-Warn "docker compose down 실패 (종료코드: $LASTEXITCODE)" }
 }
 
 # ── 상태 확인 ─────────────────────────────────────────────────────────────────
