@@ -283,8 +283,10 @@ function Start-Frontend {
         Write-Err "npm을 찾을 수 없습니다. Node.js 설치 후 재시도하세요."; exit 1
     }
 
+    # BROWSER=none 을 환경변수로 직접 주입
+    $env:BROWSER = "none"
     $proc = Start-Process -FilePath "cmd.exe" `
-        -ArgumentList "/c", "set BROWSER=none && npm start" `
+        -ArgumentList "/c", "npm start" `
         -WorkingDirectory $FrontendDir `
         -RedirectStandardOutput $FeLog `
         -RedirectStandardError "$LogDir\frontend_err.log" `
@@ -293,12 +295,12 @@ function Start-Frontend {
 
     Save-Pid "FE" $proc.Id
 
-    # 기동 확인 (최대 60초 — CRA는 느림)
+    # 기동 확인 (최대 120초 — CRA 첫 빌드는 느림)
     Write-Host "  CRA 빌드 중" -NoNewline
-    for ($i = 0; $i -lt 60; $i++) {
+    for ($i = 0; $i -lt 120; $i++) {
         if (Test-PortInUse $FePort) { break }
         Start-Sleep -Seconds 1
-        if ($i % 5 -eq 4) { Write-Host "." -NoNewline }
+        if ($i % 3 -eq 2) { Write-Host "." -NoNewline }
     }
     Write-Host ""
 
