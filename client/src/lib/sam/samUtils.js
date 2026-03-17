@@ -84,12 +84,22 @@ export function preprocessImage(imageEl) {
 export async function runEncoder(session, imageTensor) {
   const inputName = session.inputNames[0];
 
-  // vietanhdev/samexporter models use 'input_image' and expect rank 3 [C,H,W].
-  // Original SAM/dhkim2810 models use 'image' and expect rank 4 [1,C,H,W].
+  // vietanhdev/samexporter models use 'input_image' and expect rank 3 HWC [H,W,C].
+  // Original SAM/dhkim2810 models use 'image' and expect rank 4 NCHW [1,C,H,W].
   let input = imageTensor;
   if (inputName === 'input_image' && imageTensor.dims.length === 4) {
     const [, C, H, W] = imageTensor.dims;
-    input = new ort.Tensor(imageTensor.type, imageTensor.data, [C, H, W]);
+    const chw = imageTensor.data;
+    // Transpose CHW → HWC
+    const hwc = new Float32Array(H * W * C);
+    for (let h = 0; h < H; h++) {
+      for (let w = 0; w < W; w++) {
+        for (let c = 0; c < C; c++) {
+          hwc[h * W * C + w * C + c] = chw[c * H * W + h * W + w];
+        }
+      }
+    }
+    input = new ort.Tensor('float32', hwc, [H, W, C]);
   }
 
   const results = await session.run({ [inputName]: input });
