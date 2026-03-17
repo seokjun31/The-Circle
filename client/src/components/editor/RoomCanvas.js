@@ -107,14 +107,7 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
       const w = Math.round(img.naturalWidth  * scale);
       const h = Math.round(img.naturalHeight * scale);
       setCanvasSize({ w, h });
-
-      // Draw base image
-      const canvas = imageCanvasRef.current;
-      if (canvas) {
-        canvas.width  = w;
-        canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      }
+      // Drawing is deferred to canvasSize effect to avoid React clearing the canvas
 
       // SAM: init model then encode
       const ok = await initModel();
@@ -124,6 +117,19 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
 
     return () => { cancelled = true; };
   }, [imageSrc]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Draw image after canvas dimensions are set by React ───────────────────
+  useEffect(() => {
+    if (canvasSize.w === 0 || canvasSize.h === 0) return;
+    const img    = imageElRef.current;
+    const canvas = imageCanvasRef.current;
+    if (!img || !canvas) return;
+    // Wait one tick so React has committed the new width/height props
+    const id = requestAnimationFrame(() => {
+      canvas.getContext('2d').drawImage(img, 0, 0, canvasSize.w, canvasSize.h);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [canvasSize]);
 
   // ── Notify parent when confirmed masks change ──────────────────────────────
   useEffect(() => {
@@ -194,12 +200,19 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
     setConfirmedMasks(prev => prev.filter((_, i) => i !== idx));
   }, []);
 
-  // ── Zoom ───────────────────────────────────────────────────────────────────
+  // ── Zoom (non-passive wheel listener to allow preventDefault) ─────────────
   const handleWheel = useCallback((e) => {
     e.preventDefault();
     const delta = e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP;
     setZoom(z => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z + delta)));
   }, []);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
+  }, [handleWheel]);
 
   // ── Pan (middle mouse) ─────────────────────────────────────────────────────
   const handleMouseDown = useCallback((e) => {
@@ -305,7 +318,6 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
       <div
         className="room-canvas-viewport"
         ref={containerRef}
-        onWheel={handleWheel}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
