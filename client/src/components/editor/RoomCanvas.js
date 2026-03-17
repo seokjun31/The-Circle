@@ -86,6 +86,7 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
   // ── Load image + run encoder ───────────────────────────────────────────────
   useEffect(() => {
     if (!imageSrc) return;
+    let cancelled = false;
 
     resetEncoding();
     setClickPoints([]);
@@ -95,6 +96,7 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = async () => {
+      if (cancelled) return;
       imageElRef.current = img;
 
       // Fit to container
@@ -116,9 +118,11 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
 
       // SAM: init model then encode
       const ok = await initModel();
-      if (ok) await encodeImage(img);
+      if (!cancelled && ok) await encodeImage(img);
     };
     img.src = imageSrc;
+
+    return () => { cancelled = true; };
   }, [imageSrc]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Notify parent when confirmed masks change ──────────────────────────────

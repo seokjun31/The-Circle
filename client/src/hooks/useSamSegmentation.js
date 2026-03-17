@@ -46,6 +46,7 @@ export function useSamSegmentation() {
   const originalSizeRef = useRef(null);  // [origH, origW]
   const modelSizeRef    = useRef(null);  // [scaledH, scaledW]
   const lowResMaskRef   = useRef(null);  // ort.Tensor for chained refinement
+  const encodingLockRef = useRef(false); // prevent concurrent encoder runs
 
   const clearError = useCallback(() => setError(null), []);
 
@@ -84,6 +85,12 @@ export function useSamSegmentation() {
    * @returns {Promise<boolean>} true on success
    */
   const encodeImage = useCallback(async (imageElement) => {
+    // Prevent concurrent encoder runs (React Strict Mode fires effects twice)
+    if (encodingLockRef.current) {
+      console.warn('[SAM] encodeImage skipped — already running');
+      return false;
+    }
+    encodingLockRef.current = true;
     setIsEncoding(true);
     setError(null);
     lowResMaskRef.current = null;
@@ -110,6 +117,7 @@ export function useSamSegmentation() {
       setError('이미지 분석에 실패했습니다.');
       return false;
     } finally {
+      encodingLockRef.current = false;
       setIsEncoding(false);
     }
   }, []);
