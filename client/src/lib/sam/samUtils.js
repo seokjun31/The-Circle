@@ -82,10 +82,17 @@ export function preprocessImage(imageEl) {
  * @returns {Promise<ort.Tensor>} image_embeddings [1,256,64,64]
  */
 export async function runEncoder(session, imageTensor) {
-  // Auto-detect input name: some models use 'image', others 'input_image'
   const inputName = session.inputNames[0];
-  const results = await session.run({ [inputName]: imageTensor });
-  // Auto-detect output name
+
+  // vietanhdev/samexporter models use 'input_image' and expect rank 3 [C,H,W].
+  // Original SAM/dhkim2810 models use 'image' and expect rank 4 [1,C,H,W].
+  let input = imageTensor;
+  if (inputName === 'input_image' && imageTensor.dims.length === 4) {
+    const [, C, H, W] = imageTensor.dims;
+    input = new ort.Tensor(imageTensor.type, imageTensor.data, [C, H, W]);
+  }
+
+  const results = await session.run({ [inputName]: input });
   const outputName = session.outputNames[0];
   return results[outputName];
 }
