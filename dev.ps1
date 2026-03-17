@@ -195,9 +195,9 @@ function Start-Db {
 
 # ── 백엔드 시작 ───────────────────────────────────────────────────────────────
 function Start-Backend {
-    $pid = Get-SavedPid "BE"
-    if (Test-ProcessAlive $pid) {
-        Write-Warn "백엔드 이미 실행 중 (PID $pid)"
+    $savedPid = Get-SavedPid "BE"
+    if (Test-ProcessAlive $savedPid) {
+        Write-Warn "백엔드 이미 실행 중 (PID $savedPid)"
         return
     }
 
@@ -247,9 +247,9 @@ function Start-Backend {
 
 # ── 프론트엔드 시작 ───────────────────────────────────────────────────────────
 function Start-Frontend {
-    $pid = Get-SavedPid "FE"
-    if (Test-ProcessAlive $pid) {
-        Write-Warn "프론트엔드 이미 실행 중 (PID $pid)"
+    $savedPid = Get-SavedPid "FE"
+    if (Test-ProcessAlive $savedPid) {
+        Write-Warn "프론트엔드 이미 실행 중 (PID $savedPid)"
         return
     }
 
@@ -278,13 +278,13 @@ function Start-Frontend {
     Write-Info "프론트엔드 시작 중 (포트 $FePort)..."
 
     # npm start — BROWSER=none으로 자동 브라우저 열기 방지
-    $npmCmd = Get-Command npm -ErrorAction SilentlyContinue
-    if (-not $npmCmd) { Write-Err "npm을 찾을 수 없습니다. Node.js 설치 후 재시도하세요."; exit 1 }
-    $npmPath = $npmCmd.Source
+    # npm은 .cmd 배치파일이므로 cmd.exe /c 를 통해 실행
+    if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+        Write-Err "npm을 찾을 수 없습니다. Node.js 설치 후 재시도하세요."; exit 1
+    }
 
-    $env:BROWSER = "none"
-    $proc = Start-Process -FilePath $npmPath `
-        -ArgumentList "start" `
+    $proc = Start-Process -FilePath "cmd.exe" `
+        -ArgumentList "/c", "set BROWSER=none && npm start" `
         -WorkingDirectory $FrontendDir `
         -RedirectStandardOutput $FeLog `
         -RedirectStandardError "$LogDir\frontend_err.log" `
@@ -311,10 +311,10 @@ function Start-Frontend {
 
 # ── 백엔드 종료 ───────────────────────────────────────────────────────────────
 function Stop-Backend {
-    $pid = Get-SavedPid "BE"
-    if (Test-ProcessAlive $pid) {
-        Write-Info "백엔드 종료 중 (PID $pid)..."
-        Stop-ProcessTree -Pid $pid
+    $savedPid = Get-SavedPid "BE"
+    if (Test-ProcessAlive $savedPid) {
+        Write-Info "백엔드 종료 중 (PID $savedPid)..."
+        Stop-ProcessTree -Pid $savedPid
         Write-Ok "백엔드 종료됨"
     } else {
         Write-Info "백엔드 실행 중이 아닙니다"
@@ -327,10 +327,10 @@ function Stop-Backend {
 
 # ── 프론트엔드 종료 ───────────────────────────────────────────────────────────
 function Stop-Frontend {
-    $pid = Get-SavedPid "FE"
-    if (Test-ProcessAlive $pid) {
-        Write-Info "프론트엔드 종료 중 (PID $pid)..."
-        Stop-ProcessTree -Pid $pid
+    $savedPid = Get-SavedPid "FE"
+    if (Test-ProcessAlive $savedPid) {
+        Write-Info "프론트엔드 종료 중 (PID $savedPid)..."
+        Stop-ProcessTree -Pid $savedPid
         Write-Ok "프론트엔드 종료됨"
     } else {
         Write-Info "프론트엔드 실행 중이 아닙니다"
