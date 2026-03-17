@@ -82,8 +82,12 @@ export function preprocessImage(imageEl) {
  * @returns {Promise<ort.Tensor>} image_embeddings [1,256,64,64]
  */
 export async function runEncoder(session, imageTensor) {
-  const results = await session.run({ image: imageTensor });
-  return results.image_embeddings;
+  // Auto-detect input name: some models use 'image', others 'input_image'
+  const inputName = session.inputNames[0];
+  const results = await session.run({ [inputName]: imageTensor });
+  // Auto-detect output name
+  const outputName = session.outputNames[0];
+  return results[outputName];
 }
 
 // ── 3. Decoder ────────────────────────────────────────────────────────────────
