@@ -319,3 +319,57 @@
 
 .rcs-tips .tip-brush-add    { color: rgba(37,99,235,0.9);  font-size: 10px; }
 .rcs-tips .tip-brush-remove { color: rgba(239,68,68,0.9);  font-size: 10px; }
+
+/* ── Mask preview row (inside action bar) ────────────────────────────────── */
+
+.rcs-preview-row {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.rcs-preview-canvas {
+  border-radius: 7px;
+  border: 1.5px solid #e5e7eb;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  flex-shrink: 0;
+  /* height is set by the canvas element itself (120 px); limit max-width */
+  max-width: 200px;
+  height: auto !important;
+  display: block;
+}
+
+.rcs-preview-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-top: 2px;
+}
+
+.rcs-preview-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #9ca3af;
+}
+
+.rcs-preview-area {
+  font-size: 14px;
+  color: #374151;
+  font-variant-numeric: tabular-nums;
+}
+
+.rcs-preview-area strong {
+  color: #2563eb;
+  font-weight: 700;
+}
+
+.rcs-preview-hint {
+  font-size: 11px;
+  color: #9ca3af;
+  line-height: 1.4;
+}
