@@ -16,11 +16,12 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 
 // ── Marching-ants config ──────────────────────────────────────────────────────
-const ANT_DASH        = 6;   // px on
-const ANT_GAP         = 4;   // px off
-const ANT_SPEED       = 0.3; // offset increment per frame
-const ANT_LINE_WIDTH  = 1.5;
-const FILL_ALPHA      = 0.22; // blue overlay opacity
+const ANT_DASH         = 6;    // px on
+const ANT_GAP          = 4;    // px off
+const ANT_SPEED        = 0.3;  // offset increment per frame
+const ANT_LINE_WIDTH   = 1.5;
+const FILL_ALPHA       = 0.22; // full-mask fill opacity
+const PREVIEW_ALPHA    = 0.10; // live-preview fill opacity (lighter, no ants)
 
 // Default palette for multiple regions
 const DEFAULT_COLORS = [
@@ -43,11 +44,12 @@ function SegmentOverlay({ masks = [], width, height, style }) {
   // ── Build fill ImageData whenever masks change ─────────────────────────────
   useEffect(() => {
     fillCacheRef.current = masks.map((m, idx) => {
-      const color  = m.color || DEFAULT_COLORS[idx % DEFAULT_COLORS.length];
+      const color     = m.color || DEFAULT_COLORS[idx % DEFAULT_COLORS.length];
       const [r, g, b] = hexToRgb(color);
-      const img    = new ImageData(width, height);
-      const px     = img.data;
-      const alpha  = Math.round(FILL_ALPHA * 255);
+      const img       = new ImageData(width, height);
+      const px        = img.data;
+      // Preview masks render at reduced opacity so they're clearly "tentative".
+      const alpha     = Math.round((m.preview ? PREVIEW_ALPHA : FILL_ALPHA) * 255);
 
       for (let i = 0; i < m.binary.length; i++) {
         if (m.binary[i]) {
@@ -83,17 +85,21 @@ function SegmentOverlay({ masks = [], width, height, style }) {
         ctx.putImageData(fillCacheRef.current[idx], 0, 0);
       }
 
+      // Preview masks: fill-only, no marching-ants, no label.
+      // They are transient (shown during brush drag) and intentionally subtle.
+      if (m.preview) return;
+
       // 2. Marching-ants contour
       const contourPath = buildContourPath(m.binary, width, height);
       if (contourPath.length === 0) return;
 
       ctx.save();
-      ctx.strokeStyle   = color;
-      ctx.lineWidth     = ANT_LINE_WIDTH;
+      ctx.strokeStyle    = color;
+      ctx.lineWidth      = ANT_LINE_WIDTH;
       ctx.setLineDash([ANT_DASH, ANT_GAP]);
       ctx.lineDashOffset = -offsetRef.current;
-      ctx.shadowColor   = 'rgba(0,0,0,0.6)';
-      ctx.shadowBlur    = 2;
+      ctx.shadowColor    = 'rgba(0,0,0,0.6)';
+      ctx.shadowBlur     = 2;
 
       ctx.beginPath();
       contourPath.forEach(([x, y], i) => {

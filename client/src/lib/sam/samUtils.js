@@ -218,11 +218,11 @@ export function maskToBinary(maskTensor) {
   return out;
 }
 
-// ── 5. Multi-mask best selection ─────────────────────────────────────────────
+// ── 5. Multi-mask selection ───────────────────────────────────────────────────
 
 /**
- * When SAM returns multiple mask candidates (multi-mask mode),
- * pick the one with the highest predicted IoU score.
+ * Pick the single best SAM mask by highest predicted IoU score.
+ * (kept for backward-compat; prefer extractAllMasks for new code)
  *
  * @param {ort.Tensor} masks           - [1,K,H,W]
  * @param {ort.Tensor} iouPredictions  - [1,K]
@@ -242,7 +242,100 @@ export function selectBestMask(masks, iouPredictions) {
   return new ort.Tensor('float32', slice, [1, 1, H, W]);
 }
 
-// ── 6. Base64 embedding helpers (for server fallback) ────────────────────────
+/**
+ * Extract ALL mask candidates from SAM output.
+ * Returns each as a separate [1,1,H,W] tensor so the caller can let the user
+ * switch between them without re-running the decoder.
+ *
+ * @param {ort.Tensor} masks           - [1,K,H,W]
+ * @param {ort.Tensor} iouPredictions  - [1,K]
+ * @returns {{ masks: ort.Tensor[], scores: number[], bestIndex: number }}
+ */
+export function extractAllMasks(masks, iouPredictions) {
+  const iouData = Array.from(iouPredictions.data);
+  const [, K, H, W] = masks.dims;
+
+  let bestIdx = 0;
+  for (let k = 1; k < K; k++) {
+    if (iouData[k] > iouData[bestIdx]) bestIdx = k;
+  }
+
+  const allMasks = [];
+  for (let k = 0; k < K; k++) {
+    const offset = k * H * W;
+    const slice  = masks.data.slice(offset, offset + H * W);
+    allMasks.push(new ort.Tensor('float32', slice, [1, 1, H, W]));
+  }
+
+  return { masks: allMasks, scores: iouData, bestIndex: bestIdx };
+}
+
+// ── 6. Brush path sampling ────────────────────────────────────────────────────
+
+/**
+ * Sample a brush stroke path using arc-length parameterisation.
+ *
+ * Unlike a simple distance-gate approach, this distributes the sampled points
+ * evenly along the total path length, giving SAM a representative spread of
+ * the stroke regardless of where the pointer slowed down or sped up.
+ *
+ * Point count guide (adaptive when maxPoints is omitted):
+ *   arc-length  < 100 px  →  4 points  (tiny tap / dot)
+ *   arc-length  < 300 px  →  6 points  (short stroke, single object)
+ *   arc-length  < 600 px  →  8 points  (medium stroke, one wall face)
+ *   arc-length  < 1000 px → 10 points  (long stroke, full floor)
+ *   arc-length ≥ 1000 px  → 12 points  (hard cap — avoids over-segmentation)
+ *
+ * @param {Array<{x:number, y:number}>} brushPath  Raw pointer path
+ * @param {number} [maxPoints]  Explicit cap; adaptive if omitted
+ * @returns {Array<{x:number, y:number}>}
+ */
+export function samplePointsFromBrush(brushPath, maxPoints) {
+  if (brushPath.length === 0) return [];
+  if (brushPath.length === 1) return [brushPath[0]];
+
+  // 1. Compute total arc length
+  let totalLength = 0;
+  for (let i = 1; i < brushPath.length; i++) {
+    const dx = brushPath[i].x - brushPath[i - 1].x;
+    const dy = brushPath[i].y - brushPath[i - 1].y;
+    totalLength += Math.sqrt(dx * dx + dy * dy);
+  }
+
+  // 2. Determine maxPoints adaptively if not supplied
+  if (maxPoints === undefined) {
+    if      (totalLength <  100) maxPoints =  4;
+    else if (totalLength <  300) maxPoints =  6;
+    else if (totalLength <  600) maxPoints =  8;
+    else if (totalLength < 1000) maxPoints = 10;
+    else                         maxPoints = 12; // absolute cap
+  }
+
+  if (brushPath.length <= maxPoints) return brushPath;
+
+  // 3. Arc-length parameterised sampling
+  const sampled     = [brushPath[0]]; // always include start point
+  const interval    = totalLength / (maxPoints - 1);
+  let   accumulated = 0;
+
+  for (let i = 1; i < brushPath.length && sampled.length < maxPoints - 1; i++) {
+    const dx = brushPath[i].x - brushPath[i - 1].x;
+    const dy = brushPath[i].y - brushPath[i - 1].y;
+    accumulated += Math.sqrt(dx * dx + dy * dy);
+    if (accumulated >= interval) {
+      sampled.push(brushPath[i]);
+      accumulated -= interval; // carry remainder for even spacing
+    }
+  }
+
+  // 4. Always include end point
+  const last = brushPath[brushPath.length - 1];
+  if (sampled[sampled.length - 1] !== last) sampled.push(last);
+
+  return sampled.slice(0, maxPoints);
+}
+
+// ── 7. Base64 embedding helpers (for server fallback) ────────────────────────
 
 /**
  * Serialise an ONNX Tensor to a plain object that can be JSON-stringified.

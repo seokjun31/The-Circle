@@ -1,0 +1,151 @@
+/* ── BrushSelector canvas overlay ─────────────────────────────────────────── */
+
+/*
+ * The canvas sits on top of the image stack inside the zoom wrapper.
+ * pointer-events are always 'all' — the parent (RoomCanvas) renders this
+ * component only when brush mode is active, so the hit-area div beneath
+ * is then rendered with pointer-events:none.
+ */
+.brush-overlay-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  cursor: none;          /* we draw our own cursor ring */
+  z-index: 20;           /* above SegmentOverlay (z:10) and point markers (z:15) */
+  touch-action: none;    /* disable browser touch gestures (panning, pinch) */
+}
+
+/* ── Mode toggle bar ─────────────────────────────────────────────────────── */
+
+.rcs-mode-bar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.rcs-mode-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 4px;
+  border: 1.5px solid var(--border, #333);
+  border-radius: 6px;
+  background: var(--bg-elevated, #1a1a1a);
+  color: var(--text-muted, #999);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.rcs-mode-btn:hover {
+  background: var(--bg-hover, #2a2a2a);
+  color: var(--text-primary, #fff);
+}
+
+.rcs-mode-btn.active {
+  border-color: var(--accent, #3b82f6);
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--accent, #3b82f6);
+}
+
+.rcs-mode-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* ── Brush size slider ───────────────────────────────────────────────────── */
+
+.rcs-brush-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--bg-elevated, #1a1a1a);
+  border: 1px solid var(--border, #333);
+  border-radius: 8px;
+  margin-top: 4px;
+}
+
+.rcs-brush-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.rcs-brush-label {
+  font-size: 11px;
+  color: var(--text-muted, #999);
+  font-weight: 500;
+}
+
+.rcs-brush-value {
+  font-size: 11px;
+  color: var(--text-primary, #fff);
+  font-variant-numeric: tabular-nums;
+  min-width: 28px;
+  text-align: right;
+}
+
+.rcs-brush-slider {
+  width: 100%;
+  height: 4px;
+  appearance: none;
+  background: linear-gradient(
+    to right,
+    var(--accent, #3b82f6) 0%,
+    var(--accent, #3b82f6) var(--progress, 50%),
+    var(--border, #333) var(--progress, 50%),
+    var(--border, #333) 100%
+  );
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.rcs-brush-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent, #3b82f6);
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+.rcs-brush-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent, #3b82f6);
+  cursor: pointer;
+  border: none;
+}
+
+/* ── Brush tips ──────────────────────────────────────────────────────────── */
+
+.rcs-tips .tip-brush-add {
+  color: rgba(37, 99, 235, 0.9);
+}
+
+.rcs-tips .tip-brush-remove {
+  color: rgba(239, 68, 68, 0.9);
+}
+
+/* ── Stroke count badge (shown in action bar info area) ──────────────────── */
+
+.rcs-stroke-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--accent, #3b82f6);
+  background: rgba(59, 130, 246, 0.12);
+  border-radius: 4px;
+  padding: 2px 6px;
+  margin-left: 6px;
+}
