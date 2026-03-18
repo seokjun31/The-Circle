@@ -274,3 +274,22 @@
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* ── Brush stroke count badge (action bar) ───────────────────────────────── */
+
+.rcs-stroke-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.12);
+  border-radius: 4px;
+  padding: 2px 7px;
+  margin-left: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Brush tip colours ───────────────────────────────────────────────────── */
+
+.rcs-tips .tip-brush-add    { color: rgba(37,99,235,0.9);  font-size: 10px; }
+.rcs-tips .tip-brush-remove { color: rgba(239,68,68,0.9);  font-size: 10px; }

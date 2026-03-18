@@ -185,6 +185,15 @@ export function useSamSegmentation() {
     lowResMaskRef.current   = null;
   }, []);
 
+  /**
+   * Clear only the chained low-res mask, keeping the image embedding.
+   * Call this when the user cancels a brush selection so the next stroke
+   * starts fresh without the previous mask as context.
+   */
+  const clearPrevMask = useCallback(() => {
+    lowResMaskRef.current = null;
+  }, []);
+
   // ── Internal helpers ──────────────────────────────────────────────────────
 
   return {
@@ -193,6 +202,7 @@ export function useSamSegmentation() {
     segment,
     segmentMultiPoint,
     resetEncoding,
+    clearPrevMask,
     clearError,
     isModelLoading,
     isEncoding,
