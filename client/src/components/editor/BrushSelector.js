@@ -27,48 +27,15 @@
  */
 
 import React, { useRef, useCallback } from 'react';
+import { samplePointsFromBrush } from '../../lib/sam/samUtils';
 import './BrushSelector.css';
 
-// ── Path sampling constants ───────────────────────────────────────────────────
-const MIN_SAMPLE_DIST    = 12; // minimum distance between sampled points (canvas px)
-const MAX_POINTS         = 24; // max points sent to SAM per final stroke
-const PREVIEW_MAX_POINTS = 6;  // fewer points for lightweight preview decodes
+// ── Sampling constants ────────────────────────────────────────────────────────
+// samplePointsFromBrush (imported from samUtils) handles adaptive max-point
+// selection based on arc length for the final stroke.
+// For the live preview during drag we explicitly limit to PREVIEW_MAX_POINTS.
+const PREVIEW_MAX_POINTS = 6;   // fewer points for lightweight preview decodes
 const PREVIEW_THROTTLE   = 200; // ms between throttled preview SAM calls
-
-/**
- * Sample a raw pointer path to a manageable set of points for SAM.
- *
- * @param {Array<{x,y}>} path  Raw pointer path
- * @param {number} [maxPts]    Cap; defaults to MAX_POINTS (24)
- *
- * Steps:
- *   1. Distance-gate: skip points closer than MIN_SAMPLE_DIST to previous sample.
- *   2. Cap: if still too many, uniformly subsample down to maxPts.
- */
-function sampleStrokePath(path, maxPts = MAX_POINTS) {
-  if (path.length === 0) return [];
-
-  // 1. Distance-based deduplication
-  const kept = [path[0]];
-  for (let i = 1; i < path.length; i++) {
-    const prev = kept[kept.length - 1];
-    const dx   = path[i].x - prev.x;
-    const dy   = path[i].y - prev.y;
-    if (Math.sqrt(dx * dx + dy * dy) >= MIN_SAMPLE_DIST) {
-      kept.push(path[i]);
-    }
-  }
-
-  if (kept.length <= maxPts) return kept;
-
-  // 2. Uniform subsample
-  const result = [];
-  const step   = (kept.length - 1) / (maxPts - 1);
-  for (let i = 0; i < maxPts; i++) {
-    result.push(kept[Math.round(i * step)]);
-  }
-  return result;
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -189,7 +156,7 @@ export default function BrushSelector({
       const now = Date.now();
       if (now - lastPreviewRef.current >= PREVIEW_THROTTLE) {
         lastPreviewRef.current = now;
-        const sampled = sampleStrokePath(pathRef.current, PREVIEW_MAX_POINTS);
+        const sampled = samplePointsFromBrush(pathRef.current, PREVIEW_MAX_POINTS);
         if (sampled.length > 0) {
           onBrushPreview(sampled, isExcludeRef.current);
         }
@@ -201,7 +168,8 @@ export default function BrushSelector({
     if (!isDrawingRef.current) return;
     isDrawingRef.current = false;
 
-    const sampled = sampleStrokePath(pathRef.current);
+    // Arc-length parameterised sampling with adaptive point count.
+    const sampled = samplePointsFromBrush(pathRef.current /*, maxPoints adaptive */);
     pathRef.current = [];
     clearCanvas();
 

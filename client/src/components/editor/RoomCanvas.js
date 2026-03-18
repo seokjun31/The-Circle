@@ -3,18 +3,20 @@
  *
  * Input modes:
  *   Point mode (default)
- *     - Left-click  → foreground point (label=1) → mask updated instantly
- *     - Right-click → background point (label=0) → mask refined
- *     - Points accumulate; all are passed to SAM decoder together.
+ *     - Left-click  → foreground point (label=1)
+ *     - Right-click → background point (label=0)
+ *     - Clicks accumulate; all points are sent to SAM together.
  *
  *   Brush mode
- *     - Left-drag   → scribble to ADD area to selection (label=1)
+ *     - Left-drag   → scribble to ADD area (label=1)
  *     - Right-drag / Alt+drag → scribble to REMOVE area (label=0)
- *     - Brush path is sampled to ≤24 points, passed to SAM.
- *     - SAM carries the previous mask as context (lowResMask chaining) so
- *       successive strokes expand / contract the selection naturally.
- *     - Each stroke replaces accumulated point history; only the stroke's
- *       own points are forwarded, but the hook's prevMask carries context.
+ *     - Path is arc-length sampled (adaptive ≤ 12 pts, user's spec cap).
+ *     - prevMaskTensor chains successive strokes without re-accumulating.
+ *
+ * Over-segmentation prevention (解決 A+B+C):
+ *   A. arc-length sampling via samplePointsFromBrush()  — adaptive 4-12 pts
+ *   B. MaskSizeSelector — show all 3 SAM mask candidates; instant switching
+ *   C. cleanMask + fillHoles applied after each decode  — remove islands/gaps
  *
  * Props:
  *   imageSrc         {string}   URL / data-URL of the room photo
@@ -30,13 +32,15 @@ import React, {
   useCallback,
   useMemo,
 } from 'react';
-import SegmentOverlay from './SegmentOverlay';
-import BrushSelector  from './BrushSelector';
+import SegmentOverlay  from './SegmentOverlay';
+import BrushSelector   from './BrushSelector';
+import MaskSizeSelector from './MaskSizeSelector';
 import { useSamSegmentation } from '../../hooks/useSamSegmentation';
-import { maskToBinary } from '../../lib/sam/samUtils';
+import { maskToBinary }        from '../../lib/sam/samUtils';
+import { cleanMask, fillHoles } from '../../lib/sam/maskPostProcess';
 import './RoomCanvas.css';
 
-// ── Rescale binary mask from original image dims to canvas dims ───────────────
+// ── Rescale binary mask from tensor dims to canvas dims ───────────────────────
 function rescaleMask(binary, srcW, srcH, dstW, dstH) {
   if (srcW === dstW && srcH === dstH) return binary;
   const out = new Uint8Array(dstW * dstH);
@@ -48,6 +52,24 @@ function rescaleMask(binary, srcW, srcH, dstW, dstH) {
     }
   }
   return out;
+}
+
+/**
+ * Convert a SAM tensor to a display-ready binary mask:
+ *   1. maskToBinary (logits > 0)
+ *   2. rescale to canvas dimensions
+ *   3. cleanMask (remove isolated islands < 1 %)
+ *   4. fillHoles (fill interior gaps < 2 %)
+ */
+function tensorToBinaryProcessed(tensor, canvasW, canvasH) {
+  const raw    = maskToBinary(tensor);
+  const maskW  = tensor.dims[3];
+  const maskH  = tensor.dims[2];
+  const scaled = (maskW !== canvasW || maskH !== canvasH)
+    ? rescaleMask(raw, maskW, maskH, canvasW, canvasH)
+    : raw;
+  const clean  = cleanMask(scaled, canvasW, canvasH);
+  return fillHoles(clean, canvasW, canvasH);
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -79,7 +101,7 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
     error: samError,
   } = useSamSegmentation();
 
-  // ── Canvas refs ────────────────────────────────────────────────────────────
+  // ── Canvas refs ───────────────────────────────────────────────────────────
   const containerRef   = useRef(null);
   const wrapperRef     = useRef(null);
   const imageCanvasRef = useRef(null);
@@ -97,14 +119,21 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
   // ── Input mode ────────────────────────────────────────────────────────────
   const [brushMode, setBrushMode] = useState(false);
   const [brushSize, setBrushSize] = useState(BRUSH_INIT);
-  const strokeCountRef = useRef(0); // number of brush strokes in current selection
+  const strokeCountRef = useRef(0);
 
   // ── Segmentation state ────────────────────────────────────────────────────
   const [clickPoints,   setClickPoints]   = useState([]); // point mode only
-  const [currentMask,   setCurrentMask]   = useState(null);
-  const [previewMask,   setPreviewMask]   = useState(null); // live brush preview
-  const [pendingLabel,  setPendingLabel]  = useState('벽');
-  const [confirmedMasks, setConfirmedMasks] = useState([]);
+  // currentMaskSet: { masks: Tensor[], scores: number[], bestIndex: number } | null
+  const [currentMaskSet,  setCurrentMaskSet]  = useState(null);
+  const [selectedMaskIdx, setSelectedMaskIdx] = useState(0);
+  const [previewMask,     setPreviewMask]     = useState(null); // single tensor, brush drag
+  const [pendingLabel,    setPendingLabel]    = useState('벽');
+  const [confirmedMasks,  setConfirmedMasks]  = useState([]);
+
+  // Sync selectedMaskIdx to SAM's best guess whenever a new decode arrives.
+  useEffect(() => {
+    if (currentMaskSet) setSelectedMaskIdx(currentMaskSet.bestIndex);
+  }, [currentMaskSet]);
 
   // ── Notify parent of encoding status ─────────────────────────────────────
   useEffect(() => {
@@ -118,7 +147,8 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
 
     resetEncoding();
     setClickPoints([]);
-    setCurrentMask(null);
+    setCurrentMaskSet(null);
+    setPreviewMask(null);
     setConfirmedMasks([]);
     strokeCountRef.current = 0;
 
@@ -144,7 +174,7 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
     return () => { cancelled = true; };
   }, [imageSrc]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Draw image onto canvas after size is committed ────────────────────────
+  // ── Draw image after canvas dimensions are committed ─────────────────────
   useEffect(() => {
     if (canvasSize.w === 0 || canvasSize.h === 0) return;
     const img    = imageElRef.current;
@@ -161,35 +191,30 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
     onMasksChange?.(confirmedMasks);
   }, [confirmedMasks, onMasksChange]);
 
-  // ── Switch modes: clear current pending selection ─────────────────────────
-  const handleSwitchMode = useCallback((nextBrushMode) => {
-    setBrushMode(nextBrushMode);
+  // ── Mode switch: clear pending selection ──────────────────────────────────
+  const handleSwitchMode = useCallback((nextBrush) => {
+    setBrushMode(nextBrush);
     setClickPoints([]);
-    setCurrentMask(null);
+    setCurrentMaskSet(null);
     setPreviewMask(null);
     clearPrevMask();
     strokeCountRef.current = 0;
   }, [clearPrevMask]);
 
-  // ── Point mode: canvas click → original image coords ─────────────────────
+  // ── Point mode: canvas click → image coords ───────────────────────────────
   const canvasToImageCoords = useCallback((clientX, clientY) => {
     const canvas = imageCanvasRef.current;
     const img    = imageElRef.current;
     if (!canvas || !img) return null;
-
     const rect  = canvas.getBoundingClientRect();
     const canvX = (clientX - rect.left) / zoom;
     const canvY = (clientY - rect.top)  / zoom;
-
     return {
-      x:     (canvX / canvasSize.w) * img.naturalWidth,
-      y:     (canvY / canvasSize.h) * img.naturalHeight,
-      canvX,
-      canvY,
+      x: (canvX / canvasSize.w) * img.naturalWidth,
+      y: (canvY / canvasSize.h) * img.naturalHeight,
     };
   }, [zoom, canvasSize]);
 
-  // ── Point mode click handler ──────────────────────────────────────────────
   const handleCanvasClick = useCallback(async (e) => {
     if (brushMode || isEncoding || isModelLoading) return;
     e.preventDefault();
@@ -198,15 +223,15 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
     const coords = canvasToImageCoords(e.clientX, e.clientY);
     if (!coords) return;
 
-    const newPoint  = { x: coords.x, y: coords.y, label };
+    const newPoint   = { x: coords.x, y: coords.y, label };
     const nextPoints = [...clickPoints, newPoint];
     setClickPoints(nextPoints);
 
-    const mask = await segmentMultiPoint(
+    const result = await segmentMultiPoint(
       nextPoints.map(({ x, y }) => ({ x, y })),
       nextPoints.map(({ label: l }) => l),
     );
-    setCurrentMask(mask);
+    if (result !== null) setCurrentMaskSet(result);
   }, [brushMode, clickPoints, isEncoding, isModelLoading, canvasToImageCoords, segmentMultiPoint]);
 
   const handleContextMenu = useCallback((e) => {
@@ -214,84 +239,58 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
     handleCanvasClick(e);
   }, [handleCanvasClick]);
 
-  // ── Brush mode stroke handler ─────────────────────────────────────────────
-  /**
-   * Called by BrushSelector when a drag stroke ends.
-   * canvasPoints: [{x, y}] in display-canvas pixel space (0..canvasSize.w)
-   * isExclude:    true → label=0 (remove), false → label=1 (add)
-   *
-   * Strategy: each stroke is passed independently to SAM; the previous
-   * selection is carried as context via the hook's lowResMask ref.
-   * This lets successive strokes expand / contract naturally without
-   * accumulating hundreds of points.
-   */
+  // ── Brush mode: stroke end ────────────────────────────────────────────────
   const handleStrokeEnd = useCallback(async (canvasPoints, isExclude) => {
     if (isEncoding || isModelLoading) return;
     const img = imageElRef.current;
     if (!img) return;
 
-    // Clear stale preview immediately so we don't show it while the full
-    // decode is running.  The real result will appear when it arrives.
     setPreviewMask(null);
     strokeCountRef.current += 1;
 
-    // Convert canvas px → original image px
     const pts    = canvasPoints.map(({ x, y }) => ({
       x: (x / canvasSize.w) * img.naturalWidth,
       y: (y / canvasSize.h) * img.naturalHeight,
     }));
     const labels = canvasPoints.map(() => isExclude ? 0 : 1);
 
-    // segmentMultiPoint returns null if the result was superseded by a newer
-    // request — in that case we leave currentMask at its previous value so the
-    // UI doesn't flicker.
-    const mask = await segmentMultiPoint(pts, labels);
-    if (mask !== null) setCurrentMask(mask);
+    const result = await segmentMultiPoint(pts, labels);
+    if (result !== null) setCurrentMaskSet(result);
   }, [isEncoding, isModelLoading, canvasSize, segmentMultiPoint]);
 
-  /**
-   * Throttled live-preview handler called by BrushSelector during drag.
-   * Uses segmentPreview (no requestId increment, no state updates in the hook).
-   * Preview is shown at half-opacity; replaced by the real mask on stroke end.
-   */
+  // ── Brush mode: throttled preview ─────────────────────────────────────────
   const handleBrushPreview = useCallback(async (canvasPoints, isExclude) => {
     const img = imageElRef.current;
     if (!img) return;
-
     const pts    = canvasPoints.map(({ x, y }) => ({
       x: (x / canvasSize.w) * img.naturalWidth,
       y: (y / canvasSize.h) * img.naturalHeight,
     }));
     const labels = canvasPoints.map(() => isExclude ? 0 : 1);
-
-    const mask = await segmentPreview(pts, labels);
+    const mask   = await segmentPreview(pts, labels);
     if (mask !== null) setPreviewMask(mask);
   }, [canvasSize, segmentPreview]);
 
-  // ── Confirm → save mask to confirmed list ────────────────────────────────
+  // ── Confirm → save to confirmed list ─────────────────────────────────────
   const handleConfirm = useCallback(() => {
-    if (!currentMask) return;
+    if (!currentMaskSet) return;
 
-    const raw    = maskToBinary(currentMask);
-    const maskW  = currentMask.dims[3];
-    const maskH  = currentMask.dims[2];
-    const binary = (maskW !== canvasSize.w || maskH !== canvasSize.h)
-      ? rescaleMask(raw, maskW, maskH, canvasSize.w, canvasSize.h)
-      : raw;
+    const tensor = currentMaskSet.masks[selectedMaskIdx];
+    const binary = tensorToBinaryProcessed(tensor, canvasSize.w, canvasSize.h);
+    const color  = LABEL_COLORS[pendingLabel] || '#1e90ff';
 
-    const color = LABEL_COLORS[pendingLabel] || '#1e90ff';
     setConfirmedMasks(prev => [...prev, { binary, label: pendingLabel, color }]);
     setClickPoints([]);
-    setCurrentMask(null);
+    setCurrentMaskSet(null);
     setPreviewMask(null);
     clearPrevMask();
     strokeCountRef.current = 0;
-  }, [currentMask, pendingLabel, canvasSize, clearPrevMask]);
+  }, [currentMaskSet, selectedMaskIdx, pendingLabel, canvasSize, clearPrevMask]);
 
-  // ── Cancel current selection ──────────────────────────────────────────────
+  // ── Cancel ────────────────────────────────────────────────────────────────
   const handleCancel = useCallback(() => {
     setClickPoints([]);
-    setCurrentMask(null);
+    setCurrentMaskSet(null);
     setPreviewMask(null);
     clearPrevMask();
     strokeCountRef.current = 0;
@@ -333,40 +332,34 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
 
   const handleMouseUp = useCallback(() => { isPanning.current = false; }, []);
 
-  // ── Overlay masks ─────────────────────────────────────────────────────────
+  // ── Overlay masks (confirmed + preview + pending) ─────────────────────────
   const overlayMasks = useMemo(() => {
     const all = [...confirmedMasks];
 
-    // Live preview (during brush drag): show at half opacity, no label.
-    // Only shown when there is no confirmed current mask yet (i.e. mid-stroke).
-    if (previewMask && !currentMask) {
-      const raw    = maskToBinary(previewMask);
-      const maskW  = previewMask.dims[3];
-      const maskH  = previewMask.dims[2];
-      const binary = (maskW !== canvasSize.w || maskH !== canvasSize.h)
-        ? rescaleMask(raw, maskW, maskH, canvasSize.w, canvasSize.h)
-        : raw;
+    // Live preview during brush drag (half opacity, no label, no ants).
+    if (previewMask && !currentMaskSet) {
+      const binary = tensorToBinaryProcessed(previewMask, canvasSize.w, canvasSize.h);
       all.push({
         binary,
-        label:   '',    // no label text for preview
+        label:   '',
         color:   LABEL_COLORS[pendingLabel] || '#1e90ff',
-        preview: true,  // → SegmentOverlay renders at reduced opacity, no ants
+        preview: true,
       });
     }
 
     // Pending selection (after stroke end or point click).
-    if (currentMask) {
-      const raw    = maskToBinary(currentMask);
-      const maskW  = currentMask.dims[3];
-      const maskH  = currentMask.dims[2];
-      const binary = (maskW !== canvasSize.w || maskH !== canvasSize.h)
-        ? rescaleMask(raw, maskW, maskH, canvasSize.w, canvasSize.h)
-        : raw;
-      all.push({ binary, label: pendingLabel, color: LABEL_COLORS[pendingLabel] || '#1e90ff' });
+    if (currentMaskSet) {
+      const tensor = currentMaskSet.masks[selectedMaskIdx];
+      const binary = tensorToBinaryProcessed(tensor, canvasSize.w, canvasSize.h);
+      all.push({
+        binary,
+        label: pendingLabel,
+        color: LABEL_COLORS[pendingLabel] || '#1e90ff',
+      });
     }
 
     return all;
-  }, [confirmedMasks, currentMask, previewMask, pendingLabel, canvasSize]);
+  }, [confirmedMasks, currentMaskSet, selectedMaskIdx, previewMask, pendingLabel, canvasSize]);
 
   // ── Point markers (point mode only) ──────────────────────────────────────
   const pointMarkers = useMemo(() => clickPoints.map((pt, i) => {
@@ -386,13 +379,13 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
     );
   }), [clickPoints, canvasSize]);
 
-  // ── Brush size slider CSS custom-property (fill colour) ───────────────────
+  // ── Brush size slider progress ────────────────────────────────────────────
   const brushSliderStyle = useMemo(() => ({
     '--progress': `${((brushSize - BRUSH_MIN) / (BRUSH_MAX - BRUSH_MIN)) * 100}%`,
   }), [brushSize]);
 
-  // ── Action bar visibility: show whenever there is a pending selection ─────
-  const hasSelection = currentMask !== null || clickPoints.length > 0;
+  const hasSelection = currentMaskSet !== null || clickPoints.length > 0;
+  const hasMultiMasks = currentMaskSet?.masks.length > 1;
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
@@ -441,7 +434,7 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
           </div>
         </div>
 
-        {/* Brush size slider (brush mode only) */}
+        {/* Brush size (brush mode only) */}
         {brushMode && (
           <div className="rcs-brush-controls">
             <div className="rcs-brush-header">
@@ -491,9 +484,7 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
                   className="rcs-mask-remove"
                   onClick={() => handleRemoveMask(i)}
                   title="제거"
-                >
-                  ×
-                </button>
+                >×</button>
               </div>
             ))}
           </div>
@@ -517,9 +508,7 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
               {isModelLoading ? 'SAM 모델 로딩 중...' : '이미지를 분석하고 있습니다...'}
             </div>
           )}
-          {samError && (
-            <div className="rcs-error-banner">{samError}</div>
-          )}
+          {samError && <div className="rcs-error-banner">{samError}</div>}
 
           {/* Zoom/pan wrapper */}
           <div
@@ -557,7 +546,7 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
               {!brushMode && pointMarkers}
             </div>
 
-            {/* Layer 4: brush canvas overlay (brush mode) */}
+            {/* Layer 4: brush canvas overlay */}
             {canvasSize.w > 0 && (
               <BrushSelector
                 canvasSize={canvasSize}
@@ -570,7 +559,7 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
               />
             )}
 
-            {/* Layer 5: point-mode hit area (disabled in brush mode) */}
+            {/* Layer 5: point-mode invisible hit area */}
             <div
               className="rcs-hit-area"
               onClick={handleCanvasClick}
@@ -579,14 +568,13 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
               tabIndex={0}
               aria-label="이미지 클릭으로 영역 선택"
               style={{
-                cursor: brushMode
-                  ? 'default'
+                cursor: brushMode ? 'default'
                   : (isEncoding || isModelLoading || isSegmenting ? 'wait' : 'crosshair'),
                 pointerEvents: brushMode ? 'none' : 'auto',
                 position: 'absolute',
                 top: 0,
                 left: 0,
-                width: canvasSize.w,
+                width:  canvasSize.w,
                 height: canvasSize.h,
               }}
             />
@@ -599,23 +587,33 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
             <div className="rcs-action-info">
               {isSegmenting ? (
                 <><span className="spinner" /> 마스크 생성 중...</>
-              ) : currentMask ? (
-                brushMode ? (
-                  <>
-                    영역이 선택됐습니다. 확인하거나 클릭을 추가하세요.
-                    {strokeCountRef.current > 0 && (
-                      <span className="rcs-stroke-badge">
-                        {strokeCountRef.current}회 스트로크
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  <>영역이 선택됐습니다. 확인하거나 클릭을 추가하세요.</>
-                )
+              ) : currentMaskSet ? (
+                <>
+                  영역이 선택됐습니다. 확인하거나 클릭을 추가하세요.
+                  {brushMode && strokeCountRef.current > 0 && (
+                    <span className="rcs-stroke-badge">
+                      {strokeCountRef.current}회 스트로크
+                    </span>
+                  )}
+                </>
               ) : (
                 <>클릭 포인트가 추가됐습니다.</>
               )}
             </div>
+
+            {/* Mask size selector — only when SAM returned multiple candidates */}
+            {currentMaskSet && hasMultiMasks && (
+              <div className="rcs-mask-size-row">
+                <MaskSizeSelector
+                  masks={currentMaskSet.masks}
+                  scores={currentMaskSet.scores}
+                  selectedIdx={selectedMaskIdx}
+                  bestIndex={currentMaskSet.bestIndex}
+                  onSelect={setSelectedMaskIdx}
+                />
+              </div>
+            )}
+
             <div className="rcs-action-buttons">
               <button className="btn btn-secondary" onClick={handleCancel}>
                 취소
@@ -623,7 +621,7 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
               <button
                 className="btn btn-primary"
                 onClick={handleConfirm}
-                disabled={!currentMask || isSegmenting}
+                disabled={!currentMaskSet || isSegmenting}
               >
                 이 영역 확정
               </button>

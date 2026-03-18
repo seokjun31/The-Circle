@@ -28,6 +28,7 @@ import {
   runEncoder,
   runDecoder,
   selectBestMask,
+  extractAllMasks,
   embeddingFromBase64,
 } from '../lib/sam/samUtils';
 
@@ -140,11 +141,15 @@ export function useSamSegmentation() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
-   * Run decoder for multiple click points simultaneously.
+   * Run decoder for multiple click / brush points simultaneously.
    *
-   * @param {Array<{x:number,y:number}>} points
-   * @param {Array<number>} labels
-   * @returns {Promise<import('onnxruntime-web').Tensor|null>}
+   * Returns ALL three SAM mask candidates so the caller can let the user
+   * switch between small / medium / large without re-running inference.
+   *
+   * @param {Array<{x:number,y:number}>} points  Original-image pixel coords
+   * @param {Array<number>} labels               1 = foreground, 0 = background
+   * @returns {Promise<{masks:Tensor[], scores:number[], bestIndex:number}|null>}
+   *   null when the result was superseded by a newer request (stale discard).
    */
   const segmentMultiPoint = useCallback(async (points, labels) => {
     if (!embeddingRef.current) {
@@ -179,7 +184,9 @@ export function useSamSegmentation() {
 
       // Cache low-res mask for next call (chained refinement).
       lowResMaskRef.current = lowResMasks;
-      return selectBestMask(masks, iouPredictions);
+
+      // Return all K candidates — caller picks which to display.
+      return extractAllMasks(masks, iouPredictions);
     } catch (err) {
       if (myId === requestIdRef.current) {
         console.error('[SAM] segmentMultiPoint failed:', err);
