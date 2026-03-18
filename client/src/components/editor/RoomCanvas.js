@@ -379,6 +379,68 @@ function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, clas
     strokeCountRef.current = 0;
   }, [clearPrevMask]);
 
+  // ── Preview thumbnail ─────────────────────────────────────────────────────
+  const previewCanvasRef = useRef(null);
+  const [areaPercentage, setAreaPercentage] = useState(0);
+
+  useEffect(() => {
+    const canvas = previewCanvasRef.current;
+    if (!currentMaskSet || !imageElRef.current || !canvas || canvasSize.w === 0) return;
+
+    const img    = imageElRef.current;
+    const tensor = currentMaskSet.masks[selectedMaskIdx];
+    const binary = tensorToBinaryProcessed(tensor, canvasSize.w, canvasSize.h);
+
+    // Compute area %
+    let selectedPx = 0;
+    for (let i = 0; i < binary.length; i++) selectedPx += binary[i];
+    setAreaPercentage((selectedPx / binary.length) * 100);
+
+    // Preview canvas: fixed height 120 px, proportional width
+    const PREV_H = 120;
+    const PREV_W = Math.max(1, Math.round(PREV_H * canvasSize.w / canvasSize.h));
+    canvas.width  = PREV_W;
+    canvas.height = PREV_H;
+
+    const ctx = canvas.getContext('2d');
+
+    // 1. Base image
+    ctx.drawImage(img, 0, 0, PREV_W, PREV_H);
+
+    // 2. Colored mask on offscreen canvas
+    const color = labelColor(pendingLabel);
+    const r = parseInt(color.slice(1, 3), 16);
+    const g = parseInt(color.slice(3, 5), 16);
+    const b = parseInt(color.slice(5, 7), 16);
+
+    const oc   = document.createElement('canvas');
+    oc.width   = PREV_W;
+    oc.height  = PREV_H;
+    const octx = oc.getContext('2d');
+    const id   = octx.createImageData(PREV_W, PREV_H);
+    const od   = id.data;
+
+    for (let py = 0; py < PREV_H; py++) {
+      for (let px = 0; px < PREV_W; px++) {
+        const cx = Math.min(Math.round(px * canvasSize.w / PREV_W), canvasSize.w - 1);
+        const cy = Math.min(Math.round(py * canvasSize.h / PREV_H), canvasSize.h - 1);
+        if (binary[cy * canvasSize.w + cx]) {
+          const idx = (py * PREV_W + px) * 4;
+          od[idx]     = r;
+          od[idx + 1] = g;
+          od[idx + 2] = b;
+          od[idx + 3] = 255;
+        }
+      }
+    }
+    octx.putImageData(id, 0, 0);
+
+    // 3. Composite at 42 % opacity
+    ctx.globalAlpha = 0.42;
+    ctx.drawImage(oc, 0, 0);
+    ctx.globalAlpha = 1.0;
+  }, [currentMaskSet, selectedMaskIdx, pendingLabel, canvasSize]);
+
   const handleRemoveMask = useCallback((idx) => {
     setConfirmedMasks(prev => prev.filter((_, i) => i !== idx));
   }, []);
@@ -724,22 +786,35 @@ function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, clas
         {/* Action bar */}
         {hasSelection && (
           <div className="rcs-action-bar">
-            <div className="rcs-action-info">
-              {isSegmenting ? (
-                <><span className="spinner" /> 마스크 생성 중...</>
-              ) : currentMaskSet ? (
-                <>
-                  영역이 선택됐습니다.
-                  {inputMode === 'point' && ' 클릭을 추가하거나 확정하세요.'}
+
+            {/* ── Preview row: thumbnail + stats ─────────────────────────── */}
+            {currentMaskSet && !isSegmenting && (
+              <div className="rcs-preview-row">
+                <canvas ref={previewCanvasRef} className="rcs-preview-canvas" />
+                <div className="rcs-preview-meta">
+                  <span className="rcs-preview-title">미리보기</span>
+                  <span className="rcs-preview-area">
+                    선택 면적&nbsp;<strong>{areaPercentage.toFixed(1)}%</strong>
+                  </span>
+                  <span className="rcs-preview-hint">
+                    라벨을 선택한 후 영역을 확정하세요
+                  </span>
                   {inputMode === 'brush' && strokeCountRef.current > 0 && (
                     <span className="rcs-stroke-badge">
                       {strokeCountRef.current}회 스트로크
                     </span>
                   )}
-                </>
-              ) : (
+                </div>
+              </div>
+            )}
+
+            {/* Status text (segmenting / point added) */}
+            <div className="rcs-action-info">
+              {isSegmenting ? (
+                <><span className="spinner" /> 마스크 생성 중...</>
+              ) : !currentMaskSet ? (
                 <>클릭 포인트가 추가됐습니다.</>
-              )}
+              ) : null}
             </div>
 
             {/* Mask size selector — only when SAM returned multiple candidates */}
@@ -755,7 +830,7 @@ function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, clas
               </div>
             )}
 
-            {/* Label picker — shown after mask is generated (user sees mask, then labels) */}
+            {/* Label picker — shown after mask is generated */}
             {currentMaskSet && (
               <div className="rcs-label-row">
                 <span className="rcs-label-title">라벨 선택</span>
