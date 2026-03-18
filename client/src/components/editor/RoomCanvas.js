@@ -33,9 +33,10 @@ import BoxDragSelector  from './BoxDragSelector';
 import MaskSizeSelector from './MaskSizeSelector';
 import SegmentLabel, { SEGMENT_LABELS, labelColor, labelText } from './SegmentLabel';
 import { useSamSegmentation } from '../../hooks/useSamSegmentation';
-import { maskToBinary }        from '../../lib/sam/samUtils';
-import { cleanMask, fillHoles } from '../../lib/sam/maskPostProcess';
-import { lassoToSamInput }      from '../../lib/sam/lassoToSamInput';
+import { maskToBinary, binaryToPng } from '../../lib/sam/samUtils';
+import { cleanMask, fillHoles }      from '../../lib/sam/maskPostProcess';
+import { lassoToSamInput }           from '../../lib/sam/lassoToSamInput';
+import { saveMask }                  from '../../utils/api';
 import './RoomCanvas.css';
 
 // ── Rescale binary mask from tensor dims to canvas dims ───────────────────────
@@ -84,7 +85,7 @@ const BRUSH_INIT = 20;
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' }) {
+function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, className = '' }) {
   // ── SAM hook ──────────────────────────────────────────────────────────────
   const {
     initModel,
@@ -320,27 +321,54 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
     if (mask !== null) setPreviewMask(mask);
   }, [canvasSize, segmentPreview]);
 
-  // ── Confirm → save to confirmed list ─────────────────────────────────────
-  const handleConfirm = useCallback(() => {
+  // ── Confirm → save to confirmed list + upload to server ──────────────────
+  const handleConfirm = useCallback(async () => {
     if (!currentMaskSet) return;
 
-    const tensor = currentMaskSet.masks[selectedMaskIdx];
-    const binary = tensorToBinaryProcessed(tensor, canvasSize.w, canvasSize.h);
-    const color  = labelColor(pendingLabel);
+    const tensor       = currentMaskSet.masks[selectedMaskIdx];
+    const binary       = tensorToBinaryProcessed(tensor, canvasSize.w, canvasSize.h);
+    const color        = labelColor(pendingLabel);
     const displayLabel = labelText(pendingLabel);
+    // Unique local id used to update the record after server responds
+    const localId      = Date.now();
 
+    // 1. Add immediately for instant visual feedback (optimistic)
     setConfirmedMasks(prev => [...prev, {
+      localId,
       binary,
-      label:      displayLabel,  // human-readable display text
-      labelId:    pendingLabel,  // machine id (e.g. 'wall', 'floor')
+      label:      displayLabel,
+      labelId:    pendingLabel,
       color,
+      mask_id:    null,
+      mask_url:   null,
     }]);
     setClickPoints([]);
     setCurrentMaskSet(null);
     setPreviewMask(null);
     clearPrevMask();
     strokeCountRef.current = 0;
-  }, [currentMaskSet, selectedMaskIdx, pendingLabel, canvasSize, clearPrevMask]);
+
+    // 2. Upload PNG to server in background (non-blocking for UI)
+    if (projectId) {
+      try {
+        const pngBlob = await binaryToPng(binary, canvasSize.w, canvasSize.h);
+        const saved   = await saveMask(projectId, {
+          maskBlob:    pngBlob,
+          label:       pendingLabel,
+          customLabel: pendingLabel === 'custom' ? displayLabel : undefined,
+          layerOrder:  confirmedMasks.length,
+        });
+        setConfirmedMasks(prev => prev.map(m =>
+          m.localId === localId
+            ? { ...m, mask_id: saved.mask_id, mask_url: saved.mask_url }
+            : m
+        ));
+      } catch (err) {
+        console.error('[RoomCanvas] Mask save failed:', err);
+        // Keep local mask; server save failure is non-fatal
+      }
+    }
+  }, [currentMaskSet, selectedMaskIdx, pendingLabel, canvasSize, clearPrevMask, projectId, confirmedMasks.length]);
 
   // ── Cancel ────────────────────────────────────────────────────────────────
   const handleCancel = useCallback(() => {

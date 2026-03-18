@@ -71,17 +71,26 @@ export async function saveOrder(orderData) {
 // ── Material apply (Phase 4) ──────────────────────────────────────────────────
 
 /**
- * Save a SAM mask to the server and get back a layerId.
+ * Save a SAM mask to the server via multipart upload.
+ *
  * @param {number} projectId
- * @param {{ maskBase64: string, label: string, layerOrder?: number }} payload
- * @returns {{ layer_id, mask_url, label }}
+ * @param {{
+ *   maskBlob:    Blob,         // PNG blob (white=selected, black=background)
+ *   label:       string,       // machine label ID (wall|floor|ceiling|door|window|molding|custom)
+ *   customLabel?: string,      // free-text when label === 'custom'
+ *   layerOrder?: number,
+ * }} payload
+ * @returns {{ mask_id, layer_id, mask_url, label, area_percentage }}
  */
 export async function saveMask(projectId, payload) {
-  const { data } = await api.post(`/v1/projects/${projectId}/masks`, {
-    mask_base64: payload.maskBase64,
-    label:       payload.label,
-    layer_order: payload.layerOrder ?? 0,
-  });
+  const form = new FormData();
+  form.append('mask_image', payload.maskBlob, 'mask.png');
+  form.append('label',       payload.label);
+  form.append('layer_order', String(payload.layerOrder ?? 0));
+  if (payload.label === 'custom' && payload.customLabel) {
+    form.append('custom_label', payload.customLabel);
+  }
+  const { data } = await api.post(`/v1/projects/${projectId}/masks`, form);
   return data;
 }
 

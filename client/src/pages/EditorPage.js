@@ -196,6 +196,7 @@ function EditorPage() {
             <div className="ep-canvas-wrap">
               <RoomCanvas
                 imageSrc={imageUrl}
+                projectId={projectId}
                 onMasksChange={setCanvasSegments}
                 onEncodingChange={handleEncodingChange}
               />

@@ -24,7 +24,8 @@ import uuid
 from typing import Optional
 
 import numpy as np
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+
 from pydantic import BaseModel, Field
 from PIL import Image
 from sqlalchemy.orm import Session
@@ -112,17 +113,12 @@ class EncodeResponse(BaseModel):
     embedding: EmbeddingPayload
 
 
-class SaveMaskRequest(BaseModel):
-    mask_base64: str         = Field(..., description="Base64-encoded PNG mask image (binary, white=selected)")
-    label: str               = Field("벽", description="Display label (e.g. 벽 | 바닥 | 천장 | 기타)")
-    label_id: Optional[str]  = Field(None, description="Machine label ID (e.g. wall | floor | ceiling | door | window | molding | custom)")
-    layer_order: int         = Field(0, ge=0)
-
-
 class SaveMaskResponse(BaseModel):
-    layer_id:  int
-    mask_url:  str
-    label:     str
+    mask_id:          str
+    layer_id:         int
+    mask_url:         str
+    label:            str
+    area_percentage:  float
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -201,23 +197,28 @@ def encode_image(
     status_code=status.HTTP_201_CREATED,
     summary="확정 마스크를 S3에 저장 + EditLayer 생성",
 )
-def save_mask(
+async def save_mask(
     project_id: int,
-    body: SaveMaskRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    mask_image:   UploadFile        = File(..., description="Binary mask PNG (white=selected, black=background)"),
+    label:        str               = Form("wall", description="Machine label ID: wall|floor|ceiling|door|window|molding|custom"),
+    custom_label: Optional[str]     = Form(None,   description="Free-text label when label=='custom'"),
+    layer_order:  int               = Form(0),
+    db:           Session           = Depends(get_db),
+    current_user: User              = Depends(get_current_user),
 ):
     """
     Save a SAM-generated mask PNG for a project.
 
     Flow:
       1. Verify project ownership
-      2. Decode base64 PNG → raw bytes
-      3. Upload to S3 at  users/{uid}/projects/{pid}/masks/{uuid}.png
-      4. Create EditLayer record (layer_type = wall/floor/ceiling/etc.)
-      5. Return { layer_id, mask_url, label }
+      2. Read uploaded PNG bytes
+      3. Compute area_percentage (selected pixels / total)
+      4. Upload to S3 at  users/{uid}/projects/{pid}/masks/{uuid}.png
+      5. Create EditLayer record (layer_type = wall/floor/ceiling/etc.)
+      6. Return { mask_id, layer_id, mask_url, label, area_percentage }
 
-    The mask_url is subsequently passed to WorkflowManager for ComfyUI inpainting.
+    Accepts all 7 SegmentLabel IDs: wall | floor | ceiling | door | window | molding | custom.
+    The mask_url is used by material-apply (Phase 4) and final-render (Phase 7).
     """
     # ── 1. Ownership check ─────────────────────────────────────────────────
     project: Optional[Project] = db.query(Project).filter(
@@ -231,19 +232,24 @@ def save_mask(
             detail="프로젝트를 찾을 수 없습니다.",
         )
 
-    # ── 2. Decode mask PNG ─────────────────────────────────────────────────
+    # ── 2. Read uploaded PNG ────────────────────────────────────────────────
     try:
-        mask_bytes = base64.b64decode(body.mask_base64)
+        mask_bytes = await mask_image.read()
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"마스크 데이터 디코딩 실패: {exc}",
+            detail=f"마스크 파일 읽기 실패: {exc}",
         ) from exc
 
-    # Validate it is a real PNG
+    # Validate it is a real PNG and compute area_percentage
     try:
-        with Image.open(io.BytesIO(mask_bytes)) as img:
-            img.verify()
+        with Image.open(io.BytesIO(mask_bytes)) as pil_img:
+            pil_img.verify()
+        with Image.open(io.BytesIO(mask_bytes)) as pil_img:
+            arr = np.array(pil_img.convert("L"), dtype=np.uint8)
+            selected = int(np.sum(arr > 127))
+            total    = arr.size
+            area_percentage = round(selected / total * 100, 2) if total > 0 else 0.0
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -251,7 +257,9 @@ def save_mask(
         ) from exc
 
     # ── 3. Upload to S3 / local ─────────────────────────────────────────────
-    mask_filename = f"mask_{uuid.uuid4().hex}.png"
+    mask_uuid     = uuid.uuid4().hex
+    mask_id       = f"mask_{mask_uuid}"
+    mask_filename = f"{mask_id}.png"
     s3_key = storage.project_key(
         current_user.id, project_id, f"masks/{mask_filename}"
     )
@@ -270,45 +278,55 @@ def save_mask(
         ) from exc
 
     # ── 4. Map label → LayerType ────────────────────────────────────────────
-    # Accepts both machine IDs (new system) and Korean display strings (legacy).
+    # Accepts all 7 SegmentLabel machine IDs and legacy Korean display strings.
     label_map = {
         # Machine IDs (SegmentLabel.js)
         "wall":    LayerType.wall,
         "floor":   LayerType.floor,
         "ceiling": LayerType.ceiling,
+        "door":    LayerType.style,
+        "window":  LayerType.style,
+        "molding": LayerType.style,
+        "custom":  LayerType.style,
         # Korean display strings (backwards-compatibility)
         "벽":  LayerType.wall,
         "바닥": LayerType.floor,
         "천장": LayerType.ceiling,
     }
-    # Prefer label_id if provided; fall back to display label.
-    label_key  = body.label_id or body.label
-    layer_type = label_map.get(label_key, LayerType.style)
+    layer_type = label_map.get(label, LayerType.style)
+
+    # Display label: custom text or machine ID
+    display_label = custom_label.strip() if label == "custom" and custom_label else label
 
     # ── 5. Persist EditLayer ────────────────────────────────────────────────
     layer = EditLayer(
         project_id=project_id,
         layer_type=layer_type,
         parameters={
-            "mask_url":    mask_url,
-            "label":       body.label,
-            "source":      "sam_browser",
+            "mask_id":          mask_id,
+            "mask_url":         mask_url,
+            "label":            label,
+            "display_label":    display_label,
+            "area_percentage":  area_percentage,
+            "source":           "sam_browser",
         },
         result_image_url=None,
         is_visible=True,
-        order=body.layer_order,
+        order=layer_order,
     )
     db.add(layer)
     db.commit()
     db.refresh(layer)
 
     logger.info(
-        "Mask saved: project_id=%d layer_id=%d label=%s url=%s",
-        project_id, layer.id, body.label, mask_url,
+        "Mask saved: project_id=%d layer_id=%d label=%s area=%.1f%% url=%s",
+        project_id, layer.id, label, area_percentage, mask_url,
     )
 
     return SaveMaskResponse(
+        mask_id=mask_id,
         layer_id=layer.id,
         mask_url=mask_url,
-        label=body.label,
+        label=label,
+        area_percentage=area_percentage,
     )
