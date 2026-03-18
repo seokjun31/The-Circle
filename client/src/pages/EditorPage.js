@@ -125,7 +125,7 @@ function EditorPage() {
     const common = { projectId, originalImageUrl: imageUrl, creditBalance, onResult: handleResult };
     switch (activeTool) {
       case 'circle_ai':    return <StyleTransform  {...common} />;
-      case 'material':     return <MaterialPanel   {...common} selectedSegments={canvasSegments} />;
+      case 'material':     return <MaterialPanel   {...common} confirmedMasks={canvasSegments} />;
       case 'mood_copy':    return <MoodCopy        {...common} />;
       case 'furniture':    return <FurniturePanel  projectId={projectId} originalImageUrl={imageUrl} creditBalance={creditBalance} onResult={handleResult} />;
       case 'final_render': return <FinalRender     {...common} onResult={handleFinalRenderResult} />;
@@ -196,6 +196,7 @@ function EditorPage() {
             <div className="ep-canvas-wrap">
               <RoomCanvas
                 imageSrc={imageUrl}
+                projectId={projectId}
                 onMasksChange={setCanvasSegments}
                 onEncodingChange={handleEncodingChange}
               />

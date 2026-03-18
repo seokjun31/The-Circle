@@ -1,0 +1,72 @@
+/* ── SegmentLabel ─────────────────────────────────────────────────────────── */
+
+.seg-label-root {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Chip row */
+.seg-label-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.seg-label-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 20px;
+  border: 1.5px solid transparent;
+  background: var(--bg-elevated, #f3f4f6);
+  color: var(--text-secondary, #374151);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  white-space: nowrap;
+}
+
+.seg-label-chip:hover {
+  background: color-mix(in srgb, var(--chip-color) 12%, transparent);
+  border-color: var(--chip-color);
+  color: var(--chip-color);
+}
+
+.seg-label-chip.active {
+  background: color-mix(in srgb, var(--chip-color) 18%, transparent);
+  border-color: var(--chip-color);
+  color: var(--chip-color);
+}
+
+/* Colored dot */
+.seg-label-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--chip-color);
+  flex-shrink: 0;
+}
+
+/* Custom text input */
+.seg-label-custom-input {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1.5px solid var(--accent, #3b82f6);
+  border-radius: 6px;
+  background: var(--bg-surface, #fff);
+  color: var(--text-primary, #111);
+  font-size: 12px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.seg-label-custom-input::placeholder {
+  color: var(--text-muted, #9ca3af);
+}
+
+.seg-label-custom-input:focus {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent, #3b82f6) 25%, transparent);
+}

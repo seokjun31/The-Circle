@@ -335,7 +335,36 @@ export function samplePointsFromBrush(brushPath, maxPoints) {
   return sampled.slice(0, maxPoints);
 }
 
-// ── 7. Base64 embedding helpers (for server fallback) ────────────────────────
+// ── 7. Binary mask → PNG Blob ─────────────────────────────────────────────────
+
+/**
+ * Convert a binary Uint8Array mask to a PNG Blob for server upload.
+ * Selected pixels (1) → white (255,255,255), background (0) → black (0,0,0).
+ *
+ * @param {Uint8Array} binary  Row-major 0/1 mask, width × height elements
+ * @param {number} width
+ * @param {number} height
+ * @returns {Promise<Blob>}  PNG blob, resolves via canvas.toBlob
+ */
+export function binaryToPng(binary, width, height) {
+  const canvas = document.createElement('canvas');
+  canvas.width  = width;
+  canvas.height = height;
+  const ctx  = canvas.getContext('2d');
+  const img  = ctx.createImageData(width, height);
+  const data = img.data;
+  for (let i = 0; i < binary.length; i++) {
+    const v = binary[i] ? 255 : 0;
+    data[i * 4 + 0] = v;
+    data[i * 4 + 1] = v;
+    data[i * 4 + 2] = v;
+    data[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+}
+
+// ── 8. Base64 embedding helpers (for server fallback) ────────────────────────
 
 /**
  * Serialise an ONNX Tensor to a plain object that can be JSON-stringified.

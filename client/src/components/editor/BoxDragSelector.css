@@ -1,0 +1,11 @@
+/* ── BoxDragSelector canvas overlay ─────────────────────────────────────────── */
+
+.box-drag-overlay-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  cursor: crosshair;
+  z-index: 20;        /* above SegmentOverlay and point markers */
+  touch-action: none;
+}

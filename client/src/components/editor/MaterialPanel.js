@@ -26,6 +26,7 @@ import React, {
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
 import BeforeAfterSlider from './BeforeAfterSlider';
+import { LABEL_TO_CATEGORY } from './SegmentLabel';
 import './MaterialPanel.css';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -51,10 +52,18 @@ const STYLES = [
 
 function MaterialPanel({
   projectId,
-  confirmedMasks = [],
+  // Accept both prop names for compatibility
+  confirmedMasks: confirmedMasksProp,
+  selectedSegments,
   originalImageSrc,
+  originalImageUrl,   // EditorPage passes this name
   onApplyComplete,
+  onResult,           // EditorPage passes this name
 }) {
+  // Normalise prop aliases
+  const confirmedMasks   = confirmedMasksProp ?? selectedSegments ?? [];
+  const imageSrc         = originalImageSrc ?? originalImageUrl ?? null;
+  const handleApplyDone  = onApplyComplete ?? onResult;
   // ── UI state ──────────────────────────────────────────────────────────────
   const [activeCategory, setActiveCategory] = useState('wallpaper');
   const [activeStyle,    setActiveStyle]    = useState('');
@@ -75,6 +84,14 @@ function MaterialPanel({
   // Preview canvas
   const previewCanvasRef = useRef(null);
   const previewImgRef    = useRef(null);
+
+  // ── Auto-switch category when selected mask label changes ─────────────────
+  useEffect(() => {
+    const mask = confirmedMasks[selectedLayerIdx];
+    if (!mask?.labelId) return;
+    const suggested = LABEL_TO_CATEGORY[mask.labelId];
+    if (suggested) setActiveCategory(suggested);
+  }, [selectedLayerIdx, confirmedMasks]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fetch materials ────────────────────────────────────────────────────────
   const fetchMaterials = useCallback(async (cat, style, q, p) => {
@@ -208,7 +225,7 @@ function MaterialPanel({
 
   // Sync canvas size when original image loads
   useEffect(() => {
-    if (!originalImageSrc) return;
+    if (!imageSrc) return;
     const img = new window.Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
@@ -221,8 +238,8 @@ function MaterialPanel({
         ctx.drawImage(img, 0, 0);
       }
     };
-    img.src = originalImageSrc;
-  }, [originalImageSrc]);
+    img.src = imageSrc;
+  }, [imageSrc]);
 
   // ── AI Apply ──────────────────────────────────────────────────────────────
   const handleApply = useCallback(async () => {
@@ -255,13 +272,13 @@ function MaterialPanel({
 
       setResultUrl(data.result_url);
       toast.success('자재가 성공적으로 적용됐습니다!');
-      onApplyComplete?.({ layerId: data.layer_id, resultUrl: data.result_url });
+      handleApplyDone?.({ layerId: data.layer_id, resultUrl: data.result_url });
     } catch (err) {
       toast.error('AI 적용 실패: ' + err.message);
     } finally {
       setIsApplying(false);
     }
-  }, [selectedMaterial, confirmedMasks, selectedLayerIdx, projectId, onApplyComplete]);
+  }, [selectedMaterial, confirmedMasks, selectedLayerIdx, projectId, handleApplyDone]);
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
@@ -409,7 +426,7 @@ function MaterialPanel({
           <>
             <div className="mp-preview-label">변경 전 / 후 비교</div>
             <BeforeAfterSlider
-              beforeSrc={originalImageSrc}
+              beforeSrc={imageSrc}
               afterSrc={resultUrl}
               className="mp-slider"
             />
