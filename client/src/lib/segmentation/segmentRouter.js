@@ -12,7 +12,6 @@
  * conditional branching in its render or confirm logic.
  */
 
-import * as ort       from 'onnxruntime-web';
 import { edgeSnapMask } from './edgeSnap';
 
 // ── Label routing sets ────────────────────────────────────────────────────────
@@ -44,8 +43,9 @@ function binaryToMaskSet(binary, canvasSize) {
   const { w, h } = canvasSize;
   const float32  = new Float32Array(binary.length);
   for (let i = 0; i < binary.length; i++) float32[i] = binary[i];
-  const tensor = new ort.Tensor('float32', float32, [1, 1, h, w]);
-  return { masks: [tensor], scores: [1.0], bestIndex: 0 };
+  // Plain { data, dims } object — duck-typed tensor compatible with
+  // tensorToBinaryProcessed() in RoomCanvas.js (reads .data and .dims[2/3])
+  return { masks: [{ data: float32, dims: [1, 1, h, w] }], scores: [1.0], bestIndex: 0 };
 }
 
 /**

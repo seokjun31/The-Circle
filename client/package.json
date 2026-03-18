@@ -6,8 +6,8 @@
     "@testing-library/jest-dom": "^5.17.0",
     "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^13.5.0",
+    "@xenova/transformers": "^2.17.2",
     "axios": "^1.6.0",
-    "onnxruntime-web": "^1.17.3",
     "react": "^18.2.0",
     "react-compare-slider": "^3.0.0",
     "react-dom": "^18.2.0",
@@ -21,8 +21,7 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject",
-    "postinstall": "node -e \"const fs=require('fs');try{fs.mkdirSync('public/models',{recursive:true})}catch(e){};const src='node_modules/onnxruntime-web/dist';if(fs.existsSync(src))fs.readdirSync(src).filter(f=>f.endsWith('.wasm')).forEach(f=>{try{fs.copyFileSync(src+'/'+f,'public/'+f)}catch(e){}})\""
+    "eject": "react-scripts eject"
   },
   "eslintConfig": {
     "extends": [
