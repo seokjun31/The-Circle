@@ -36,7 +36,8 @@ import { useSamSegmentation } from '../../hooks/useSamSegmentation';
 import { maskToBinary, binaryToPng } from '../../lib/sam/samUtils';
 import { cleanMask, fillHoles }      from '../../lib/sam/maskPostProcess';
 import { lassoToSamInput }           from '../../lib/sam/lassoToSamInput';
-import { saveMask }                  from '../../utils/api';
+import { segmentByLabel }             from '../../lib/segmentation/segmentRouter';
+import { saveMask }                   from '../../utils/api';
 import './RoomCanvas.css';
 
 // ── Rescale binary mask from tensor dims to canvas dims ───────────────────────
@@ -205,51 +206,66 @@ function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, clas
     strokeCountRef.current = 0;
   }, [clearPrevMask]);
 
-  // ── Lasso mode: lasso end → SAM hybrid input ─────────────────────────────
+  // ── Lasso mode: lasso end → router (SAM or edge snap) ───────────────────
   const handleLassoEnd = useCallback(async (canvasPoints) => {
     if (isEncoding || isModelLoading) return;
     const img = imageElRef.current;
     if (!img) return;
 
-    // Convert canvas px → image px
-    const scaleX = img.naturalWidth  / canvasSize.w;
-    const scaleY = img.naturalHeight / canvasSize.h;
-    const imagePath = canvasPoints.map(({ x, y }) => ({
-      x: x * scaleX,
-      y: y * scaleY,
-    }));
+    // Scale canvas px → image px for SAM decoder
+    const scaleX    = img.naturalWidth  / canvasSize.w;
+    const scaleY    = img.naturalHeight / canvasSize.h;
+    const imagePath = canvasPoints.map(({ x, y }) => ({ x: x * scaleX, y: y * scaleY }));
 
-    // Extract SAM hybrid inputs: box corners (labels 2/3) + pos/neg points
     const samPoints = lassoToSamInput(imagePath);
     if (samPoints.length === 0) return;
 
-    const pts    = samPoints.map((p) => ({ x: p.x, y: p.y }));
-    const labels = samPoints.map((p) => p.label);
-
-    const result = await segmentMultiPoint(pts, labels);
+    const result = await segmentByLabel({
+      label:             pendingLabel,
+      canvasPoints,
+      samInputPoints:    samPoints.map((p) => ({ x: p.x, y: p.y })),
+      samInputLabels:    samPoints.map((p) => p.label),
+      segmentMultiPoint,
+      imageCanvas:       imageCanvasRef.current,
+      canvasSize,
+    });
     if (result !== null) setCurrentMaskSet(result);
-  }, [isEncoding, isModelLoading, canvasSize, segmentMultiPoint]);
+  }, [isEncoding, isModelLoading, canvasSize, pendingLabel, segmentMultiPoint]);
 
-  // ── Box mode: box end → SAM box-prompt input ──────────────────────────────
+  // ── Box mode: box end → router (SAM or edge snap) ────────────────────────
   const handleBoxEnd = useCallback(async (canvasBox) => {
     if (isEncoding || isModelLoading) return;
     const img = imageElRef.current;
     if (!img) return;
 
-    // Convert canvas px → image px
     const scaleX = img.naturalWidth  / canvasSize.w;
     const scaleY = img.naturalHeight / canvasSize.h;
 
     // SAM box-prompt: top-left label=2, bottom-right label=3
-    const pts = [
+    const samInputPoints = [
       { x: canvasBox.x_min * scaleX, y: canvasBox.y_min * scaleY },
       { x: canvasBox.x_max * scaleX, y: canvasBox.y_max * scaleY },
     ];
-    const labels = [2, 3];
 
-    const result = await segmentMultiPoint(pts, labels);
+    // For edge snap: the box corners become the polygon path
+    const boxPath = [
+      { x: canvasBox.x_min, y: canvasBox.y_min },
+      { x: canvasBox.x_max, y: canvasBox.y_min },
+      { x: canvasBox.x_max, y: canvasBox.y_max },
+      { x: canvasBox.x_min, y: canvasBox.y_max },
+    ];
+
+    const result = await segmentByLabel({
+      label:             pendingLabel,
+      canvasPoints:      boxPath,
+      samInputPoints,
+      samInputLabels:    [2, 3],
+      segmentMultiPoint,
+      imageCanvas:       imageCanvasRef.current,
+      canvasSize,
+    });
     if (result !== null) setCurrentMaskSet(result);
-  }, [isEncoding, isModelLoading, canvasSize, segmentMultiPoint]);
+  }, [isEncoding, isModelLoading, canvasSize, pendingLabel, segmentMultiPoint]);
 
   // ── Point mode: canvas click → image coords ───────────────────────────────
   const canvasToImageCoords = useCallback((clientX, clientY) => {
