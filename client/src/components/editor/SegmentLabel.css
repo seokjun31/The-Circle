@@ -3,26 +3,41 @@
 .seg-label-root {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+}
+
+/* Group container */
+.seg-label-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.seg-label-group-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #9ca3af;
 }
 
 /* Chip row */
 .seg-label-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: 4px;
 }
 
 .seg-label-chip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 9px;
+  gap: 4px;
+  padding: 3px 8px;
   border-radius: 20px;
   border: 1.5px solid transparent;
   background: var(--bg-elevated, #f3f4f6);
   color: var(--text-secondary, #374151);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   cursor: pointer;
   transition: background 0.12s, border-color 0.12s, color 0.12s;
@@ -43,8 +58,8 @@
 
 /* Colored dot */
 .seg-label-dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: var(--chip-color);
   flex-shrink: 0;

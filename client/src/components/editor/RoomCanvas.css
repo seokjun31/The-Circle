@@ -11,7 +11,6 @@
   position: relative;
 }
 
-/* Two-column when sidebar has space */
 @media (min-width: 900px) {
   .room-canvas-root {
     flex-direction: row;
@@ -102,7 +101,14 @@
 .tip-dot.positive { background: #22c55e; }
 .tip-dot.negative { background: #ef4444; }
 
-/* Confirmed mask list */
+/* Staged mask list */
+.rcs-mask-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 160px;
+  overflow-y: auto;
+}
 .rcs-mask-item {
   display: flex;
   align-items: center;
@@ -117,6 +123,11 @@
   flex-shrink: 0;
 }
 .rcs-mask-label { flex: 1; color: #374151; }
+.rcs-mask-saved {
+  color: #22c55e;
+  font-size: 11px;
+  font-weight: 700;
+}
 .rcs-mask-remove {
   border: none;
   background: none;
@@ -128,7 +139,47 @@
 }
 .rcs-mask-remove:hover { color: #ef4444; }
 
-/* ── Main column: viewport + action bar stacked ───────────────────────────── */
+/* Undo row */
+.rcs-undo-row {
+  display: flex;
+  align-items: center;
+  padding: 4px 0;
+}
+
+/* Complete button */
+.btn-complete {
+  width: 100%;
+  padding: 9px 12px;
+  background: #16a34a;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-complete:hover:not(:disabled) { background: #15803d; }
+.btn-complete:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* Ghost button */
+.btn-ghost {
+  background: none;
+  border: 1px solid #e5e7eb;
+  color: #6b7280;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s;
+  font-size: 12px;
+}
+.btn-ghost:hover:not(:disabled) {
+  border-color: #9ca3af;
+  color: #374151;
+}
+.btn-ghost:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-sm { padding: 4px 9px; }
+
+/* ── Main column ──────────────────────────────────────────────────────────── */
 
 .room-canvas-main {
   flex: 1;
@@ -138,7 +189,7 @@
   overflow: hidden;
 }
 
-/* ── Viewport ─────────────────────────────────────────────────────────────── */
+/* ── Viewport row: canvas area + preview panel ───────────────────────────── */
 
 .room-canvas-viewport {
   flex: 1;
@@ -146,13 +197,21 @@
   overflow: hidden;
   background: #111;
   display: flex;
-  align-items: flex-start;
-  justify-content: flex-start;
+  flex-direction: row;
   min-height: 320px;
 }
 
+/* Canvas area (left, fills remaining space) */
+.rcs-canvas-area {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
 .room-canvas-zoom-wrapper {
-  /* transform applied inline for zoom/pan */
   user-select: none;
 }
 
@@ -186,13 +245,80 @@
   border: 2px solid #fff;
   pointer-events: none;
 }
-.sam-point-marker.positive {
-  background: #22c55e;
-  color: #fff;
+.sam-point-marker.positive { background: #22c55e; color: #fff; }
+.sam-point-marker.negative { background: #ef4444; color: #fff; }
+
+/* ── Large preview panel (right side of viewport) ────────────────────────── */
+
+.rcs-live-preview-panel {
+  width: 300px;
+  flex-shrink: 0;
+  background: #1a1a1a;
+  border-left: 1px solid #2d2d2d;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 12px;
+  overflow-y: auto;
 }
-.sam-point-marker.negative {
-  background: #ef4444;
-  color: #fff;
+
+@media (max-width: 900px) {
+  .rcs-live-preview-panel {
+    display: none;
+  }
+}
+
+.rcs-live-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.rcs-live-preview-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+.rcs-live-preview-pct {
+  font-size: 13px;
+  font-weight: 700;
+  color: #3b82f6;
+  font-variant-numeric: tabular-nums;
+}
+
+.rcs-live-preview-canvas {
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+  border: 1.5px solid #2d2d2d;
+  display: block;
+}
+
+.rcs-live-preview-placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #4b5563;
+  font-size: 13px;
+  line-height: 1.7;
+  padding: 20px;
+  border: 2px dashed #2d2d2d;
+  border-radius: 8px;
+  gap: 8px;
+}
+
+.rcs-live-preview-staged-count {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #22c55e;
+  font-weight: 600;
+  text-align: center;
 }
 
 /* ── Status banners ───────────────────────────────────────────────────────── */
@@ -246,7 +372,6 @@
   flex-wrap: wrap;
 }
 
-/* Label row — appears between mask-size selector and confirm button */
 .rcs-label-row {
   width: 100%;
   display: flex;
@@ -254,6 +379,8 @@
   gap: 6px;
   padding: 8px 0 4px;
   border-top: 1px solid #f3f4f6;
+  max-height: 260px;
+  overflow-y: auto;
 }
 
 .rcs-label-title {
@@ -277,7 +404,7 @@
   gap: 8px;
 }
 
-/* ── Spinner (reused from global) ─────────────────────────────────────────── */
+/* ── Spinner ──────────────────────────────────────────────────────────────── */
 
 .spinner {
   display: inline-block;
@@ -289,19 +416,25 @@
   animation: spin 0.7s linear infinite;
 }
 
+.spinner-dark {
+  border-color: rgba(0,0,0,0.15);
+  border-top-color: #6b7280;
+}
+
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
 
-/* ── Mask size selector row (inside action bar) ──────────────────────────── */
+/* ── Mask size selector row ───────────────────────────────────────────────── */
 
 .rcs-mask-size-row {
+  width: 100%;
   padding: 4px 0;
   border-top: 1px solid rgba(255,255,255,0.06);
   border-bottom: 1px solid rgba(255,255,255,0.06);
 }
 
-/* ── Brush stroke count badge (action bar) ───────────────────────────────── */
+/* ── Brush stroke count badge ─────────────────────────────────────────────── */
 
 .rcs-stroke-badge {
   display: inline-flex;
@@ -320,56 +453,56 @@
 .rcs-tips .tip-brush-add    { color: rgba(37,99,235,0.9);  font-size: 10px; }
 .rcs-tips .tip-brush-remove { color: rgba(239,68,68,0.9);  font-size: 10px; }
 
-/* ── Mask preview row (inside action bar) ────────────────────────────────── */
+/* ── Mode bar ─────────────────────────────────────────────────────────────── */
 
-.rcs-preview-row {
-  width: 100%;
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid #f3f4f6;
+.rcs-mode-bar {
+  display: grid;
+  gap: 4px;
 }
+.rcs-mode-bar-4 { grid-template-columns: 1fr 1fr; }
 
-.rcs-preview-canvas {
-  border-radius: 7px;
-  border: 1.5px solid #e5e7eb;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-  flex-shrink: 0;
-  /* height is set by the canvas element itself (120 px); limit max-width */
-  max-width: 200px;
-  height: auto !important;
-  display: block;
-}
-
-.rcs-preview-meta {
+.rcs-mode-btn {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  padding-top: 2px;
-}
-
-.rcs-preview-title {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: #9ca3af;
-}
-
-.rcs-preview-area {
-  font-size: 14px;
-  color: #374151;
-  font-variant-numeric: tabular-nums;
-}
-
-.rcs-preview-area strong {
-  color: #2563eb;
-  font-weight: 700;
-}
-
-.rcs-preview-hint {
+  align-items: center;
+  gap: 3px;
+  padding: 7px 4px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
   font-size: 11px;
-  color: #9ca3af;
-  line-height: 1.4;
+  font-weight: 500;
+  color: #6b7280;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.rcs-mode-btn:hover:not(.active) {
+  border-color: #9ca3af;
+  background: #f9fafb;
+  color: #374151;
+}
+.rcs-mode-btn.active {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+}
+.rcs-mode-icon { font-size: 16px; }
+
+/* ── Brush controls ───────────────────────────────────────────────────────── */
+
+.rcs-brush-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rcs-brush-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+.rcs-brush-label { color: #6b7280; }
+.rcs-brush-value { font-weight: 600; color: #374151; }
+.rcs-brush-slider {
+  width: 100%;
+  accent-color: #3b82f6;
 }
