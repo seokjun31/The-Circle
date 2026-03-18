@@ -1,0 +1,11 @@
+/* ── LassoSelector canvas overlay ───────────────────────────────────────────── */
+
+.lasso-overlay-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  cursor: crosshair;
+  z-index: 20;        /* above SegmentOverlay (z:10) and point markers (z:15) */
+  touch-action: none; /* disable browser scroll/pinch while drawing */
+}

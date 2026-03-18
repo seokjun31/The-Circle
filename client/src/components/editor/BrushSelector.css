@@ -24,6 +24,13 @@
   margin-bottom: 4px;
 }
 
+/* 4-button grid variant for the 4-tool mode bar */
+.rcs-mode-bar-4 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+
 .rcs-mode-btn {
   flex: 1;
   display: flex;

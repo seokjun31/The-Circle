@@ -1,17 +1,11 @@
 /**
  * RoomCanvas — Interactive image editor canvas with SAM segmentation.
  *
- * Input modes:
- *   Point mode (default)
- *     - Left-click  → foreground point (label=1)
- *     - Right-click → background point (label=0)
- *     - Clicks accumulate; all points are sent to SAM together.
- *
- *   Brush mode
- *     - Left-drag   → scribble to ADD area (label=1)
- *     - Right-drag / Alt+drag → scribble to REMOVE area (label=0)
- *     - Path is arc-length sampled (adaptive ≤ 12 pts, user's spec cap).
- *     - prevMaskTensor chains successive strokes without re-accumulating.
+ * Input modes (inputMode):
+ *   'lasso'  (default) — Freehand lasso → hybrid Box + Positive + Negative SAM input
+ *   'point'            — Left/right-click accumulates foreground/background points
+ *   'box'              — Drag to draw a bounding box (SAM box-prompt labels 2/3)
+ *   'brush'            — Scribble stroke → arc-length sampled points
  *
  * Over-segmentation prevention (解決 A+B+C):
  *   A. arc-length sampling via samplePointsFromBrush()  — adaptive 4-12 pts
@@ -32,12 +26,15 @@ import React, {
   useCallback,
   useMemo,
 } from 'react';
-import SegmentOverlay  from './SegmentOverlay';
-import BrushSelector   from './BrushSelector';
+import SegmentOverlay   from './SegmentOverlay';
+import BrushSelector    from './BrushSelector';
+import LassoSelector    from './LassoSelector';
+import BoxDragSelector  from './BoxDragSelector';
 import MaskSizeSelector from './MaskSizeSelector';
 import { useSamSegmentation } from '../../hooks/useSamSegmentation';
 import { maskToBinary }        from '../../lib/sam/samUtils';
 import { cleanMask, fillHoles } from '../../lib/sam/maskPostProcess';
+import { lassoToSamInput }      from '../../lib/sam/lassoToSamInput';
 import './RoomCanvas.css';
 
 // ── Rescale binary mask from tensor dims to canvas dims ───────────────────────
@@ -117,9 +114,13 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
   const panStart  = useRef({ mx: 0, my: 0, px: 0, py: 0 });
 
   // ── Input mode ────────────────────────────────────────────────────────────
-  const [brushMode, setBrushMode] = useState(false);
+  // 'lasso' | 'point' | 'box' | 'brush'
+  const [inputMode, setInputMode] = useState('lasso');
   const [brushSize, setBrushSize] = useState(BRUSH_INIT);
   const strokeCountRef = useRef(0);
+
+  // Derived booleans for selector components
+  const brushMode = inputMode === 'brush';
 
   // ── Segmentation state ────────────────────────────────────────────────────
   const [clickPoints,   setClickPoints]   = useState([]); // point mode only
@@ -192,14 +193,60 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
   }, [confirmedMasks, onMasksChange]);
 
   // ── Mode switch: clear pending selection ──────────────────────────────────
-  const handleSwitchMode = useCallback((nextBrush) => {
-    setBrushMode(nextBrush);
+  const handleSwitchMode = useCallback((nextMode) => {
+    setInputMode(nextMode);
     setClickPoints([]);
     setCurrentMaskSet(null);
     setPreviewMask(null);
     clearPrevMask();
     strokeCountRef.current = 0;
   }, [clearPrevMask]);
+
+  // ── Lasso mode: lasso end → SAM hybrid input ─────────────────────────────
+  const handleLassoEnd = useCallback(async (canvasPoints) => {
+    if (isEncoding || isModelLoading) return;
+    const img = imageElRef.current;
+    if (!img) return;
+
+    // Convert canvas px → image px
+    const scaleX = img.naturalWidth  / canvasSize.w;
+    const scaleY = img.naturalHeight / canvasSize.h;
+    const imagePath = canvasPoints.map(({ x, y }) => ({
+      x: x * scaleX,
+      y: y * scaleY,
+    }));
+
+    // Extract SAM hybrid inputs: box corners (labels 2/3) + pos/neg points
+    const samPoints = lassoToSamInput(imagePath);
+    if (samPoints.length === 0) return;
+
+    const pts    = samPoints.map((p) => ({ x: p.x, y: p.y }));
+    const labels = samPoints.map((p) => p.label);
+
+    const result = await segmentMultiPoint(pts, labels);
+    if (result !== null) setCurrentMaskSet(result);
+  }, [isEncoding, isModelLoading, canvasSize, segmentMultiPoint]);
+
+  // ── Box mode: box end → SAM box-prompt input ──────────────────────────────
+  const handleBoxEnd = useCallback(async (canvasBox) => {
+    if (isEncoding || isModelLoading) return;
+    const img = imageElRef.current;
+    if (!img) return;
+
+    // Convert canvas px → image px
+    const scaleX = img.naturalWidth  / canvasSize.w;
+    const scaleY = img.naturalHeight / canvasSize.h;
+
+    // SAM box-prompt: top-left label=2, bottom-right label=3
+    const pts = [
+      { x: canvasBox.x_min * scaleX, y: canvasBox.y_min * scaleY },
+      { x: canvasBox.x_max * scaleX, y: canvasBox.y_max * scaleY },
+    ];
+    const labels = [2, 3];
+
+    const result = await segmentMultiPoint(pts, labels);
+    if (result !== null) setCurrentMaskSet(result);
+  }, [isEncoding, isModelLoading, canvasSize, segmentMultiPoint]);
 
   // ── Point mode: canvas click → image coords ───────────────────────────────
   const canvasToImageCoords = useCallback((clientX, clientY) => {
@@ -216,7 +263,7 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
   }, [zoom, canvasSize]);
 
   const handleCanvasClick = useCallback(async (e) => {
-    if (brushMode || isEncoding || isModelLoading) return;
+    if (inputMode !== 'point' || isEncoding || isModelLoading) return;
     e.preventDefault();
 
     const label  = e.button === 2 ? 0 : 1;
@@ -232,7 +279,7 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
       nextPoints.map(({ label: l }) => l),
     );
     if (result !== null) setCurrentMaskSet(result);
-  }, [brushMode, clickPoints, isEncoding, isModelLoading, canvasToImageCoords, segmentMultiPoint]);
+  }, [inputMode, clickPoints, isEncoding, isModelLoading, canvasToImageCoords, segmentMultiPoint]);
 
   const handleContextMenu = useCallback((e) => {
     e.preventDefault();
@@ -411,21 +458,37 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
           </div>
         </div>
 
-        {/* Mode toggle */}
+        {/* Mode toggle — 3 main tools + brush */}
         <div className="rcs-section">
           <h4 className="rcs-title">입력 모드</h4>
-          <div className="rcs-mode-bar">
+          <div className="rcs-mode-bar rcs-mode-bar-4">
             <button
-              className={`rcs-mode-btn ${!brushMode ? 'active' : ''}`}
-              onClick={() => handleSwitchMode(false)}
+              className={`rcs-mode-btn ${inputMode === 'lasso' ? 'active' : ''}`}
+              onClick={() => handleSwitchMode('lasso')}
+              title="자유형 올가미로 영역 선택 (기본)"
+            >
+              <span className="rcs-mode-icon">◎</span>
+              올가미
+            </button>
+            <button
+              className={`rcs-mode-btn ${inputMode === 'point' ? 'active' : ''}`}
+              onClick={() => handleSwitchMode('point')}
               title="포인트 클릭으로 영역 선택"
             >
               <span className="rcs-mode-icon">⊕</span>
               포인트
             </button>
             <button
-              className={`rcs-mode-btn ${brushMode ? 'active' : ''}`}
-              onClick={() => handleSwitchMode(true)}
+              className={`rcs-mode-btn ${inputMode === 'box' ? 'active' : ''}`}
+              onClick={() => handleSwitchMode('box')}
+              title="박스 드래그로 영역 선택"
+            >
+              <span className="rcs-mode-icon">▢</span>
+              박스
+            </button>
+            <button
+              className={`rcs-mode-btn ${inputMode === 'brush' ? 'active' : ''}`}
+              onClick={() => handleSwitchMode('brush')}
               title="브러시로 영역을 긁어서 선택"
             >
               <span className="rcs-mode-icon">✏️</span>
@@ -435,7 +498,7 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
         </div>
 
         {/* Brush size (brush mode only) */}
-        {brushMode && (
+        {inputMode === 'brush' && (
           <div className="rcs-brush-controls">
             <div className="rcs-brush-header">
               <span className="rcs-brush-label">브러시 크기</span>
@@ -456,17 +519,35 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
         {/* Usage tips */}
         <div className="rcs-section">
           <h4 className="rcs-title">사용법</h4>
-          {brushMode ? (
+          {inputMode === 'lasso' && (
+            <ul className="rcs-tips">
+              <li>원하는 영역을 대충 둘러싸세요</li>
+              <li>드래그로 자유형 경계선 그리기</li>
+              <li>SAM이 정밀 마스크를 자동 생성</li>
+              <li>휠: 줌 / 가운데 버튼: 이동</li>
+            </ul>
+          )}
+          {inputMode === 'point' && (
+            <ul className="rcs-tips">
+              <li><span className="tip-dot positive" /> 좌클릭: 선택할 영역</li>
+              <li><span className="tip-dot negative" /> 우클릭: 제외할 영역</li>
+              <li>여러 번 클릭해 영역을 정밀화</li>
+              <li>휠: 줌 / 가운데 버튼: 이동</li>
+            </ul>
+          )}
+          {inputMode === 'box' && (
+            <ul className="rcs-tips">
+              <li>드래그로 사각형 영역 그리기</li>
+              <li>문, 창문 등 사각형 객체에 최적</li>
+              <li>SAM Box Prompt로 직접 입력</li>
+              <li>휠: 줌 / 가운데 버튼: 이동</li>
+            </ul>
+          )}
+          {inputMode === 'brush' && (
             <ul className="rcs-tips">
               <li><span className="tip-brush-add">◉</span> 좌클릭 드래그: 영역 추가</li>
               <li><span className="tip-brush-remove">◉</span> 우클릭 / Alt+드래그: 영역 제외</li>
               <li>여러 번 긁으면 선택 영역이 확장됩니다</li>
-              <li>휠: 줌 / 가운데 버튼: 이동</li>
-            </ul>
-          ) : (
-            <ul className="rcs-tips">
-              <li><span className="tip-dot positive" /> 좌클릭: 선택할 영역</li>
-              <li><span className="tip-dot negative" /> 우클릭: 제외할 영역</li>
               <li>휠: 줌 / 가운데 버튼: 이동</li>
             </ul>
           )}
@@ -543,10 +624,32 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
               className="rcs-points-layer"
               style={{ width: canvasSize.w, height: canvasSize.h }}
             >
-              {!brushMode && pointMarkers}
+              {inputMode === 'point' && pointMarkers}
             </div>
 
-            {/* Layer 4: brush canvas overlay */}
+            {/* Layer 4a: lasso overlay */}
+            {canvasSize.w > 0 && (
+              <LassoSelector
+                canvasSize={canvasSize}
+                zoom={zoom}
+                lassoMode={inputMode === 'lasso'}
+                disabled={isEncoding || isModelLoading || isSegmenting}
+                onLassoEnd={handleLassoEnd}
+              />
+            )}
+
+            {/* Layer 4b: box drag overlay */}
+            {canvasSize.w > 0 && (
+              <BoxDragSelector
+                canvasSize={canvasSize}
+                zoom={zoom}
+                boxMode={inputMode === 'box'}
+                disabled={isEncoding || isModelLoading || isSegmenting}
+                onBoxEnd={handleBoxEnd}
+              />
+            )}
+
+            {/* Layer 4c: brush canvas overlay */}
             {canvasSize.w > 0 && (
               <BrushSelector
                 canvasSize={canvasSize}
@@ -568,9 +671,10 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
               tabIndex={0}
               aria-label="이미지 클릭으로 영역 선택"
               style={{
-                cursor: brushMode ? 'default'
-                  : (isEncoding || isModelLoading || isSegmenting ? 'wait' : 'crosshair'),
-                pointerEvents: brushMode ? 'none' : 'auto',
+                cursor: inputMode === 'point'
+                  ? (isEncoding || isModelLoading || isSegmenting ? 'wait' : 'crosshair')
+                  : 'default',
+                pointerEvents: inputMode === 'point' ? 'auto' : 'none',
                 position: 'absolute',
                 top: 0,
                 left: 0,
@@ -589,8 +693,9 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
                 <><span className="spinner" /> 마스크 생성 중...</>
               ) : currentMaskSet ? (
                 <>
-                  영역이 선택됐습니다. 확인하거나 클릭을 추가하세요.
-                  {brushMode && strokeCountRef.current > 0 && (
+                  영역이 선택됐습니다.
+                  {inputMode === 'point' && ' 클릭을 추가하거나 확정하세요.'}
+                  {inputMode === 'brush' && strokeCountRef.current > 0 && (
                     <span className="rcs-stroke-badge">
                       {strokeCountRef.current}회 스트로크
                     </span>
