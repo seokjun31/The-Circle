@@ -31,6 +31,7 @@ import BrushSelector    from './BrushSelector';
 import LassoSelector    from './LassoSelector';
 import BoxDragSelector  from './BoxDragSelector';
 import MaskSizeSelector from './MaskSizeSelector';
+import SegmentLabel, { SEGMENT_LABELS, labelColor, labelText } from './SegmentLabel';
 import { useSamSegmentation } from '../../hooks/useSamSegmentation';
 import { maskToBinary }        from '../../lib/sam/samUtils';
 import { cleanMask, fillHoles } from '../../lib/sam/maskPostProcess';
@@ -70,8 +71,8 @@ function tensorToBinaryProcessed(tensor, canvasW, canvasH) {
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const LABEL_OPTIONS = ['벽', '바닥', '천장', '기타'];
-const LABEL_COLORS  = { '벽': '#1e90ff', '바닥': '#22c55e', '천장': '#f59e0b', '기타': '#ec4899' };
+// Legacy sidebar quick-select (shows first 4 common labels)
+const QUICK_LABELS = ['wall', 'floor', 'ceiling', 'door'];
 
 const MIN_ZOOM  = 0.5;
 const MAX_ZOOM  = 4.0;
@@ -128,7 +129,8 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
   const [currentMaskSet,  setCurrentMaskSet]  = useState(null);
   const [selectedMaskIdx, setSelectedMaskIdx] = useState(0);
   const [previewMask,     setPreviewMask]     = useState(null); // single tensor, brush drag
-  const [pendingLabel,    setPendingLabel]    = useState('벽');
+  // pendingLabel: label id (e.g. 'wall') — user picks AFTER mask is shown
+  const [pendingLabel,    setPendingLabel]    = useState('wall');
   const [confirmedMasks,  setConfirmedMasks]  = useState([]);
 
   // Sync selectedMaskIdx to SAM's best guess whenever a new decode arrives.
@@ -324,9 +326,15 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
 
     const tensor = currentMaskSet.masks[selectedMaskIdx];
     const binary = tensorToBinaryProcessed(tensor, canvasSize.w, canvasSize.h);
-    const color  = LABEL_COLORS[pendingLabel] || '#1e90ff';
+    const color  = labelColor(pendingLabel);
+    const displayLabel = labelText(pendingLabel);
 
-    setConfirmedMasks(prev => [...prev, { binary, label: pendingLabel, color }]);
+    setConfirmedMasks(prev => [...prev, {
+      binary,
+      label:      displayLabel,  // human-readable display text
+      labelId:    pendingLabel,  // machine id (e.g. 'wall', 'floor')
+      color,
+    }]);
     setClickPoints([]);
     setCurrentMaskSet(null);
     setPreviewMask(null);
@@ -441,18 +449,18 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
       {/* ── Left panel ─────────────────────────────────────────────────── */}
       <div className="room-canvas-sidebar">
 
-        {/* Label selector */}
+        {/* Quick label selector (4 most-common) */}
         <div className="rcs-section">
           <h4 className="rcs-title">영역 레이블</h4>
           <div className="rcs-labels">
-            {LABEL_OPTIONS.map((lbl) => (
+            {SEGMENT_LABELS.filter((l) => QUICK_LABELS.includes(l.id)).map(({ id, label, color }) => (
               <button
-                key={lbl}
-                className={`rcs-label-btn ${pendingLabel === lbl ? 'active' : ''}`}
-                style={{ '--accent': LABEL_COLORS[lbl] }}
-                onClick={() => setPendingLabel(lbl)}
+                key={id}
+                className={`rcs-label-btn ${pendingLabel === id ? 'active' : ''}`}
+                style={{ '--accent': color }}
+                onClick={() => setPendingLabel(id)}
               >
-                {lbl}
+                {label}
               </button>
             ))}
           </div>
@@ -719,6 +727,17 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
               </div>
             )}
 
+            {/* Label picker — shown after mask is generated (user sees mask, then labels) */}
+            {currentMaskSet && (
+              <div className="rcs-label-row">
+                <span className="rcs-label-title">라벨 선택</span>
+                <SegmentLabel
+                  value={pendingLabel}
+                  onChange={setPendingLabel}
+                />
+              </div>
+            )}
+
             <div className="rcs-action-buttons">
               <button className="btn btn-secondary" onClick={handleCancel}>
                 취소
@@ -726,7 +745,7 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
               <button
                 className="btn btn-primary"
                 onClick={handleConfirm}
-                disabled={!currentMaskSet || isSegmenting}
+                disabled={!currentMaskSet || isSegmenting || !pendingLabel}
               >
                 이 영역 확정
               </button>

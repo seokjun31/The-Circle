@@ -237,13 +237,31 @@
 
 .rcs-action-bar {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   padding: 10px 16px;
   background: #fff;
   border-top: 1px solid #e5e7eb;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+/* Label row — appears between mask-size selector and confirm button */
+.rcs-label-row {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 0 4px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.rcs-label-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #6b7280;
 }
 
 .rcs-action-info {
