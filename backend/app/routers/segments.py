@@ -113,9 +113,10 @@ class EncodeResponse(BaseModel):
 
 
 class SaveMaskRequest(BaseModel):
-    mask_base64: str   = Field(..., description="Base64-encoded PNG mask image (binary, white=selected)")
-    label: str         = Field("벽", description="Region label: 벽 | 바닥 | 천장 | 기타")
-    layer_order: int   = Field(0, ge=0)
+    mask_base64: str         = Field(..., description="Base64-encoded PNG mask image (binary, white=selected)")
+    label: str               = Field("벽", description="Display label (e.g. 벽 | 바닥 | 천장 | 기타)")
+    label_id: Optional[str]  = Field(None, description="Machine label ID (e.g. wall | floor | ceiling | door | window | molding | custom)")
+    layer_order: int         = Field(0, ge=0)
 
 
 class SaveMaskResponse(BaseModel):
@@ -269,12 +270,20 @@ def save_mask(
         ) from exc
 
     # ── 4. Map label → LayerType ────────────────────────────────────────────
+    # Accepts both machine IDs (new system) and Korean display strings (legacy).
     label_map = {
+        # Machine IDs (SegmentLabel.js)
+        "wall":    LayerType.wall,
+        "floor":   LayerType.floor,
+        "ceiling": LayerType.ceiling,
+        # Korean display strings (backwards-compatibility)
         "벽":  LayerType.wall,
         "바닥": LayerType.floor,
         "천장": LayerType.ceiling,
     }
-    layer_type = label_map.get(body.label, LayerType.style)
+    # Prefer label_id if provided; fall back to display label.
+    label_key  = body.label_id or body.label
+    layer_type = label_map.get(label_key, LayerType.style)
 
     # ── 5. Persist EditLayer ────────────────────────────────────────────────
     layer = EditLayer(

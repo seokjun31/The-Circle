@@ -397,7 +397,7 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
       all.push({
         binary,
         label:   '',
-        color:   LABEL_COLORS[pendingLabel] || '#1e90ff',
+        color:   labelColor(pendingLabel),
         preview: true,
       });
     }
@@ -409,7 +409,7 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
       all.push({
         binary,
         label: pendingLabel,
-        color: LABEL_COLORS[pendingLabel] || '#1e90ff',
+        color: labelColor(pendingLabel),
       });
     }
 
