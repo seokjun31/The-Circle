@@ -48,6 +48,10 @@ export function useSamSegmentation() {
   const lowResMaskRef   = useRef(null);  // ort.Tensor for chained refinement
   const encodingLockRef = useRef(false); // prevent concurrent encoder runs
 
+  // Concurrency control refs
+  const requestIdRef  = useRef(0);    // monotone counter; incremented per full decode call
+  const isDecodingRef = useRef(false); // true while a full segmentMultiPoint is running
+
   const clearError = useCallback(() => setError(null), []);
 
   // ── initModel ─────────────────────────────────────────────────────────────
@@ -148,7 +152,12 @@ export function useSamSegmentation() {
       return null;
     }
 
+    // Claim this request slot — any in-flight decode with an older id is stale.
+    const myId = ++requestIdRef.current;
+    isDecodingRef.current = true;
     setIsSegmenting(true);
+    setError(null);
+
     try {
       const decoderSession = await samModel.loadDecoder();
 
@@ -162,17 +171,67 @@ export function useSamSegmentation() {
         lowResMaskRef.current,
       );
 
-      // Cache low-res mask for next click (chained refinement)
-      lowResMaskRef.current = lowResMasks;
+      // Discard if a newer request was already made while we were waiting.
+      if (myId !== requestIdRef.current) {
+        console.debug('[SAM] Stale decode discarded (id=%d, latest=%d)', myId, requestIdRef.current);
+        return null;
+      }
 
+      // Cache low-res mask for next call (chained refinement).
+      lowResMaskRef.current = lowResMasks;
       return selectBestMask(masks, iouPredictions);
     } catch (err) {
-      console.error('[SAM] segmentMultiPoint failed:', err);
-      setError('마스크 생성에 실패했습니다.');
+      if (myId === requestIdRef.current) {
+        console.error('[SAM] segmentMultiPoint failed:', err);
+        setError('마스크 생성에 실패했습니다.');
+      }
       return null;
     } finally {
-      setIsSegmenting(false);
+      // Only update UI state if we're still the latest request.
+      if (myId === requestIdRef.current) {
+        setIsSegmenting(false);
+        isDecodingRef.current = false;
+      }
     }
+  }, []);
+
+  /**
+   * Lightweight preview decode — called during brush drag (throttled).
+   *
+   * Differences from segmentMultiPoint:
+   *   - Does NOT increment requestIdRef (won't invalidate pending full decode).
+   *   - Skips entirely if a full decode is already running (isDecodingRef).
+   *   - Does NOT update lowResMaskRef (keeps chained state intact).
+   *   - No React state changes (no isSegmenting spinner).
+   *
+   * Returns the best mask tensor, or null if stale / skipped.
+   */
+  const segmentPreview = useCallback(async (points, labels) => {
+    if (!embeddingRef.current || isDecodingRef.current) return null;
+
+    const myId = requestIdRef.current; // snapshot, do NOT increment
+
+    try {
+      const decoderSession = await samModel.loadDecoder();
+
+      const { masks, iouPredictions } = await runDecoder(
+        decoderSession,
+        embeddingRef.current,
+        points,
+        labels,
+        originalSizeRef.current,
+        modelSizeRef.current,
+        lowResMaskRef.current, // read context but never write it
+      );
+
+      // A full decode (or newer preview) superseded us.
+      if (myId !== requestIdRef.current) return null;
+
+      return selectBestMask(masks, iouPredictions);
+    } catch {
+      return null; // preview failures are silent
+    }
+    // No finally: intentionally no state/ref side-effects.
   }, []);
 
   // ── resetEncoding ─────────────────────────────────────────────────────────
@@ -183,6 +242,9 @@ export function useSamSegmentation() {
     originalSizeRef.current = null;
     modelSizeRef.current    = null;
     lowResMaskRef.current   = null;
+    // Invalidate any in-flight decode so its result is discarded.
+    requestIdRef.current  = 0;
+    isDecodingRef.current = false;
   }, []);
 
   /**
@@ -201,6 +263,7 @@ export function useSamSegmentation() {
     encodeImage,
     segment,
     segmentMultiPoint,
+    segmentPreview,
     resetEncoding,
     clearPrevMask,
     clearError,

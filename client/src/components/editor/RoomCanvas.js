@@ -70,6 +70,7 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
     initModel,
     encodeImage,
     segmentMultiPoint,
+    segmentPreview,
     resetEncoding,
     clearPrevMask,
     isModelLoading,
@@ -101,6 +102,7 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
   // ── Segmentation state ────────────────────────────────────────────────────
   const [clickPoints,   setClickPoints]   = useState([]); // point mode only
   const [currentMask,   setCurrentMask]   = useState(null);
+  const [previewMask,   setPreviewMask]   = useState(null); // live brush preview
   const [pendingLabel,  setPendingLabel]  = useState('벽');
   const [confirmedMasks, setConfirmedMasks] = useState([]);
 
@@ -164,6 +166,7 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
     setBrushMode(nextBrushMode);
     setClickPoints([]);
     setCurrentMask(null);
+    setPreviewMask(null);
     clearPrevMask();
     strokeCountRef.current = 0;
   }, [clearPrevMask]);
@@ -227,6 +230,11 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
     const img = imageElRef.current;
     if (!img) return;
 
+    // Clear stale preview immediately so we don't show it while the full
+    // decode is running.  The real result will appear when it arrives.
+    setPreviewMask(null);
+    strokeCountRef.current += 1;
+
     // Convert canvas px → original image px
     const pts    = canvasPoints.map(({ x, y }) => ({
       x: (x / canvasSize.w) * img.naturalWidth,
@@ -234,11 +242,31 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
     }));
     const labels = canvasPoints.map(() => isExclude ? 0 : 1);
 
-    strokeCountRef.current += 1;
-
+    // segmentMultiPoint returns null if the result was superseded by a newer
+    // request — in that case we leave currentMask at its previous value so the
+    // UI doesn't flicker.
     const mask = await segmentMultiPoint(pts, labels);
-    setCurrentMask(mask);
+    if (mask !== null) setCurrentMask(mask);
   }, [isEncoding, isModelLoading, canvasSize, segmentMultiPoint]);
+
+  /**
+   * Throttled live-preview handler called by BrushSelector during drag.
+   * Uses segmentPreview (no requestId increment, no state updates in the hook).
+   * Preview is shown at half-opacity; replaced by the real mask on stroke end.
+   */
+  const handleBrushPreview = useCallback(async (canvasPoints, isExclude) => {
+    const img = imageElRef.current;
+    if (!img) return;
+
+    const pts    = canvasPoints.map(({ x, y }) => ({
+      x: (x / canvasSize.w) * img.naturalWidth,
+      y: (y / canvasSize.h) * img.naturalHeight,
+    }));
+    const labels = canvasPoints.map(() => isExclude ? 0 : 1);
+
+    const mask = await segmentPreview(pts, labels);
+    if (mask !== null) setPreviewMask(mask);
+  }, [canvasSize, segmentPreview]);
 
   // ── Confirm → save mask to confirmed list ────────────────────────────────
   const handleConfirm = useCallback(() => {
@@ -255,6 +283,7 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
     setConfirmedMasks(prev => [...prev, { binary, label: pendingLabel, color }]);
     setClickPoints([]);
     setCurrentMask(null);
+    setPreviewMask(null);
     clearPrevMask();
     strokeCountRef.current = 0;
   }, [currentMask, pendingLabel, canvasSize, clearPrevMask]);
@@ -263,6 +292,7 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
   const handleCancel = useCallback(() => {
     setClickPoints([]);
     setCurrentMask(null);
+    setPreviewMask(null);
     clearPrevMask();
     strokeCountRef.current = 0;
   }, [clearPrevMask]);
@@ -306,6 +336,25 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
   // ── Overlay masks ─────────────────────────────────────────────────────────
   const overlayMasks = useMemo(() => {
     const all = [...confirmedMasks];
+
+    // Live preview (during brush drag): show at half opacity, no label.
+    // Only shown when there is no confirmed current mask yet (i.e. mid-stroke).
+    if (previewMask && !currentMask) {
+      const raw    = maskToBinary(previewMask);
+      const maskW  = previewMask.dims[3];
+      const maskH  = previewMask.dims[2];
+      const binary = (maskW !== canvasSize.w || maskH !== canvasSize.h)
+        ? rescaleMask(raw, maskW, maskH, canvasSize.w, canvasSize.h)
+        : raw;
+      all.push({
+        binary,
+        label:   '',    // no label text for preview
+        color:   LABEL_COLORS[pendingLabel] || '#1e90ff',
+        preview: true,  // → SegmentOverlay renders at reduced opacity, no ants
+      });
+    }
+
+    // Pending selection (after stroke end or point click).
     if (currentMask) {
       const raw    = maskToBinary(currentMask);
       const maskW  = currentMask.dims[3];
@@ -315,8 +364,9 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
         : raw;
       all.push({ binary, label: pendingLabel, color: LABEL_COLORS[pendingLabel] || '#1e90ff' });
     }
+
     return all;
-  }, [confirmedMasks, currentMask, pendingLabel, canvasSize]);
+  }, [confirmedMasks, currentMask, previewMask, pendingLabel, canvasSize]);
 
   // ── Point markers (point mode only) ──────────────────────────────────────
   const pointMarkers = useMemo(() => clickPoints.map((pt, i) => {
@@ -516,6 +566,7 @@ function RoomCanvas({ imageSrc, onMasksChange, onEncodingChange, className = '' 
                 brushMode={brushMode}
                 disabled={isEncoding || isModelLoading || isSegmenting}
                 onStrokeEnd={handleStrokeEnd}
+                onBrushPreview={handleBrushPreview}
               />
             )}
 
