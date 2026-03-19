@@ -391,6 +391,32 @@
   font-size: 13px;
 }
 
+/* Onboarding workspace: single column, full height */
+.ep-workspace--onboarding {
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Step badge shown during onboarding */
+.ep-step-badge {
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  border: none;
+  color: #fff;
+  border-radius: 20px;
+  padding: 4px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+/* "분위기 변경" restyle button */
+.ep-mode-toggle--restyle {
+  background: #1e1e3a;
+  border-color: #4f46e5 !important;
+  color: #818cf8 !important;
+}
+.ep-mode-toggle--restyle:hover { background: #2a2a4a; }
+
 /* Advanced mode toggle button */
 .ep-mode-toggle {
   background: var(--bg-elevated);

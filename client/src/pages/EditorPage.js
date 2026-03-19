@@ -14,6 +14,7 @@ import RoomCanvas from '../components/editor/RoomCanvas';
 import ChatPanel from '../components/editor/ChatPanel';
 import CorrectionMode from '../components/editor/CorrectionMode';
 import SegmentOverlay from '../components/editor/SegmentOverlay';
+import StyleOnboarding from '../components/editor/StyleOnboarding';
 import { useSemanticSegmentation } from '../hooks/useSemanticSegmentation';
 import './EditorPage.css';
 
@@ -61,6 +62,8 @@ function EditorPage() {
   const [loadingProject, setLoadingProject]   = useState(false);
   const [advancedMode,   setAdvancedMode]     = useState(false);  // chat-first (false) vs full editor (true)
   const [imageFullscreen, setImageFullscreen] = useState(false);
+  // 'onboarding' → style selection first; 'chat' → main editor
+  const [editorStep, setEditorStep] = useState('onboarding');
 
   const { isAnalyzing, analyzeRoom } = useSemanticSegmentation();
   const imageCanvasRef = useRef(null);
@@ -157,6 +160,16 @@ function EditorPage() {
 
   const activeMeta = TOOLS.find((t) => t.id === activeTool);
 
+  // Called by StyleOnboarding when done (result or skip)
+  const handleOnboardingDone = useCallback((result) => {
+    if (result) {
+      setLastResult(result);
+      refreshLayers();
+      getCreditBalance().then((d) => setCreditBalance(d.balance)).catch(() => {});
+    }
+    setEditorStep('chat');
+  }, [setLastResult, refreshLayers, setCreditBalance]);
+
   // ── Right panel content ────────────────────────────────────────────────────
   const renderPanel = () => {
     const common = { projectId, originalImageUrl: imageUrl, creditBalance, onResult: handleResult };
@@ -203,13 +216,27 @@ function EditorPage() {
             <span>💎</span>
             <span>{creditBalance !== null ? creditBalance : '—'}</span>
           </div>
-          <button
-            className={`ep-mode-toggle ${advancedMode ? 'active' : ''}`}
-            onClick={() => setAdvancedMode((v) => !v)}
-            title={advancedMode ? '채팅 모드로 전환' : '고급 에디터 열기'}
-          >
-            {advancedMode ? '채팅 모드' : '고급 에디터'}
-          </button>
+          {editorStep === 'onboarding' && (
+            <button className="ep-step-badge">① 분위기 설정</button>
+          )}
+          {editorStep === 'chat' && (
+            <button
+              className="ep-mode-toggle ep-mode-toggle--restyle"
+              onClick={() => setEditorStep('onboarding')}
+              title="분위기 다시 설정"
+            >
+              🎨 분위기 변경
+            </button>
+          )}
+          {editorStep === 'chat' && (
+            <button
+              className={`ep-mode-toggle ${advancedMode ? 'active' : ''}`}
+              onClick={() => setAdvancedMode((v) => !v)}
+              title={advancedMode ? '채팅 모드로 전환' : '고급 에디터 열기'}
+            >
+              {advancedMode ? '채팅 모드' : '고급 에디터'}
+            </button>
+          )}
           {advancedMode && (
             <button className="ep-panel-toggle" onClick={() => setRightPanelOpen((v) => !v)} title="옵션 패널 토글">
               {rightPanelOpen ? '⊳' : '⊲'}
@@ -219,7 +246,19 @@ function EditorPage() {
       </header>
 
       {/* ── Workspace ────────────────────────────────────────────────────── */}
-      <div className={`ep-workspace ${advancedMode ? '' : 'ep-workspace--chat'}`}>
+      <div className={`ep-workspace ${editorStep === 'onboarding' ? 'ep-workspace--onboarding' : advancedMode ? '' : 'ep-workspace--chat'}`}>
+
+        {/* ── ONBOARDING STEP ──────────────────────────────────────────────── */}
+        {editorStep === 'onboarding' && (
+          <StyleOnboarding
+            projectId={projectId}
+            imageUrl={imageUrl}
+            creditBalance={creditBalance}
+            onDone={handleOnboardingDone}
+          />
+        )}
+
+        {editorStep === 'chat' && <>
 
         {/* Left sidebar — advanced mode only */}
         {advancedMode && (
@@ -360,6 +399,7 @@ function EditorPage() {
             </div>
           </aside>
         )}
+        </>}  {/* end editorStep === 'chat' */}
       </div>
 
       {/* Fullscreen image overlay */}
