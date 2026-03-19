@@ -316,8 +316,6 @@ const ChatPanel = forwardRef(function ChatPanel(
       </div>
     </div>
   );
-}
-
 });
 
 export default ChatPanel;
