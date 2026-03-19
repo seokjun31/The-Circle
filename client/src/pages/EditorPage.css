@@ -328,6 +328,151 @@
   .ep-topbar-center { display: none; }
 }
 
+/* ── Chat-first layout ────────────────────────────────────────────────────── */
+
+/* Workspace in chat mode: single column, no sidebar/panel */
+.ep-workspace--chat {
+  flex-direction: column;
+}
+
+/* Main content in chat mode */
+.ep-chat-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* Image area (top ~45%) */
+.ep-chat-image-area {
+  flex: 0 0 45%;
+  min-height: 200px;
+  max-height: 55vh;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0a0a14;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border);
+}
+
+.ep-chat-image-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ep-chat-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  cursor: zoom-in;
+  border-radius: 4px;
+  transition: opacity 0.2s;
+}
+.ep-chat-image:hover { opacity: 0.92; }
+
+/* Loading overlay on image */
+.ep-chat-image-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(10, 10, 20, 0.7);
+  color: #e2e8f0;
+  font-size: 13px;
+}
+
+/* Advanced mode toggle button */
+.ep-mode-toggle {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  border-radius: 6px;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+.ep-mode-toggle:hover { color: var(--text-primary); border-color: var(--border-hover); }
+.ep-mode-toggle.active {
+  background: var(--accent-light);
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
+/* Fullscreen image overlay */
+.ep-fullscreen-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: zoom-out;
+}
+.ep-fullscreen-img {
+  max-width: 95vw;
+  max-height: 95vh;
+  object-fit: contain;
+  border-radius: 4px;
+}
+.ep-fullscreen-close {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  background: rgba(255,255,255,0.1);
+  border: none;
+  color: #fff;
+  font-size: 20px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Mobile (chat-first optimized) ────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .ep-chat-image-area {
+    flex: 0 0 42%;
+    max-height: 42vh;
+  }
+
+  /* Stack: image 42% / chat 58% */
+  .ep-chat-main {
+    height: calc(100vh - 52px);
+  }
+}
+
+@media (max-width: 480px) {
+  .ep-chat-image-area {
+    flex: 0 0 38%;
+    max-height: 38vh;
+  }
+
+  /* Keyboard open: shrink image, keep chat usable */
+  @supports (height: 100dvh) {
+    .ep-chat-main { height: calc(100dvh - 52px); }
+  }
+
+  .ep-mode-toggle { font-size: 0.7rem; padding: 0.25rem 0.55rem; }
+}
+
 /* Keep legacy classes for old EditorPage inline styles that may reference them */
 .ep-workspace-legacy { display: flex; gap: 1rem; }
 .ep-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1.5rem; }

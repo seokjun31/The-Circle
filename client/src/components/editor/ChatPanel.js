@@ -19,8 +19,17 @@
 import React, { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { roomSegmenter } from '../../lib/segmentation/semanticSegmentation';
 import { binaryToPng } from '../../lib/sam/samUtils';
-import { analyzeChatMessage, saveMask, applyMaterial } from '../../utils/api';
+import { analyzeChatMessage, saveMask, applyMaterial, copyMood } from '../../utils/api';
 import './ChatPanel.css';
+
+const STYLE_PRESETS = [
+  { id: 'modern',        label: '모던',      msg: '모던 스타일로 변환해줘' },
+  { id: 'scandinavian',  label: '스칸디',    msg: '스칸디나비아 스타일로 변환해줘' },
+  { id: 'japanese',      label: '재팬디',    msg: '재팬디 스타일로 변환해줘' },
+  { id: 'industrial',    label: '인더스트리얼', msg: '인더스트리얼 스타일로 변환해줘' },
+  { id: 'korean_modern', label: '한국 모던', msg: '한국 모던 스타일로 변환해줘' },
+  { id: 'classic',       label: '클래식',    msg: '클래식 스타일로 변환해줘' },
+];
 
 const LABEL_KR = {
   wall: '벽', floor: '바닥', ceiling: '천장',
@@ -36,7 +45,7 @@ const ACTION_ROUTES = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ChatPanel = forwardRef(function ChatPanel(
-  { projectId, creditBalance, onShowMask, onOpenCorrection, onResult, onSwitchTool },
+  { projectId, imageUrl, creditBalance, onShowMask, onOpenCorrection, onResult, onSwitchTool },
   ref,
 ) {
   const [messages, setMessages]       = useState([
@@ -44,7 +53,9 @@ const ChatPanel = forwardRef(function ChatPanel(
   ]);
   const [input, setInput]             = useState('');
   const [loading, setLoading]         = useState(false);
-  const [pendingIntent, setPendingIntent] = useState(null); // intent awaiting confirm
+  const [pendingIntent, setPendingIntent] = useState(null);
+  const [showPresets, setShowPresets]     = useState(false);
+  const fileInputRef = useRef(null);
   const listRef = useRef(null);
   const msgId   = useRef(1);
 
@@ -125,7 +136,13 @@ const ChatPanel = forwardRef(function ChatPanel(
           customPrompt: prompt,
         });
 
-        addMsg('ai', '완료했어요!');
+        // Show result image inline in chat
+        const id = ++msgId.current;
+        setMessages((prev) => [...prev, {
+          id, role: 'ai', text: '완료했어요! 어떠세요?',
+          resultUrl: result.result_url,
+          elapsed: result.elapsed_s,
+        }]);
         onResult?.(result);
       }
     } catch (err) {
@@ -149,6 +166,38 @@ const ChatPanel = forwardRef(function ChatPanel(
     addMsg('ai', '취소했어요.');
   }, [onShowMask, addMsg]);
 
+  // ── Quick actions ────────────────────────────────────────────────────────────
+  const handlePresetSelect = useCallback((preset) => {
+    setShowPresets(false);
+    setInput(preset.msg);
+  }, []);
+
+  const handleImageAttach = useCallback(async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !projectId) return;
+    e.target.value = '';
+    addMsg('user', `📎 ${file.name} — 이 이미지처럼 분위기를 바꿔줘`);
+    setLoading(true);
+    try {
+      const reader = new FileReader();
+      const dataUrl = await new Promise((res) => {
+        reader.onload = () => res(reader.result);
+        reader.readAsDataURL(file);
+      });
+      const result = await copyMood(projectId, { referenceImage: dataUrl, strength: 0.75 });
+      const id = ++msgId.current;
+      setMessages((prev) => [...prev, {
+        id, role: 'ai', text: '분위기를 적용했어요!',
+        resultUrl: result.result_url,
+      }]);
+      onResult?.(result);
+    } catch (err) {
+      addMsg('ai', `실패: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId, addMsg, onResult]);
+
   // Expose confirmWithMask so EditorPage can call it after CorrectionMode returns
   useImperativeHandle(ref, () => ({
     confirmWithMask: (mask) => handleConfirm(mask),
@@ -160,6 +209,29 @@ const ChatPanel = forwardRef(function ChatPanel(
         {messages.map((m) => (
           <div key={m.id} className={`chat-msg chat-msg--${m.role}`}>
             <span className="chat-msg-text">{m.text}</span>
+            {m.resultUrl && (
+              <div className="chat-result-img-wrap">
+                <img className="chat-result-img" src={m.resultUrl} alt="결과" />
+                {m.elapsed && <span className="chat-elapsed">{m.elapsed.toFixed(1)}s</span>}
+                <div className="chat-result-actions">
+                  <button
+                    className="chat-btn chat-btn--cancel"
+                    onClick={async () => {
+                      try {
+                        const token = localStorage.getItem('auth_token');
+                        const res = await fetch(m.resultUrl, { credentials: 'include', headers: token ? { Authorization: `Bearer ${token}` } : {} });
+                        const blob = await res.blob();
+                        const href = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = href; a.download = 'result.jpg';
+                        document.body.appendChild(a); a.click();
+                        document.body.removeChild(a); URL.revokeObjectURL(href);
+                      } catch { window.open(m.resultUrl, '_blank'); }
+                    }}
+                  >↓ 저장</button>
+                </div>
+              </div>
+            )}
             {m.awaitConfirm && pendingIntent && (
               <div className="chat-confirm-row">
                 <button className="chat-btn chat-btn--confirm" onClick={() => handleConfirm()}>
@@ -177,12 +249,32 @@ const ChatPanel = forwardRef(function ChatPanel(
         ))}
         {loading && (
           <div className="chat-msg chat-msg--ai">
-            <span className="chat-thinking">분석 중...</span>
+            <span className="chat-thinking">처리 중...</span>
           </div>
         )}
       </div>
 
+      {/* Style preset popup */}
+      {showPresets && (
+        <div className="chat-presets">
+          {STYLE_PRESETS.map((p) => (
+            <button key={p.id} className="chat-preset-btn" onClick={() => handlePresetSelect(p)}>
+              {p.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="chat-input-row">
+        {/* Quick actions */}
+        <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleImageAttach} />
+        <button className="chat-quick-btn" onClick={() => fileInputRef.current?.click()} title="이미지 첨부 (분위기 복사)">📎</button>
+        <button
+          className={`chat-quick-btn ${showPresets ? 'active' : ''}`}
+          onClick={() => setShowPresets((v) => !v)}
+          title="스타일 프리셋"
+        >🎨</button>
+
         <input
           className="chat-input"
           value={input}

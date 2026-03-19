@@ -59,6 +59,8 @@ function EditorPage() {
   const [canvasSegments, setCanvasSegments]   = useState([]);
   const [rightPanelOpen, setRightPanelOpen]   = useState(true);
   const [loadingProject, setLoadingProject]   = useState(false);
+  const [advancedMode,   setAdvancedMode]     = useState(false);  // chat-first (false) vs full editor (true)
+  const [imageFullscreen, setImageFullscreen] = useState(false);
 
   const { isAnalyzing, analyzeRoom } = useSemanticSegmentation();
   const imageCanvasRef = useRef(null);
@@ -201,115 +203,154 @@ function EditorPage() {
             <span>💎</span>
             <span>{creditBalance !== null ? creditBalance : '—'}</span>
           </div>
-          <button className="ep-panel-toggle" onClick={() => setRightPanelOpen((v) => !v)} title="옵션 패널 토글">
-            {rightPanelOpen ? '⊳' : '⊲'}
+          <button
+            className={`ep-mode-toggle ${advancedMode ? 'active' : ''}`}
+            onClick={() => setAdvancedMode((v) => !v)}
+            title={advancedMode ? '채팅 모드로 전환' : '고급 에디터 열기'}
+          >
+            {advancedMode ? '채팅 모드' : '고급 에디터'}
           </button>
+          {advancedMode && (
+            <button className="ep-panel-toggle" onClick={() => setRightPanelOpen((v) => !v)} title="옵션 패널 토글">
+              {rightPanelOpen ? '⊳' : '⊲'}
+            </button>
+          )}
         </div>
       </header>
 
       {/* ── Workspace ────────────────────────────────────────────────────── */}
-      <div className="ep-workspace">
+      <div className={`ep-workspace ${advancedMode ? '' : 'ep-workspace--chat'}`}>
 
-        {/* Left sidebar */}
-        <aside className="ep-sidebar">
-          {TOOLS.map((t) => (
-            <button
-              key={t.id}
-              className={`ep-tool-btn ${activeTool === t.id ? 'active' : ''}`}
-              onClick={() => setActiveTool(t.id)}
-              title={`${t.label} — ${t.sub}`}
-            >
-              <span className="ep-tool-icon">{t.icon}</span>
-              <span className="ep-tool-label">{t.label}</span>
-            </button>
-          ))}
-        </aside>
+        {/* Left sidebar — advanced mode only */}
+        {advancedMode && (
+          <aside className="ep-sidebar">
+            {TOOLS.map((t) => (
+              <button
+                key={t.id}
+                className={`ep-tool-btn ${activeTool === t.id ? 'active' : ''}`}
+                onClick={() => setActiveTool(t.id)}
+                title={`${t.label} — ${t.sub}`}
+              >
+                <span className="ep-tool-icon">{t.icon}</span>
+                <span className="ep-tool-label">{t.label}</span>
+              </button>
+            ))}
+          </aside>
+        )}
 
-        {/* Canvas */}
-        <main className="ep-canvas-area">
-          {imageUrl ? (
-            <div className="ep-canvas-wrap" style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-              <div style={{ position: 'relative', flex: 1 }}>
-                <RoomCanvas
-                  imageSrc={imageUrl}
-                  projectId={projectId}
-                  onMasksChange={setCanvasSegments}
-                  onEncodingChange={handleEncodingChange}
-                />
-                {/* Chat mask preview overlay */}
-                {chatPreviewMask && (
-                  <SegmentOverlay
-                    masks={[{ ...chatPreviewMask, color: '#f59e0b' }]}
-                    width={chatPreviewMask.width}
-                    height={chatPreviewMask.height}
-                    style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none', zIndex: 10 }}
+        {/* ── CHAT-FIRST MODE ──────────────────────────────────────────────── */}
+        {!advancedMode && (
+          <main className="ep-chat-main">
+            {/* Image display (top) */}
+            <div className="ep-chat-image-area">
+              {imageUrl ? (
+                <div className="ep-chat-image-wrap">
+                  <img
+                    className="ep-chat-image"
+                    src={lastResult?.result_url || imageUrl}
+                    alt="인테리어"
+                    onClick={() => setImageFullscreen(true)}
+                    title="클릭하면 전체화면"
                   />
-                )}
-                {(isProcessing || isAnalyzing) && (
-                  <ProcessingOverlay
-                    message={isAnalyzing ? '이미지를 분석하고 있습니다...' : processingMessage}
-                    isColdStart={isColdStart}
-                  />
-                )}
-              </div>
-              {/* Chat panel below canvas */}
-              <ChatPanel
-                ref={chatPanelRef}
-                projectId={projectId}
-                creditBalance={creditBalance}
-                onShowMask={setChatPreviewMask}
-                onOpenCorrection={handleOpenCorrection}
-                onResult={handleResult}
-                onSwitchTool={setActiveTool}
-              />
-            </div>
-          ) : (
-            <div className="ep-canvas-placeholder">
-              {loadingProject ? (
-                <><span className="spinner spinner-lg" /><p>프로젝트 불러오는 중...</p></>
+                  {isAnalyzing && (
+                    <div className="ep-chat-image-overlay">
+                      <span className="spinner" />
+                      <span>이미지를 분석하고 있습니다...</span>
+                    </div>
+                  )}
+                  {isProcessing && !isAnalyzing && (
+                    <div className="ep-chat-image-overlay">
+                      <span className="spinner" />
+                      <span>{processingMessage}</span>
+                    </div>
+                  )}
+                </div>
               ) : (
-                <><span>🏠</span><p>이미지를 불러오는 중...</p></>
+                <div className="ep-canvas-placeholder">
+                  {loadingProject
+                    ? <><span className="spinner spinner-lg" /><p>프로젝트 불러오는 중...</p></>
+                    : <><span>🏠</span><p>이미지를 불러오는 중...</p></>
+                  }
+                </div>
               )}
             </div>
-          )}
 
-          {lastResult?.result_url && (
-            <div className="ep-result-strip">
-              <img src={lastResult.result_url} alt="최근 결과" />
-              <div className="ep-result-meta">
-                <span>
-                  {lastResult.style_preset
-                    ? `Circle AI — ${lastResult.style_preset}`
-                    : `레이어 #${lastResult.layer_id || '?'}`}
-                </span>
-                {lastResult.elapsed_s && <span>{lastResult.elapsed_s.toFixed(1)}s</span>}
+            {/* Chat panel (bottom) */}
+            <ChatPanel
+              ref={chatPanelRef}
+              projectId={projectId}
+              imageUrl={imageUrl}
+              creditBalance={creditBalance}
+              onShowMask={setChatPreviewMask}
+              onOpenCorrection={handleOpenCorrection}
+              onResult={handleResult}
+              onSwitchTool={(tool) => { setAdvancedMode(true); setActiveTool(tool); }}
+            />
+          </main>
+        )}
+
+        {/* ── ADVANCED MODE — original canvas + panels ────────────────────── */}
+        {advancedMode && (
+          <main className="ep-canvas-area">
+            {imageUrl ? (
+              <div className="ep-canvas-wrap" style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <RoomCanvas
+                    imageSrc={imageUrl}
+                    projectId={projectId}
+                    onMasksChange={setCanvasSegments}
+                    onEncodingChange={handleEncodingChange}
+                  />
+                  {chatPreviewMask && (
+                    <SegmentOverlay
+                      masks={[{ ...chatPreviewMask, color: '#f59e0b' }]}
+                      width={chatPreviewMask.width}
+                      height={chatPreviewMask.height}
+                      style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none', zIndex: 10 }}
+                    />
+                  )}
+                  {isProcessing && (
+                    <ProcessingOverlay message={processingMessage} isColdStart={isColdStart} />
+                  )}
+                </div>
+                {lastResult?.result_url && (
+                  <div className="ep-result-strip">
+                    <img src={lastResult.result_url} alt="최근 결과" />
+                    <div className="ep-result-meta">
+                      <span>{lastResult.style_preset ? `Circle AI — ${lastResult.style_preset}` : `레이어 #${lastResult.layer_id || '?'}`}</span>
+                      {lastResult.elapsed_s && <span>{lastResult.elapsed_s.toFixed(1)}s</span>}
+                    </div>
+                    <button
+                      className="ep-download-btn"
+                      onClick={async () => {
+                        try {
+                          const token = localStorage.getItem('auth_token');
+                          const res   = await fetch(lastResult.result_url, { credentials: 'include', headers: token ? { Authorization: `Bearer ${token}` } : {} });
+                          const blob  = await res.blob();
+                          const href  = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = href; a.download = 'result.jpg';
+                          document.body.appendChild(a); a.click();
+                          document.body.removeChild(a); URL.revokeObjectURL(href);
+                        } catch { window.open(lastResult.result_url, '_blank'); }
+                      }}
+                    >↓ 다운로드</button>
+                  </div>
+                )}
               </div>
-              <button
-                className="ep-download-btn"
-                onClick={async () => {
-                  try {
-                    const token = localStorage.getItem('auth_token');
-                    const res  = await fetch(lastResult.result_url, {
-                      credentials: 'include',
-                      headers: token ? { Authorization: `Bearer ${token}` } : {},
-                    });
-                    const blob = await res.blob();
-                    const href = URL.createObjectURL(blob);
-                    const a    = document.createElement('a');
-                    a.href = href; a.download = 'result.jpg';
-                    document.body.appendChild(a); a.click();
-                    document.body.removeChild(a); URL.revokeObjectURL(href);
-                  } catch { window.open(lastResult.result_url, '_blank'); }
-                }}
-              >
-                ↓ 다운로드
-              </button>
-            </div>
-          )}
-        </main>
+            ) : (
+              <div className="ep-canvas-placeholder">
+                {loadingProject
+                  ? <><span className="spinner spinner-lg" /><p>프로젝트 불러오는 중...</p></>
+                  : <><span>🏠</span><p>이미지를 불러오는 중...</p></>
+                }
+              </div>
+            )}
+          </main>
+        )}
 
-        {/* Right panel */}
-        {rightPanelOpen && (
+        {/* Right panel — advanced mode only */}
+        {advancedMode && rightPanelOpen && (
           <aside className="ep-options-panel">
             <div className="ep-options-header">
               {activeMeta && <><span>{activeMeta.icon} {activeMeta.label}</span><span className="ep-options-sub">{activeMeta.sub}</span></>}
@@ -320,6 +361,14 @@ function EditorPage() {
           </aside>
         )}
       </div>
+
+      {/* Fullscreen image overlay */}
+      {imageFullscreen && (
+        <div className="ep-fullscreen-overlay" onClick={() => setImageFullscreen(false)}>
+          <img src={lastResult?.result_url || imageUrl} alt="전체화면" className="ep-fullscreen-img" />
+          <button className="ep-fullscreen-close">✕</button>
+        </div>
+      )}
 
       {/* Correction Mode modal */}
       {correctionIntent && (

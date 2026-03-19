@@ -15,25 +15,26 @@
  */
 
 import { useCallback, useState } from 'react';
+import { modelManager } from '../lib/ai/ModelManager';
 import { roomSegmenter } from '../lib/segmentation/semanticSegmentation';
 
 export function useSemanticSegmentation() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [segments,    setSegments]    = useState(null);  // Map or null
+  const [segments,    setSegments]    = useState(null);
   const [error,       setError]       = useState(null);
 
   /**
-   * Run SegFormer analysis and cache results.
+   * Run SegFormer via ModelManager (15s timeout + graceful fallback).
    * @param {string} imageUrl
-   * @param {HTMLCanvasElement|null} imageCanvas  Optional — passed for edge refinement
+   * @param {HTMLCanvasElement|null} imageCanvas  Optional — for edge refinement
    */
   const analyzeRoom = useCallback(async (imageUrl, imageCanvas = null) => {
     if (!imageUrl) return null;
     setIsAnalyzing(true);
     setError(null);
-    roomSegmenter.clear();
     try {
-      const result = await roomSegmenter.analyzeRoom(imageUrl, imageCanvas);
+      await modelManager.onImageUpload(imageUrl, imageCanvas);
+      const result = roomSegmenter.getAllSegments();
       setSegments(result);
       return result;
     } catch (err) {
