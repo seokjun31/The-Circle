@@ -15,6 +15,7 @@ import ChatPanel from '../components/editor/ChatPanel';
 import CorrectionMode from '../components/editor/CorrectionMode';
 import SegmentOverlay from '../components/editor/SegmentOverlay';
 import StyleOnboarding from '../components/editor/StyleOnboarding';
+import EditorHub from '../components/editor/EditorHub';
 import { useSemanticSegmentation } from '../hooks/useSemanticSegmentation';
 import './EditorPage.css';
 
@@ -277,55 +278,32 @@ function EditorPage() {
           </aside>
         )}
 
-        {/* ── CHAT-FIRST MODE ──────────────────────────────────────────────── */}
+        {/* ── HUB MODE (default after onboarding) ──────────────────────────── */}
         {!advancedMode && (
-          <main className="ep-chat-main">
-            {/* Image display (top) */}
-            <div className="ep-chat-image-area">
-              {imageUrl ? (
-                <div className="ep-chat-image-wrap">
-                  <img
-                    className="ep-chat-image"
-                    src={lastResult?.result_url || imageUrl}
-                    alt="인테리어"
-                    onClick={() => setImageFullscreen(true)}
-                    title="클릭하면 전체화면"
-                  />
-                  {isAnalyzing && (
-                    <div className="ep-chat-image-overlay">
-                      <span className="spinner" />
-                      <span>이미지를 분석하고 있습니다...</span>
-                    </div>
-                  )}
-                  {isProcessing && !isAnalyzing && (
-                    <div className="ep-chat-image-overlay">
-                      <span className="spinner" />
-                      <span>{processingMessage}</span>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="ep-canvas-placeholder">
-                  {loadingProject
-                    ? <><span className="spinner spinner-lg" /><p>프로젝트 불러오는 중...</p></>
-                    : <><span>🏠</span><p>이미지를 불러오는 중...</p></>
-                  }
-                </div>
-              )}
-            </div>
-
-            {/* Chat panel (bottom) */}
-            <ChatPanel
-              ref={chatPanelRef}
-              projectId={projectId}
-              imageUrl={imageUrl}
-              creditBalance={creditBalance}
-              onShowMask={setChatPreviewMask}
-              onOpenCorrection={handleOpenCorrection}
-              onResult={handleResult}
-              onSwitchTool={(tool) => { setAdvancedMode(true); setActiveTool(tool); }}
-            />
-          </main>
+          <EditorHub
+            projectId={projectId}
+            imageUrl={imageUrl}
+            resultUrl={lastResult?.result_url || null}
+            creditBalance={creditBalance}
+            isProcessing={isProcessing || isAnalyzing}
+            processingMsg={processingMessage || (isAnalyzing ? '이미지 분석 중...' : '')}
+            onSwitchService={(serviceId) => {
+              if (serviceId === 'skip') return;          // "변경 안할래요" — stay in hub
+              setAdvancedMode(true);
+              setActiveTool(serviceId);
+            }}
+            onFinalRender={() => { setAdvancedMode(true); setActiveTool('final_render'); }}
+            onMiniChatSend={(text) => {
+              // proxy to ChatPanel if available, otherwise open advanced chat
+              if (chatPanelRef.current?.sendMessage) {
+                chatPanelRef.current.sendMessage(text);
+              } else {
+                setAdvancedMode(true);
+                setActiveTool('circle_ai');
+              }
+            }}
+            chatMessages={[]}
+          />
         )}
 
         {/* ── ADVANCED MODE — original canvas + panels ────────────────────── */}

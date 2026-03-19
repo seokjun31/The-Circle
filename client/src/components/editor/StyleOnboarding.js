@@ -1,22 +1,16 @@
 /**
- * StyleOnboarding — "분위기 먼저 설정" step shown before the chat editor.
+ * StyleOnboarding — "분위기 먼저 설정" step
  *
- * Step A (select):
- *   - Original room image (top)
- *   - Style preset cards (from API, horizontal scroll)
- *   - OR: drag-and-drop reference image upload
- *   - Strength slider
- *   - "변환하기" + "건너뛰기" buttons
+ * SELECT step:
+ *   3-column hero: [원본 이미지] → [참조 이미지 업로드] → [AI 변환 예시 animated]
+ *   + Style preset cards (horizontal scroll)
+ *   + Strength slider
+ *   + "건너뛰기" / "변환하기" buttons
  *
- * Step B (result):
- *   - Before / After compare slider
- *   - "다시 선택" + "이렇게 할게요 →" buttons
- *
- * Props:
- *   projectId       {number}
- *   imageUrl        {string}   original room image
- *   creditBalance   {number}
- *   onDone          {Function} (result | null) → enter chat editor
+ * RESULT step:
+ *   Compact Before/After slider (max 360px)
+ *   3 free retries counter (UI only, decrements per retry)
+ *   "← 다시 해볼게요" / "이렇게 할게요 →"
  */
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
@@ -25,19 +19,26 @@ import toast from 'react-hot-toast';
 import { getStylePresets, applyCircleAI, copyMood } from '../../utils/api';
 import './StyleOnboarding.css';
 
-const CREDITS_COST = 5;
+const CREDITS_COST  = 5;
+const MAX_RETRIES   = 3;
 
-// Fallback gradient thumbnails (used when preset has no referenceImageUrl)
 const STYLE_GRAD = {
-  modern:        'linear-gradient(135deg,#e8e8e8,#b0b0b0)',
-  scandinavian:  'linear-gradient(135deg,#f5f0e8,#c8b89a)',
-  classic:       'linear-gradient(135deg,#f0e6d2,#8b6914)',
-  industrial:    'linear-gradient(135deg,#4a4a4a,#8b7355)',
-  korean_modern: 'linear-gradient(135deg,#f5e6c8,#d4956a)',
-  japanese:      'linear-gradient(135deg,#e8f0e8,#7a9e7e)',
-  coastal:       'linear-gradient(135deg,#d0e8f5,#4a90c4)',
-  art_deco:      'linear-gradient(135deg,#1a1a2e,#c9a227)',
+  modern:        'linear-gradient(135deg,#e8e8e8 0%,#b0b0b0 100%)',
+  scandinavian:  'linear-gradient(135deg,#f5f0e8 0%,#c8b89a 100%)',
+  classic:       'linear-gradient(135deg,#f0e6d2 0%,#8b6914 100%)',
+  industrial:    'linear-gradient(135deg,#4a4a4a 0%,#8b7355 100%)',
+  korean_modern: 'linear-gradient(135deg,#f5e6c8 0%,#d4956a 100%)',
+  japanese:      'linear-gradient(135deg,#e8f0e8 0%,#7a9e7e 100%)',
+  coastal:       'linear-gradient(135deg,#d0e8f5 0%,#4a90c4 100%)',
+  art_deco:      'linear-gradient(135deg,#1a1a2e 0%,#c9a227 100%)',
 };
+
+const PREVIEW_HINTS = [
+  '"재팬디 스타일로 바꿔줘"',
+  '"따뜻한 분위기로 변환해줘"',
+  '"모던하고 깔끔하게"',
+  '"스칸디나비안 느낌으로"',
+];
 
 function fileToDataURL(file) {
   return new Promise((res, rej) => {
@@ -48,17 +49,50 @@ function fileToDataURL(file) {
   });
 }
 
+/** Animated right preview column shown before transform */
+function AiPreviewColumn({ selectedPreset, refPreview }) {
+  const src = refPreview || selectedPreset?.referenceImageUrl || null;
+  return (
+    <div className="so-col so-col--right">
+      <div className="so-preview-magic">
+        {src ? (
+          <img className="so-preview-img" src={src} alt="참조 스타일" />
+        ) : (
+          <div className="so-preview-anim">
+            <div className="so-anim-orb so-anim-orb--1" />
+            <div className="so-anim-orb so-anim-orb--2" />
+            <div className="so-anim-orb so-anim-orb--3" />
+            <div className="so-anim-particles">
+              {[...Array(8)].map((_, i) => (
+                <div key={i} className={`so-particle so-particle--${i + 1}`} />
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="so-preview-overlay">
+          <span className="so-preview-icon">✨</span>
+          <p className="so-preview-text">멋진 공간이<br />완성됩니다</p>
+        </div>
+      </div>
+      <span className="so-col-label">AI 변환 결과</span>
+    </div>
+  );
+}
+
 export default function StyleOnboarding({ projectId, imageUrl, creditBalance, onDone }) {
-  const [step,          setStep]          = useState('select');   // 'select' | 'result'
-  const [presets,       setPresets]       = useState([]);
-  const [selected,      setSelected]      = useState(null);      // preset object | null
-  const [refDataUrl,    setRefDataUrl]    = useState(null);      // uploaded reference
-  const [refPreview,    setRefPreview]    = useState(null);
-  const [isDragging,    setIsDragging]    = useState(false);
-  const [strength,      setStrength]      = useState(0.65);
-  const [loading,       setLoading]       = useState(false);
-  const [resultUrl,     setResultUrl]     = useState(null);
-  const fileRef = useRef(null);
+  const [step,         setStep]         = useState('select');
+  const [presets,      setPresets]      = useState([]);
+  const [selected,     setSelected]     = useState(null);
+  const [refDataUrl,   setRefDataUrl]   = useState(null);
+  const [refPreview,   setRefPreview]   = useState(null);
+  const [isDragging,   setIsDragging]   = useState(false);
+  const [strength,     setStrength]     = useState(0.65);
+  const [loading,      setLoading]      = useState(false);
+  const [resultUrl,    setResultUrl]    = useState(null);
+  const [retriesLeft,  setRetriesLeft]  = useState(MAX_RETRIES);
+  // Params for retry (so we re-apply with same settings)
+  const lastParams = useRef(null);
+  const fileRef    = useRef(null);
 
   useEffect(() => {
     getStylePresets()
@@ -66,13 +100,12 @@ export default function StyleOnboarding({ projectId, imageUrl, creditBalance, on
       .catch(() => {});
   }, []);
 
-  // ── Reference image handling ────────────────────────────────────────────────
   const handleFile = useCallback(async (file) => {
     if (!file?.type.startsWith('image/')) { toast.error('이미지만 가능합니다.'); return; }
     const url = await fileToDataURL(file);
     setRefPreview(url);
     setRefDataUrl(url);
-    setSelected(null);   // deselect preset when reference image is chosen
+    setSelected(null);
   }, []);
 
   const handleDrop = useCallback((e) => {
@@ -80,18 +113,15 @@ export default function StyleOnboarding({ projectId, imageUrl, creditBalance, on
     handleFile(e.dataTransfer.files[0]);
   }, [handleFile]);
 
-  // ── Apply ───────────────────────────────────────────────────────────────────
-  const handleApply = useCallback(async () => {
-    if (!selected && !refDataUrl) { toast.error('스타일 또는 참조 이미지를 선택해주세요.'); return; }
-    if ((creditBalance ?? 0) < CREDITS_COST) { toast.error(`크레딧이 부족합니다. (잔액: ${creditBalance ?? 0}, 필요: ${CREDITS_COST})`); return; }
-
+  // ── Core apply (shared by first apply + retries) ────────────────────────────
+  const runTransform = useCallback(async (params) => {
     setLoading(true);
     try {
       let result;
-      if (refDataUrl) {
-        result = await copyMood(projectId, { referenceImage: refDataUrl, strength });
+      if (params.refDataUrl) {
+        result = await copyMood(projectId, { referenceImage: params.refDataUrl, strength: params.strength });
       } else {
-        result = await applyCircleAI(projectId, { stylePreset: selected.id, strength });
+        result = await applyCircleAI(projectId, { stylePreset: params.presetId, strength: params.strength });
       }
       setResultUrl(result.result_url);
       setStep('result');
@@ -100,15 +130,37 @@ export default function StyleOnboarding({ projectId, imageUrl, creditBalance, on
     } finally {
       setLoading(false);
     }
-  }, [projectId, selected, refDataUrl, strength, creditBalance]);
+  }, [projectId]);
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  const handleApply = useCallback(async () => {
+    if (!selected && !refDataUrl) { toast.error('스타일 또는 참조 이미지를 선택해주세요.'); return; }
+    if ((creditBalance ?? 0) < CREDITS_COST) { toast.error(`크레딧 부족 (잔액: ${creditBalance ?? 0})`); return; }
+    const params = { refDataUrl, presetId: selected?.id, strength };
+    lastParams.current = params;
+    setRetriesLeft(MAX_RETRIES);
+    await runTransform(params);
+  }, [selected, refDataUrl, strength, creditBalance, runTransform]);
 
+  const handleRetry = useCallback(async () => {
+    if (retriesLeft <= 0) return;
+    setRetriesLeft((n) => n - 1);
+    await runTransform(lastParams.current);
+  }, [retriesLeft, runTransform]);
+
+  // ── RESULT step ─────────────────────────────────────────────────────────────
   if (step === 'result') {
     return (
-      <div className="so-root">
+      <div className="so-root so-root--result">
         <div className="so-result-header">
-          <p className="so-result-title">변환이 완료됐어요! 어떠세요?</p>
+          <div className="so-result-title-row">
+            <h2 className="so-result-title">변환 완료!</h2>
+            <div className="so-retry-dots" title={`재시도 ${retriesLeft}회 남음`}>
+              {[...Array(MAX_RETRIES)].map((_, i) => (
+                <span key={i} className={`so-retry-dot ${i < retriesLeft ? 'active' : ''}`} />
+              ))}
+              <span className="so-retry-label">재시도 {retriesLeft}회 남음</span>
+            </div>
+          </div>
           <p className="so-result-sub">슬라이더를 드래그해서 비교해보세요</p>
         </div>
 
@@ -116,8 +168,12 @@ export default function StyleOnboarding({ projectId, imageUrl, creditBalance, on
           <ReactCompareSlider
             itemOne={<ReactCompareSliderImage src={imageUrl} alt="원본" />}
             itemTwo={<ReactCompareSliderImage src={resultUrl} alt="변환" />}
-            style={{ width: '100%', height: '100%', borderRadius: '12px', overflow: 'hidden' }}
+            style={{ width: '100%', height: '100%', borderRadius: '14px', overflow: 'hidden' }}
           />
+          <div className="so-compare-labels">
+            <span className="so-compare-tag">원본</span>
+            <span className="so-compare-tag so-compare-tag--right">AI 변환</span>
+          </div>
         </div>
 
         <div className="so-result-actions">
@@ -125,7 +181,16 @@ export default function StyleOnboarding({ projectId, imageUrl, creditBalance, on
             className="so-btn so-btn--ghost"
             onClick={() => { setResultUrl(null); setStep('select'); }}
           >
-            ← 다시 선택
+            ← 처음부터 다시
+          </button>
+          <button
+            className="so-btn so-btn--outline"
+            onClick={handleRetry}
+            disabled={loading || retriesLeft <= 0}
+          >
+            {loading ? <><span className="spinner so-spinner" /> 재변환 중...</>
+              : retriesLeft > 0 ? `🔄 다시 해볼게요 (${retriesLeft}회)` : '재시도 횟수 소진'
+            }
           </button>
           <button
             className="so-btn so-btn--primary"
@@ -138,22 +203,77 @@ export default function StyleOnboarding({ projectId, imageUrl, creditBalance, on
     );
   }
 
-  // ── Step: select ─────────────────────────────────────────────────────────────
+  // ── SELECT step ─────────────────────────────────────────────────────────────
   return (
     <div className="so-root">
+      {/* ── 3-column hero ─────────────────────────────────────────────────── */}
+      <div className="so-hero">
+        {/* Col 1: original room */}
+        <div className="so-col so-col--left">
+          <div className="so-orig-frame">
+            {imageUrl
+              ? <img className="so-orig-img" src={imageUrl} alt="원본 방" />
+              : <div className="so-orig-skeleton"><span className="spinner" /></div>
+            }
+            <div className="so-col-badge so-col-badge--orig">원본</div>
+          </div>
+          <span className="so-col-label">현재 내 방</span>
+        </div>
 
-      {/* Original image preview */}
-      <div className="so-orig-wrap">
-        {imageUrl
-          ? <img className="so-orig-img" src={imageUrl} alt="원본 방" />
-          : <div className="so-orig-placeholder"><span className="spinner" /></div>
-        }
+        {/* Arrow 1 */}
+        <div className="so-hero-arrow">
+          <div className="so-arrow-line" />
+          <span className="so-arrow-tip">▶</span>
+          <span className="so-arrow-hint">스타일 선택</span>
+        </div>
+
+        {/* Col 2: reference image upload */}
+        <div className="so-col so-col--mid">
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={(e) => handleFile(e.target.files[0])}
+          />
+          {refPreview ? (
+            <div className="so-ref-frame">
+              <img className="so-ref-img" src={refPreview} alt="참조 이미지" />
+              <div className="so-col-badge so-col-badge--ref">참조</div>
+              <button className="so-ref-remove" onClick={() => { setRefDataUrl(null); setRefPreview(null); }}>✕</button>
+            </div>
+          ) : (
+            <div
+              className={`so-dropzone-frame ${isDragging ? 'dragging' : ''}`}
+              onClick={() => fileRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={handleDrop}
+            >
+              <span className="so-drop-icon">📎</span>
+              <p className="so-drop-text">참조 이미지 업로드</p>
+              <p className="so-drop-sub">이런 느낌으로 바꿔주세요</p>
+            </div>
+          )}
+          <span className="so-col-label">참조 이미지</span>
+        </div>
+
+        {/* Arrow 2 */}
+        <div className="so-hero-arrow">
+          <div className="so-arrow-line" />
+          <span className="so-arrow-tip">▶</span>
+          <span className="so-arrow-hint">AI 변환</span>
+        </div>
+
+        {/* Col 3: AI result preview */}
+        <AiPreviewColumn selectedPreset={selected} refPreview={refPreview} />
       </div>
 
+      {/* ── Body: presets + controls ──────────────────────────────────────── */}
       <div className="so-body">
-        {/* ── Style preset cards ──────────────────────────────────────────── */}
+        {/* Preset cards */}
         <section className="so-section">
-          <h3 className="so-section-title">스타일 선택</h3>
+          <h3 className="so-section-title">스타일 선택 <span className="so-section-sub">(하나를 선택하거나 위에 이미지를 직접 올려주세요)</span></h3>
           <div className="so-preset-row">
             {presets.map((p) => (
               <button
@@ -167,86 +287,42 @@ export default function StyleOnboarding({ projectId, imageUrl, creditBalance, on
                   <div className="so-preset-thumb" style={{ background: STYLE_GRAD[p.id] || '#2a2a4a' }} />
                 )}
                 <span className="so-preset-label">{p.label}</span>
+                {selected?.id === p.id && !refDataUrl && <span className="so-preset-check">✓</span>}
               </button>
             ))}
           </div>
         </section>
 
-        {/* ── Reference image upload ──────────────────────────────────────── */}
-        <section className="so-section">
-          <h3 className="so-section-title">또는 참조 이미지 업로드</h3>
-          <p className="so-section-sub">"이런 느낌으로 바꿔주세요" — 원하는 인테리어 사진을 올려주세요</p>
-
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            style={{ display: 'none' }}
-            onChange={(e) => handleFile(e.target.files[0])}
-          />
-
-          {refPreview ? (
-            <div className="so-ref-preview-wrap">
-              <img className="so-ref-preview" src={refPreview} alt="참조 이미지" />
-              <button
-                className="so-ref-remove"
-                onClick={() => { setRefDataUrl(null); setRefPreview(null); }}
-              >✕ 제거</button>
-            </div>
-          ) : (
-            <div
-              className={`so-dropzone ${isDragging ? 'dragging' : ''}`}
-              onClick={() => fileRef.current?.click()}
-              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-              onDragLeave={() => setIsDragging(false)}
-              onDrop={handleDrop}
-            >
-              <span className="so-drop-icon">📎</span>
-              <span>이미지를 드래그하거나 클릭해서 업로드</span>
-            </div>
-          )}
-        </section>
-
-        {/* ── Strength slider ─────────────────────────────────────────────── */}
-        <section className="so-section so-strength-section">
-          <h3 className="so-section-title">
+        {/* Strength */}
+        <section className="so-section so-strength-row">
+          <label className="so-section-title">
             변환 강도
             <span className="so-strength-val">{Math.round(strength * 100)}%</span>
-          </h3>
+          </label>
           <input
-            type="range"
-            className="so-slider"
+            type="range" className="so-slider"
             min="0.3" max="0.85" step="0.05"
             value={strength}
             onChange={(e) => setStrength(parseFloat(e.target.value))}
           />
-          <div className="so-slider-labels">
-            <span>원본 유지</span>
-            <span>강한 변환</span>
-          </div>
+          <div className="so-slider-labels"><span>원본 유지</span><span>강한 변환</span></div>
         </section>
 
-        {/* ── CTA ─────────────────────────────────────────────────────────── */}
+        {/* CTA */}
         <div className="so-cta">
-          <button className="so-btn so-btn--ghost" onClick={() => onDone(null)}>
-            건너뛰기
-          </button>
+          <button className="so-btn so-btn--ghost" onClick={() => onDone(null)}>건너뛰기</button>
           <button
             className="so-btn so-btn--primary"
             onClick={handleApply}
             disabled={loading || (!selected && !refDataUrl)}
           >
             {loading
-              ? <><span className="spinner so-spinner" /> 변환 중...</>
-              : `변환하기 (${CREDITS_COST} 크레딧)`
+              ? <><span className="spinner so-spinner" /> AI 변환 중...</>
+              : `✨ 변환하기 (${CREDITS_COST} 크레딧)`
             }
           </button>
         </div>
-
-        {/* Credit hint */}
-        <p className="so-credit-hint">
-          💎 잔여 크레딧: <strong>{creditBalance ?? '—'}</strong>
-        </p>
+        <p className="so-credit-hint">💎 잔여 크레딧: <strong>{creditBalance ?? '—'}</strong></p>
       </div>
     </div>
   );
