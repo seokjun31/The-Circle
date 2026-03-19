@@ -1,3 +1,8 @@
+/* Tailwind CSS directives — must come first */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* ===== Reset & Base ===== */
 *, *::before, *::after {
   box-sizing: border-box;
