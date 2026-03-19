@@ -15,11 +15,9 @@ import ChatPanel from '../components/editor/ChatPanel';
 import CorrectionMode from '../components/editor/CorrectionMode';
 import SegmentOverlay from '../components/editor/SegmentOverlay';
 import StyleOnboarding from '../components/editor/StyleOnboarding';
-import EditorHub from '../components/editor/EditorHub';
 import { useSemanticSegmentation } from '../hooks/useSemanticSegmentation';
 import './EditorPage.css';
 
-// ── Sidebar tool definitions ──────────────────────────────────────────────────
 const TOOLS = [
   { id: 'circle_ai',    icon: 'auto_awesome', label: 'Circle.ai',  sub: '스타일 변환'   },
   { id: 'material',     icon: 'texture',      label: '자재',        sub: '영역 텍스처'   },
@@ -29,7 +27,13 @@ const TOOLS = [
   { id: 'layers',       icon: 'layers',       label: '레이어',      sub: '히스토리'      },
 ];
 
-// ─────────────────────────────────────────────────────────────────────────────
+const SIDE_NAV = [
+  { id: 'layout',    icon: 'grid_view',      label: 'Layout'    },
+  { id: 'material',  icon: 'texture',        label: 'Materials' },
+  { id: 'mood_copy', icon: 'wb_incandescent',label: 'Lighting'  },
+  { id: 'furniture', icon: 'chair',          label: 'Furniture' },
+  { id: 'chat',      icon: 'auto_awesome',   label: 'AI Chat'   },
+];
 
 function EditorPage() {
   const navigate = useNavigate();
@@ -59,19 +63,16 @@ function EditorPage() {
 
   const [selectedLayerId, setSelectedLayerId] = useState(null);
   const [canvasSegments, setCanvasSegments]   = useState([]);
-  const [rightPanelOpen, setRightPanelOpen]   = useState(true);
   const [loadingProject, setLoadingProject]   = useState(false);
-  const [advancedMode,   setAdvancedMode]     = useState(false);  // chat-first (false) vs full editor (true)
-  const [imageFullscreen, setImageFullscreen] = useState(false);
-  // 'onboarding' → style selection first; 'chat' → main editor
-  const [editorStep, setEditorStep] = useState('onboarding');
+  const [advancedMode,   setAdvancedMode]     = useState(false);
+  const [editorStep,     setEditorStep]       = useState('onboarding');
+  const [chatInput,      setChatInput]        = useState('');
 
   const { isAnalyzing, analyzeRoom } = useSemanticSegmentation();
   const imageCanvasRef = useRef(null);
 
-  // ── Chat state ─────────────────────────────────────────────────────────────
-  const [chatPreviewMask,  setChatPreviewMask]  = useState(null);  // { binary, width, height }
-  const [correctionIntent, setCorrectionIntent] = useState(null);  // intent from ChatPanel
+  const [chatPreviewMask,  setChatPreviewMask]  = useState(null);
+  const [correctionIntent, setCorrectionIntent] = useState(null);
   const chatPanelRef = useRef(null);
 
   const handleOpenCorrection = useCallback((intent) => {
@@ -80,40 +81,33 @@ function EditorPage() {
 
   const handleCorrectionComplete = useCallback((mask) => {
     setCorrectionIntent(null);
-    // Pass corrected mask back to ChatPanel to execute
     if (chatPanelRef.current?.confirmWithMask) {
       chatPanelRef.current.confirmWithMask(mask);
     }
   }, []);
 
   const projectId = pid ? parseInt(pid, 10) : project?.id;
-  // imageUrl: use store if already set, otherwise wait for fetch
   const imageUrl  = project?.original_image_url || null;
+  const displayUrl = lastResult?.result_url || imageUrl;
 
   const handleEncodingChange = useCallback(
     ({ isEncoding }) => {
-      // Don't override the semantic segmentation message if it's running
       if (isEncoding) setProcessing(true, 'SAM 이미지 분석 중...');
       else if (!isAnalyzing) setProcessing(false);
     },
     [setProcessing, isAnalyzing]
   );
 
-  // ── Bootstrap: fetch project if not in store ───────────────────────────────
   useEffect(() => {
     if (!projectId) {
       toast.error('프로젝트를 먼저 생성해주세요.');
       navigate('/dashboard');
       return;
     }
-
-    // Already loaded in store for this project
     if (project?.id === projectId) {
       getCreditBalance().then((d) => setCreditBalance(d.balance)).catch(() => {});
       return;
     }
-
-    // Fetch from server
     setLoadingProject(true);
     getProject(projectId)
       .then((proj) => {
@@ -127,9 +121,6 @@ function EditorPage() {
       .finally(() => setLoadingProject(false));
   }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Background: Semantic Segmentation (SegFormer ADE20K) ──────────────────
-  // Runs once per imageUrl, invisible to the user.
-  // Results are cached in roomSegmenter singleton for the chat system.
   useEffect(() => {
     if (!imageUrl) return;
     analyzeRoom(imageUrl, imageCanvasRef.current);
@@ -144,7 +135,6 @@ function EditorPage() {
 
   useEffect(() => { refreshLayers(); }, [refreshLayers]);
 
-  // ── AI result handler ──────────────────────────────────────────────────────
   const handleResult = useCallback((result) => {
     setLastResult(result);
     if (result.remaining_balance !== undefined) setCreditBalance(result.remaining_balance);
@@ -159,9 +149,6 @@ function EditorPage() {
     refreshLayers();
   }, [setLastResult, setCreditBalance, refreshLayers]);
 
-  const activeMeta = TOOLS.find((t) => t.id === activeTool);
-
-  // Called by StyleOnboarding when done (result or skip)
   const handleOnboardingDone = useCallback((result) => {
     if (result) {
       setLastResult(result);
@@ -171,8 +158,18 @@ function EditorPage() {
     setEditorStep('chat');
   }, [setLastResult, refreshLayers, setCreditBalance]);
 
-  // ── Right panel content ────────────────────────────────────────────────────
-  const renderPanel = () => {
+  const handleChatSend = useCallback(() => {
+    const text = chatInput.trim();
+    if (!text) return;
+    setChatInput('');
+    if (chatPanelRef.current?.sendMessage) {
+      chatPanelRef.current.sendMessage(text);
+    }
+  }, [chatInput]);
+
+  const activeMeta = TOOLS.find((t) => t.id === activeTool);
+
+  const renderAdvancedPanel = () => {
     const common = { projectId, originalImageUrl: imageUrl, creditBalance, onResult: handleResult };
     switch (activeTool) {
       case 'circle_ai':    return <StyleTransform  {...common} />;
@@ -194,132 +191,108 @@ function EditorPage() {
   };
 
   return (
-    <div className="ep-root">
+    <div className="h-screen flex flex-col overflow-hidden bg-background text-on-surface font-body selection:bg-primary/30">
 
-      {/* ── Top bar ──────────────────────────────────────────────────────── */}
-      <header className="ep-topbar">
-        <div className="ep-topbar-left">
-          <button className="ep-back-btn" onClick={() => navigate('/dashboard')} title="대시보드로">
+      {/* ── TopNavBar ─────────────────────────────────────────────────────── */}
+      <header className="fixed top-0 w-full z-50 bg-[#0e0e0f]/80 backdrop-blur-xl flex justify-between items-center px-8 h-20 shadow-[0_24px_48px_rgba(0,0,0,0.4)]">
+        <div className="flex items-center gap-6">
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="text-on-surface-variant hover:text-white transition-transform active:scale-95"
+          >
             <span className="material-symbols-outlined">arrow_back</span>
           </button>
-          <div className="ep-title-group">
-            <span className="ep-project-name">{project?.title || 'AI 인테리어 에디터'}</span>
-            {activeMeta && (
-              <span className="ep-tool-name">Circle.ai — {activeMeta.label}</span>
-            )}
+          <div className="flex flex-col">
+            <h1 className="font-headline text-lg font-bold tracking-tight text-white leading-tight">
+              {project?.title || 'AI 인테리어 에디터'}
+            </h1>
+            <p className="font-label text-xs tracking-widest text-primary uppercase">
+              Circle.ai — {advancedMode ? 'Advanced Editor' : 'Style Transfer'}
+            </p>
           </div>
         </div>
-        <div className="ep-topbar-center">
-          <button className="ep-hist-btn" onClick={undo} disabled={!canUndo()} title="실행 취소">
-            <span className="material-symbols-outlined" style={{ fontSize: '1.1rem' }}>undo</span>
-          </button>
-          <button className="ep-hist-btn" onClick={redo} disabled={!canRedo()} title="다시 실행">
-            <span className="material-symbols-outlined" style={{ fontSize: '1.1rem' }}>redo</span>
-          </button>
-        </div>
-        <div className="ep-topbar-right">
-          {creditBalance !== null && creditBalance < 5 && (
-            <span className="ep-low-credit-warn">크레딧 부족</span>
+
+        <div className="flex items-center gap-4">
+          {editorStep === 'chat' && (
+            <div className="flex bg-surface-container rounded-full p-1">
+              <button
+                className={`px-4 py-1.5 text-sm font-medium rounded-full transition-colors ${
+                  !advancedMode
+                    ? 'text-primary border-b-2 border-[#7c3aed]'
+                    : 'text-on-surface-variant hover:text-white'
+                }`}
+                onClick={() => setAdvancedMode(false)}
+              >
+                Style Transfer
+              </button>
+              <button
+                className={`px-4 py-1.5 text-sm font-medium rounded-full transition-colors ${
+                  advancedMode
+                    ? 'text-primary border-b-2 border-[#7c3aed]'
+                    : 'text-on-surface-variant hover:text-white'
+                }`}
+                onClick={() => setAdvancedMode(true)}
+              >
+                Advanced Editor
+              </button>
+            </div>
           )}
-          <div className="ep-credit-chip">
-            <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>generating_tokens</span>
-            <span>{creditBalance !== null ? creditBalance : '—'}</span>
+          <div className="flex items-center gap-2 bg-surface-container-high px-4 py-2 rounded-full border border-outline-variant/20">
+            <span
+              className="material-symbols-outlined text-primary text-sm"
+              style={{ fontVariationSettings: "'FILL' 1" }}
+            >
+              generating_tokens
+            </span>
+            <span className="font-headline font-bold text-sm tracking-tight text-white">
+              {creditBalance !== null ? creditBalance : '—'}
+            </span>
           </div>
-          {editorStep === 'onboarding' && (
-            <button className="ep-panel-toggle">① 분위기 설정</button>
-          )}
-          {editorStep === 'chat' && (
-            <button
-              className="ep-panel-toggle"
-              onClick={() => setEditorStep('onboarding')}
-              title="분위기 다시 설정"
-            >
-              분위기 변경
-            </button>
-          )}
-          {editorStep === 'chat' && (
-            <button
-              className={`ep-panel-toggle ${advancedMode ? 'active' : ''}`}
-              onClick={() => setAdvancedMode((v) => !v)}
-              title={advancedMode ? '채팅 모드로 전환' : '고급 에디터 열기'}
-            >
-              {advancedMode ? '채팅 모드' : '고급 에디터'}
-            </button>
-          )}
-          {advancedMode && (
-            <button className="ep-panel-toggle" onClick={() => setRightPanelOpen((v) => !v)} title="옵션 패널 토글">
-              {rightPanelOpen ? '⊳' : '⊲'}
-            </button>
-          )}
         </div>
       </header>
 
-      {/* ── Workspace ────────────────────────────────────────────────────── */}
-      <div className={`ep-workspace ${editorStep === 'onboarding' ? 'ep-workspace--onboarding' : advancedMode ? '' : 'ep-workspace--chat'}`}>
+      {/* ── Main Content ──────────────────────────────────────────────────── */}
+      <main className="pt-20 h-screen flex overflow-hidden">
 
-        {/* ── ONBOARDING STEP ──────────────────────────────────────────────── */}
-        {editorStep === 'onboarding' && (
-          <StyleOnboarding
-            projectId={projectId}
-            imageUrl={imageUrl}
-            creditBalance={creditBalance}
-            onDone={handleOnboardingDone}
-          />
-        )}
+        {/* Left Tool Area (Narrow) */}
+        <aside className="w-16 flex-shrink-0 flex flex-col items-center py-8 gap-8 bg-surface-container-low border-r border-outline-variant/10 z-10">
+          <div className="relative group cursor-pointer" onClick={() => { setEditorStep('onboarding'); }}>
+            <div className="absolute -inset-2 bg-primary/20 rounded-full blur opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            <span
+              className="material-symbols-outlined text-primary relative"
+              style={{ fontVariationSettings: "'FILL' 1" }}
+            >
+              auto_awesome
+            </span>
+          </div>
+          <span
+            className="material-symbols-outlined text-on-surface-variant hover:text-white cursor-pointer transition-colors"
+            onClick={() => { setAdvancedMode(true); setActiveTool('layers'); setEditorStep('chat'); }}
+          >
+            layers
+          </span>
+          <span
+            className="material-symbols-outlined text-on-surface-variant hover:text-white cursor-pointer transition-colors"
+            onClick={() => { setAdvancedMode(true); setActiveTool('material'); setEditorStep('chat'); }}
+          >
+            palette
+          </span>
+          <span
+            className="material-symbols-outlined text-on-surface-variant hover:text-white cursor-pointer transition-colors"
+            onClick={() => { setAdvancedMode(true); setActiveTool('final_render'); setEditorStep('chat'); }}
+          >
+            crop_free
+          </span>
+        </aside>
 
-        {editorStep === 'chat' && <>
+        {/* Center Viewport */}
+        <section className="flex-1 flex flex-col relative bg-surface-container-lowest p-6 min-w-0">
 
-        {/* Left sidebar — advanced mode only */}
-        {advancedMode && (
-          <aside className="ep-sidebar">
-            {TOOLS.map((t) => (
-              <button
-                key={t.id}
-                className={`ep-tool-btn ${activeTool === t.id ? 'active' : ''}`}
-                onClick={() => setActiveTool(t.id)}
-                title={`${t.label} — ${t.sub}`}
-              >
-                <span className="material-symbols-outlined ep-tool-icon">{t.icon}</span>
-                <span className="ep-tool-label">{t.label}</span>
-              </button>
-            ))}
-          </aside>
-        )}
-
-        {/* ── HUB MODE (default after onboarding) ──────────────────────────── */}
-        {!advancedMode && (
-          <EditorHub
-            projectId={projectId}
-            imageUrl={imageUrl}
-            resultUrl={lastResult?.result_url || null}
-            creditBalance={creditBalance}
-            isProcessing={isProcessing || isAnalyzing}
-            processingMsg={processingMessage || (isAnalyzing ? '이미지 분석 중...' : '')}
-            onSwitchService={(serviceId) => {
-              if (serviceId === 'skip') return;          // "변경 안할래요" — stay in hub
-              setAdvancedMode(true);
-              setActiveTool(serviceId);
-            }}
-            onFinalRender={() => { setAdvancedMode(true); setActiveTool('final_render'); }}
-            onMiniChatSend={(text) => {
-              // proxy to ChatPanel if available, otherwise open advanced chat
-              if (chatPanelRef.current?.sendMessage) {
-                chatPanelRef.current.sendMessage(text);
-              } else {
-                setAdvancedMode(true);
-                setActiveTool('circle_ai');
-              }
-            }}
-            chatMessages={[]}
-          />
-        )}
-
-        {/* ── ADVANCED MODE — original canvas + panels ────────────────────── */}
-        {advancedMode && (
-          <main className="ep-canvas-area">
-            {imageUrl ? (
-              <div className="ep-canvas-wrap" style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-                <div style={{ position: 'relative', flex: 1 }}>
+          {/* Advanced Editor mode */}
+          {editorStep === 'chat' && advancedMode && (
+            <div className="flex flex-col flex-1 overflow-hidden">
+              {imageUrl ? (
+                <div className="relative flex-1">
                   <RoomCanvas
                     imageSrc={imageUrl}
                     projectId={projectId}
@@ -338,61 +311,391 @@ function EditorPage() {
                     <ProcessingOverlay message={processingMessage} isColdStart={isColdStart} />
                   )}
                 </div>
-                {lastResult?.result_url && (
-                  <div className="ep-result-strip">
-                    <img src={lastResult.result_url} alt="최근 결과" />
-                    <div className="ep-result-meta">
-                      <span>{lastResult.style_preset ? `Circle AI — ${lastResult.style_preset}` : `레이어 #${lastResult.layer_id || '?'}`}</span>
-                      {lastResult.elapsed_s && <span>{lastResult.elapsed_s.toFixed(1)}s</span>}
-                    </div>
-                    <button
-                      className="ep-download-btn"
-                      onClick={async () => {
-                        try {
-                          const token = localStorage.getItem('auth_token');
-                          const res   = await fetch(lastResult.result_url, { credentials: 'include', headers: token ? { Authorization: `Bearer ${token}` } : {} });
-                          const blob  = await res.blob();
-                          const href  = URL.createObjectURL(blob);
-                          const a = document.createElement('a');
-                          a.href = href; a.download = 'result.jpg';
-                          document.body.appendChild(a); a.click();
-                          document.body.removeChild(a); URL.revokeObjectURL(href);
-                        } catch { window.open(lastResult.result_url, '_blank'); }
-                      }}
-                    >↓ 다운로드</button>
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center gap-4 text-on-surface-variant">
+                  {loadingProject
+                    ? <><span className="spinner spinner-lg" /><p>프로젝트 불러오는 중...</p></>
+                    : <p>이미지를 불러오는 중...</p>
+                  }
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Style Transfer / Chat mode */}
+          {editorStep === 'chat' && !advancedMode && (
+            <>
+              <div className="relative w-full flex-1 rounded-xl overflow-hidden shadow-2xl bg-surface-container border border-outline-variant/20 group">
+                {displayUrl ? (
+                  <img
+                    className="w-full h-full object-cover"
+                    src={displayUrl}
+                    alt="Interior design"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-on-surface-variant">
+                    {loadingProject ? '불러오는 중...' : '이미지를 불러오는 중...'}
                   </div>
                 )}
-              </div>
-            ) : (
-              <div className="ep-canvas-placeholder">
-                {loadingProject
-                  ? <><span className="spinner spinner-lg" /><p>프로젝트 불러오는 중...</p></>
-                  : <><span>🏠</span><p>이미지를 불러오는 중...</p></>
-                }
-              </div>
-            )}
-          </main>
-        )}
 
-        {/* Right panel — advanced mode only */}
-        {advancedMode && rightPanelOpen && (
-          <aside className="ep-options-panel">
-            <div className="ep-options-header">
-              {activeMeta && <><span>{activeMeta.icon} {activeMeta.label}</span><span className="ep-options-sub">{activeMeta.sub}</span></>}
-            </div>
-            <div className="ep-options-body">
-              {renderPanel()}
-            </div>
-          </aside>
-        )}
-        </>}  {/* end editorStep === 'chat' */}
-      </div>
+                {/* AI Transformed badge */}
+                {lastResult?.result_url && (
+                  <div className="absolute top-6 left-6 flex items-center gap-2 glass-effect px-4 py-2 rounded-full border border-primary/30 violet-glow">
+                    <span
+                      className="material-symbols-outlined text-primary text-sm"
+                      style={{ fontVariationSettings: "'FILL' 1" }}
+                    >
+                      colors_spark
+                    </span>
+                    <span className="text-xs font-headline font-bold tracking-tight text-white uppercase">
+                      AI Transformed
+                    </span>
+                  </div>
+                )}
 
-      {/* Fullscreen image overlay */}
-      {imageFullscreen && (
-        <div className="ep-fullscreen-overlay" onClick={() => setImageFullscreen(false)}>
-          <img src={lastResult?.result_url || imageUrl} alt="전체화면" className="ep-fullscreen-img" />
-          <button className="ep-fullscreen-close">✕</button>
+                {/* View Layers button */}
+                <button
+                  className="absolute bottom-6 right-6 glass-effect px-4 py-2 rounded-lg text-sm font-medium text-white hover:bg-white/10 transition-all flex items-center gap-2"
+                  onClick={() => { setAdvancedMode(true); setActiveTool('layers'); }}
+                >
+                  <span className="material-symbols-outlined text-sm">filter_none</span>
+                  View Layers
+                </button>
+
+                {/* Comparison slider (shown when there is a result) */}
+                {lastResult?.result_url && imageUrl && (
+                  <div className="absolute inset-y-0 left-1/2 w-0.5 bg-primary/50 flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center shadow-lg cursor-ew-resize active:scale-90 transition-transform">
+                      <span className="material-symbols-outlined text-on-primary text-sm">unfold_more</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Processing overlay */}
+                {(isProcessing || isAnalyzing) && (
+                  <ProcessingOverlay
+                    message={processingMessage || (isAnalyzing ? '이미지 분석 중...' : '')}
+                    isColdStart={isColdStart}
+                  />
+                )}
+              </div>
+
+              {/* Bottom Chat Area */}
+              <div className="mt-6 flex flex-col gap-4 max-w-3xl mx-auto w-full flex-shrink-0">
+                <div className="flex flex-col items-center gap-1 text-center">
+                  <p className="text-sm font-medium text-white">Edit your interior with chat!</p>
+                  <button
+                    className="text-xs text-on-surface-variant hover:text-primary transition-colors italic"
+                    onClick={() => setChatInput('Change the left wall to black')}
+                  >
+                    "Change the left wall to black"
+                  </button>
+                </div>
+                <div className="relative group">
+                  <input
+                    className="w-full bg-surface-container-high border border-outline-variant/50 focus:border-primary focus:outline-none text-on-surface px-6 py-4 pr-36 rounded-xl transition-all"
+                    placeholder="Type a request to refine your design..."
+                    type="text"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleChatSend();
+                    }}
+                  />
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-3">
+                    <div className="flex items-center gap-1.5 px-3 py-1 bg-surface-container-highest rounded-full border border-outline-variant/10">
+                      <span
+                        className="material-symbols-outlined text-[14px] text-primary"
+                        style={{ fontVariationSettings: "'FILL' 1" }}
+                      >
+                        generating_tokens
+                      </span>
+                      <span className="text-[10px] font-bold text-white uppercase tracking-tighter">
+                        {creditBalance !== null ? creditBalance : '—'}
+                      </span>
+                    </div>
+                    <button
+                      className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-primary-dim flex items-center justify-center text-on-primary-fixed shadow-lg hover:shadow-primary/20 transition-all active:scale-90"
+                      onClick={handleChatSend}
+                    >
+                      <span className="material-symbols-outlined font-bold">arrow_upward</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Placeholder when on onboarding step */}
+          {editorStep === 'onboarding' && (
+            <div className="flex-1 flex items-center justify-center text-on-surface-variant text-sm">
+              분위기 설정 중...
+            </div>
+          )}
+        </section>
+
+        {/* Right Sidebar */}
+        <aside className="w-[400px] flex-shrink-0 bg-surface-container-low border-l border-outline-variant/10 p-6 flex flex-col gap-8 overflow-y-auto">
+
+          {/* Advanced mode: show tool panel */}
+          {editorStep === 'chat' && advancedMode && (
+            <div className="flex flex-col flex-1 gap-4 overflow-y-auto">
+              <div className="flex flex-col gap-1">
+                {activeMeta && (
+                  <>
+                    <h3 className="font-headline text-base font-bold text-white">{activeMeta.label}</h3>
+                    <p className="text-xs text-on-surface-variant">{activeMeta.sub}</p>
+                  </>
+                )}
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                {renderAdvancedPanel()}
+              </div>
+            </div>
+          )}
+
+          {/* Style Transfer mode: show guide + actions + export */}
+          {editorStep === 'chat' && !advancedMode && (
+            <>
+              {/* Usage Guide */}
+              <div>
+                <h3 className="font-label text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-4">
+                  Usage Guide
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div
+                    className="bg-surface-container p-4 rounded-xl border border-outline-variant/5 hover:border-primary/30 transition-all cursor-pointer group"
+                    onClick={() => setEditorStep('onboarding')}
+                  >
+                    <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-2">Try saying:</p>
+                    <p className="text-sm text-white font-medium group-hover:text-primary transition-colors">Change mood</p>
+                  </div>
+                  <div
+                    className="bg-surface-container p-4 rounded-xl border border-outline-variant/5 hover:border-primary/30 transition-all cursor-pointer group"
+                    onClick={() => { setAdvancedMode(true); setActiveTool('material'); }}
+                  >
+                    <p className="text-[10px] font-bold text-on-surface-variant uppercase mb-2">Refine:</p>
+                    <p className="text-sm text-white font-medium group-hover:text-primary transition-colors">Apply material</p>
+                  </div>
+                  <div
+                    className="bg-surface-container p-4 rounded-xl border border-outline-variant/5 hover:border-primary/30 transition-all cursor-pointer group col-span-2"
+                    onClick={() => { setAdvancedMode(true); setActiveTool('material'); }}
+                  >
+                    <p className="text-sm text-white font-medium group-hover:text-primary transition-colors">Select specific area to edit</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* More Actions */}
+              <div className="flex flex-col gap-3">
+                <h3 className="font-label text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">
+                  More actions
+                </h3>
+                <button
+                  className="flex items-center justify-between p-4 bg-surface-container-high rounded-xl border border-outline-variant/10 hover:bg-surface-bright transition-all text-left"
+                  onClick={() => setEditorStep('onboarding')}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="material-symbols-outlined text-primary">circle</span>
+                    <span className="text-sm font-medium text-white">Circle.ai</span>
+                  </div>
+                  <span className="material-symbols-outlined text-on-surface-variant text-sm">chevron_right</span>
+                </button>
+                <button
+                  className="flex items-center justify-between p-4 bg-surface-container-high rounded-xl border border-outline-variant/10 hover:bg-surface-bright transition-all text-left"
+                  onClick={() => { setAdvancedMode(true); setActiveTool('material'); }}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="material-symbols-outlined text-on-surface-variant">texture</span>
+                    <span className="text-sm font-medium text-white">Material Change</span>
+                  </div>
+                  <span className="material-symbols-outlined text-on-surface-variant text-sm">chevron_right</span>
+                </button>
+                <button
+                  className="flex items-center justify-between p-4 bg-surface-container-high rounded-xl border border-outline-variant/10 hover:bg-surface-bright transition-all text-left"
+                  onClick={() => { setAdvancedMode(true); setActiveTool('furniture'); }}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="material-symbols-outlined text-on-surface-variant">chair</span>
+                    <span className="text-sm font-medium text-white">Furniture Change</span>
+                  </div>
+                  <span className="material-symbols-outlined text-on-surface-variant text-sm">chevron_right</span>
+                </button>
+                <button
+                  className="flex items-center justify-between p-4 bg-surface-container-high rounded-xl border border-outline-variant/10 hover:bg-surface-bright transition-all text-left"
+                  onClick={() => { setAdvancedMode(true); setActiveTool('mood_copy'); }}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="material-symbols-outlined text-on-surface-variant">wb_incandescent</span>
+                    <span className="text-sm font-medium text-white">Lighting Change</span>
+                  </div>
+                  <span className="material-symbols-outlined text-on-surface-variant text-sm">chevron_right</span>
+                </button>
+              </div>
+
+              {/* Export Card */}
+              <div className="mt-auto pt-6">
+                <button
+                  className="w-full relative group overflow-hidden rounded-2xl p-6 transition-all active:scale-[0.98]"
+                  onClick={() => { setAdvancedMode(true); setActiveTool('final_render'); }}
+                >
+                  <div className="absolute inset-0 bg-gradient-to-br from-[#7c3aed] to-[#bd9dff] group-hover:opacity-90 transition-opacity"></div>
+                  <div className="absolute -right-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500"></div>
+                  <div className="relative flex flex-col items-start gap-1">
+                    <div className="flex items-center justify-between w-full mb-2">
+                      <span
+                        className="material-symbols-outlined text-white"
+                        style={{ fontVariationSettings: "'FILL' 1" }}
+                      >
+                        download
+                      </span>
+                      <span className="bg-black/20 text-[10px] text-white font-bold py-1 px-2 rounded-full uppercase">Pro</span>
+                    </div>
+                    <p className="text-lg font-headline font-bold text-white tracking-tight">Export High Quality Image</p>
+                    <p className="text-xs text-white/80 font-medium">SDXL Refiner + Upscale 4K</p>
+                  </div>
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* Onboarding step: show guide */}
+          {editorStep === 'onboarding' && (
+            <div className="flex flex-col items-center justify-center flex-1 text-on-surface-variant text-sm gap-2">
+              <span className="material-symbols-outlined text-primary text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>
+              <p>스타일을 선택해주세요</p>
+            </div>
+          )}
+        </aside>
+      </main>
+
+      {/* Desktop SideNavBar */}
+      <nav className="hidden md:flex fixed left-0 top-20 h-[calc(100vh-80px)] w-64 bg-[#0e0e0f] flex-col py-6 border-r border-outline-variant/10 z-40">
+        <div className="px-6 mb-8">
+          <h2 className="font-headline text-lg font-bold text-white">Design Tools</h2>
+          <div className="flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+            <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant">
+              AI Assistant Active
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-col gap-1">
+          {SIDE_NAV.map((item) => {
+            const isActive = item.id !== 'chat' && activeTool === item.id && advancedMode && editorStep === 'chat';
+            return (
+              <a
+                key={item.id}
+                href="#"
+                className={`px-6 py-4 flex items-center gap-4 hover:bg-white/5 transition-all ${
+                  isActive
+                    ? 'bg-[#7c3aed]/20 text-[#bd9dff] border-r-4 border-[#7c3aed]'
+                    : 'text-[#adaaab]'
+                }`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (item.id === 'chat') {
+                    setAdvancedMode(false);
+                    setEditorStep('chat');
+                  } else {
+                    setAdvancedMode(true);
+                    setActiveTool(item.id);
+                    setEditorStep('chat');
+                  }
+                }}
+              >
+                <span className="material-symbols-outlined">{item.icon}</span>
+                <span className="font-body text-sm uppercase tracking-[0.1em]">{item.label}</span>
+              </a>
+            );
+          })}
+        </div>
+        <div className="mt-auto px-6 flex flex-col gap-4">
+          <button
+            className="w-full bg-gradient-to-r from-primary to-primary-dim text-on-primary-fixed font-headline font-bold py-3 rounded-xl shadow-lg shadow-primary/10 hover:shadow-primary/20 transition-all"
+            onClick={() => { setAdvancedMode(true); setActiveTool('final_render'); setEditorStep('chat'); }}
+          >
+            Export Render
+          </button>
+          <div className="flex justify-between pt-4 border-t border-outline-variant/10">
+            <button className="text-on-surface-variant hover:text-white flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider">
+              <span className="material-symbols-outlined text-sm">help</span> Help
+            </button>
+            <button
+              className="text-on-surface-variant hover:text-white flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider"
+              onClick={() => { setAdvancedMode(true); setActiveTool('layers'); setEditorStep('chat'); }}
+            >
+              <span className="material-symbols-outlined text-sm">history</span> History
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      {/* Mobile BottomNavBar */}
+      <nav className="md:hidden fixed bottom-0 left-0 w-full flex justify-around items-center h-20 bg-[#0e0e0f]/90 backdrop-blur-2xl z-50 rounded-t-3xl border-t border-white/10 shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
+        <a
+          href="#"
+          className="flex flex-col items-center justify-center text-[#adaaab] px-6 py-2 hover:text-white transition-all"
+          onClick={(e) => { e.preventDefault(); navigate('/dashboard'); }}
+        >
+          <span className="material-symbols-outlined">home</span>
+          <span className="font-body text-[10px] font-bold uppercase tracking-widest">Home</span>
+        </a>
+        <a
+          href="#"
+          className={`flex flex-col items-center justify-center px-6 py-2 transition-all ${
+            !advancedMode && editorStep === 'chat'
+              ? 'text-[#bd9dff] bg-[#7c3aed]/20 rounded-xl scale-110'
+              : 'text-[#adaaab] hover:text-white'
+          }`}
+          onClick={(e) => { e.preventDefault(); setAdvancedMode(false); setEditorStep('chat'); }}
+        >
+          <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>edit_note</span>
+          <span className="font-body text-[10px] font-bold uppercase tracking-widest">Editor</span>
+        </a>
+        <a
+          href="#"
+          className="flex flex-col items-center justify-center text-[#adaaab] px-6 py-2 hover:text-white transition-all"
+          onClick={(e) => { e.preventDefault(); setEditorStep('onboarding'); }}
+        >
+          <span className="material-symbols-outlined">compare</span>
+          <span className="font-body text-[10px] font-bold uppercase tracking-widest">Compare</span>
+        </a>
+        <a
+          href="#"
+          className="flex flex-col items-center justify-center text-[#adaaab] px-6 py-2 hover:text-white transition-all"
+          onClick={(e) => { e.preventDefault(); navigate('/dashboard'); }}
+        >
+          <span className="material-symbols-outlined">person</span>
+          <span className="font-body text-[10px] font-bold uppercase tracking-widest">Profile</span>
+        </a>
+      </nav>
+
+      {/* Hidden ChatPanel for logic — renders off-screen */}
+      {editorStep === 'chat' && (
+        <div style={{ position: 'absolute', left: '-9999px', top: 0, width: 1, height: 1, overflow: 'hidden' }}>
+          <ChatPanel
+            ref={chatPanelRef}
+            projectId={projectId}
+            imageUrl={imageUrl}
+            creditBalance={creditBalance}
+            onShowMask={setChatPreviewMask}
+            onOpenCorrection={handleOpenCorrection}
+            onResult={handleResult}
+            onSwitchTool={(toolId) => { setAdvancedMode(true); setActiveTool(toolId); }}
+          />
+        </div>
+      )}
+
+      {/* StyleOnboarding overlay */}
+      {editorStep === 'onboarding' && (
+        <div className="fixed inset-0 z-30 pt-20">
+          <StyleOnboarding
+            projectId={projectId}
+            imageUrl={imageUrl}
+            creditBalance={creditBalance}
+            onDone={handleOnboardingDone}
+          />
         </div>
       )}
 

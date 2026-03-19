@@ -211,10 +211,41 @@ const ChatPanel = forwardRef(function ChatPanel(
     }
   }, [addMsg]);
 
-  // Expose confirmWithMask so EditorPage can call it after CorrectionMode returns
+  // Expose confirmWithMask and sendMessage so EditorPage can call them
   useImperativeHandle(ref, () => ({
     confirmWithMask: (mask) => handleConfirm(mask),
-  }), [handleConfirm]);
+    sendMessage: (text) => {
+      if (!text || loading) return;
+      setInput(text);
+      // Defer so input state update propagates before handleSend reads it
+      setTimeout(() => {
+        setInput('');
+        const trimmed = text.trim();
+        addMsg('user', trimmed);
+        setLoading(true);
+        analyzeChatMessage(trimmed)
+          .then((intent) => {
+            if (intent.action === 'unknown') {
+              addMsg('ai', intent.confirmMessage);
+              return;
+            }
+            if (ACTION_ROUTES[intent.action]) {
+              const { msg, panel } = ACTION_ROUTES[intent.action];
+              addMsg('ai', msg);
+              onSwitchTool?.(panel);
+              return;
+            }
+            const seg = intent.target ? roomSegmenter.getSegment(intent.target) : null;
+            const maskData = seg ? { ...seg, label: intent.target } : null;
+            onShowMask(maskData);
+            setPendingIntent({ ...intent, maskData });
+            addMsg('ai', intent.confirmMessage, { awaitConfirm: true, intentId: msgId.current });
+          })
+          .catch((err) => addMsg('ai', `오류가 발생했어요: ${err.message}`))
+          .finally(() => setLoading(false));
+      }, 0);
+    },
+  }), [handleConfirm, loading, addMsg, onShowMask, onSwitchTool]);
 
   return (
     <div className="chat-panel">
