@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__stitch__list_projects",
+      "Bash(dir /B \"D:\\\\A_project\\\\The-Circle\")",
+      "Bash(Get-ChildItem \"D:\\\\A_project\\\\The-Circle\")",
+      "Bash(Select-Object Name)",
+      "Bash(cmd /c \"dir /s /b D:\\\\A_project\\\\The-Circle\\\\client\\\\src\\\\*.tsx 2>&1\")",
+      "Bash(powershell -Command \"Get-ChildItem -Recurse -Path ''D:\\\\A_project\\\\The-Circle\\\\client\\\\src'' -Filter ''*.tsx'' | Select-Object FullName\")",
+      "Bash(powershell.exe -Command \"Get-ChildItem -Recurse -Path ''D:\\\\A_project\\\\The-Circle\\\\client\\\\src'' -Filter ''*.tsx'' | Select-Object FullName\")",
+      "Bash(npm install:*)",
+      "Bash(cmd.exe /c \"cd /d D:\\\\A_project\\\\The-Circle\\\\client && npm install -D tailwindcss@3 postcss@8 autoprefixer@10 2>&1\")",
+      "Bash(npm --version)"
+    ]
+  }
+}

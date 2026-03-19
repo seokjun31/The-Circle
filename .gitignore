@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.env.local
+.env.production
+.env
+node_modules/
+backend/uploads/
+client/public/models/
+*.onnx
+*.wasm
