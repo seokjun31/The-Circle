@@ -21,12 +21,12 @@ import './EditorPage.css';
 
 // ── Sidebar tool definitions ──────────────────────────────────────────────────
 const TOOLS = [
-  { id: 'circle_ai',    icon: '🎨', label: 'Circle.ai',  sub: '스타일 변환'   },
-  { id: 'material',     icon: '🧱', label: '자재',        sub: '영역 텍스처'   },
-  { id: 'mood_copy',    icon: '🖼️', label: '분위기',      sub: '레퍼런스 복사' },
-  { id: 'furniture',    icon: '🪑', label: '가구',        sub: 'AI 합성'       },
-  { id: 'final_render', icon: '✨', label: '렌더링',      sub: '고품질 출력'   },
-  { id: 'layers',       icon: '📋', label: '레이어',      sub: '히스토리'      },
+  { id: 'circle_ai',    icon: 'auto_awesome', label: 'Circle.ai',  sub: '스타일 변환'   },
+  { id: 'material',     icon: 'texture',      label: '자재',        sub: '영역 텍스처'   },
+  { id: 'mood_copy',    icon: 'photo_library',label: '분위기',      sub: '레퍼런스 복사' },
+  { id: 'furniture',    icon: 'chair',        label: '가구',        sub: 'AI 합성'       },
+  { id: 'final_render', icon: 'download',     label: '렌더링',      sub: '고품질 출력'   },
+  { id: 'layers',       icon: 'layers',       label: '레이어',      sub: '히스토리'      },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -199,39 +199,47 @@ function EditorPage() {
       {/* ── Top bar ──────────────────────────────────────────────────────── */}
       <header className="ep-topbar">
         <div className="ep-topbar-left">
-          <button className="ep-back-btn" onClick={() => navigate('/dashboard')} title="대시보드로">←</button>
+          <button className="ep-back-btn" onClick={() => navigate('/dashboard')} title="대시보드로">
+            <span className="material-symbols-outlined">arrow_back</span>
+          </button>
           <div className="ep-title-group">
             <span className="ep-project-name">{project?.title || 'AI 인테리어 에디터'}</span>
-            {activeMeta && <span className="ep-tool-name">{activeMeta.icon} {activeMeta.label} — {activeMeta.sub}</span>}
+            {activeMeta && (
+              <span className="ep-tool-name">Circle.ai — {activeMeta.label}</span>
+            )}
           </div>
         </div>
         <div className="ep-topbar-center">
-          <button className="ep-hist-btn" onClick={undo} disabled={!canUndo()} title="실행 취소">↩</button>
-          <button className="ep-hist-btn" onClick={redo} disabled={!canRedo()} title="다시 실행">↪</button>
+          <button className="ep-hist-btn" onClick={undo} disabled={!canUndo()} title="실행 취소">
+            <span className="material-symbols-outlined" style={{ fontSize: '1.1rem' }}>undo</span>
+          </button>
+          <button className="ep-hist-btn" onClick={redo} disabled={!canRedo()} title="다시 실행">
+            <span className="material-symbols-outlined" style={{ fontSize: '1.1rem' }}>redo</span>
+          </button>
         </div>
         <div className="ep-topbar-right">
           {creditBalance !== null && creditBalance < 5 && (
             <span className="ep-low-credit-warn">크레딧 부족</span>
           )}
           <div className="ep-credit-chip">
-            <span>💎</span>
+            <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>generating_tokens</span>
             <span>{creditBalance !== null ? creditBalance : '—'}</span>
           </div>
           {editorStep === 'onboarding' && (
-            <button className="ep-step-badge">① 분위기 설정</button>
+            <button className="ep-panel-toggle">① 분위기 설정</button>
           )}
           {editorStep === 'chat' && (
             <button
-              className="ep-mode-toggle ep-mode-toggle--restyle"
+              className="ep-panel-toggle"
               onClick={() => setEditorStep('onboarding')}
               title="분위기 다시 설정"
             >
-              🎨 분위기 변경
+              분위기 변경
             </button>
           )}
           {editorStep === 'chat' && (
             <button
-              className={`ep-mode-toggle ${advancedMode ? 'active' : ''}`}
+              className={`ep-panel-toggle ${advancedMode ? 'active' : ''}`}
               onClick={() => setAdvancedMode((v) => !v)}
               title={advancedMode ? '채팅 모드로 전환' : '고급 에디터 열기'}
             >
@@ -271,7 +279,7 @@ function EditorPage() {
                 onClick={() => setActiveTool(t.id)}
                 title={`${t.label} — ${t.sub}`}
               >
-                <span className="ep-tool-icon">{t.icon}</span>
+                <span className="material-symbols-outlined ep-tool-icon">{t.icon}</span>
                 <span className="ep-tool-label">{t.label}</span>
               </button>
             ))}

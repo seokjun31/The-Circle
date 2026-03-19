@@ -37,13 +37,16 @@ function Header() {
     navigate('/');
   }
 
+  const isCreditsActive = location.pathname.includes('credits');
+  const isDashboardActive = location.pathname.startsWith('/dashboard') && !isCreditsActive;
+
   return (
     <header className="header">
       <div className="header-inner">
         {/* ── Logo ───────────────────────────────────────────────────────── */}
         <Link to="/" className="logo">
-          <span className="logo-icon">✦</span>
-          <span>AI 인테리어 렌더링</span>
+          <span className="material-symbols-outlined logo-icon" style={{ fontVariationSettings: "'FILL' 1" }}>circle</span>
+          <span className="logo-text">The Circle</span>
         </Link>
 
         {/* ── Step progress nav (legacy flow only) ──────────────────────── */}
@@ -67,17 +70,35 @@ function Header() {
           </nav>
         )}
 
-        {/* ── Right side: credit badge + auth ───────────────────────────── */}
+        {/* ── Right side: nav links + credit badge + auth ─────────────────── */}
         <div className="header-right">
+          {/* Main nav links (dashboard/credits) */}
+          {user && (
+            <nav className="header-nav">
+              <Link
+                to="/dashboard"
+                className={`header-nav-link ${isDashboardActive ? 'active' : ''}`}
+              >
+                Projects
+              </Link>
+              <Link
+                to="/dashboard/credits"
+                className={`header-nav-link ${isCreditsActive ? 'active' : ''}`}
+              >
+                Credits
+              </Link>
+            </nav>
+          )}
+
           {user ? (
             <>
-              {/* Credit balance badge — always visible when logged in */}
+              {/* Credit balance badge */}
               <Link to="/dashboard/credits" className="credit-badge" title="크레딧 잔액 / 충전">
-                <span className="credit-icon">◈</span>
+                <span className="material-symbols-outlined credit-icon" style={{ fontVariationSettings: "'FILL' 1" }}>diamond</span>
                 <span className="credit-value">
                   {creditBalance === null ? '…' : creditBalance}
                 </span>
-                <span className="credit-label">크레딧</span>
+                <span className="credit-label">credits</span>
               </Link>
 
               {/* User avatar + dropdown */}
@@ -94,7 +115,6 @@ function Header() {
 
                 {menuOpen && (
                   <>
-                    {/* Backdrop to close on outside click */}
                     <div
                       className="dropdown-backdrop"
                       onClick={() => setMenuOpen(false)}
@@ -110,7 +130,8 @@ function Header() {
                         className="dropdown-item"
                         onClick={() => setMenuOpen(false)}
                       >
-                        ◈ 크레딧 관리
+                        <span className="material-symbols-outlined dropdown-item-icon">diamond</span>
+                        크레딧 관리
                       </Link>
                       <button
                         className="dropdown-item dropdown-logout"
