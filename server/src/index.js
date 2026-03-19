@@ -10,6 +10,7 @@ const uploadRouter = require('./routes/upload');
 const renderRouter = require('./routes/render');
 const materialsRouter = require('./routes/materials');
 const ordersRouter = require('./routes/orders');
+const chatRouter = require('./routes/chat');
 const errorHandler = require('./middleware/errorHandler');
 const { initDb } = require('./db');
 
@@ -35,6 +36,7 @@ app.use('/api/upload', uploadRouter);
 app.use('/api/render', renderRouter);
 app.use('/api/materials', materialsRouter);
 app.use('/api/orders', ordersRouter);
+app.use('/api/v1/chat', chatRouter);
 
 // Health check
 app.get('/api/health', (req, res) => {

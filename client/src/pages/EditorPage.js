@@ -11,6 +11,9 @@ import FinalRender from '../components/editor/FinalRender';
 import LayerPanel from '../components/editor/LayerPanel';
 import ProcessingOverlay from '../components/editor/ProcessingOverlay';
 import RoomCanvas from '../components/editor/RoomCanvas';
+import ChatPanel from '../components/editor/ChatPanel';
+import CorrectionMode from '../components/editor/CorrectionMode';
+import SegmentOverlay from '../components/editor/SegmentOverlay';
 import { useSemanticSegmentation } from '../hooks/useSemanticSegmentation';
 import './EditorPage.css';
 
@@ -58,8 +61,24 @@ function EditorPage() {
   const [loadingProject, setLoadingProject]   = useState(false);
 
   const { isAnalyzing, analyzeRoom } = useSemanticSegmentation();
-  // Ref to the room canvas element — passed to analyzeRoom for edge refinement
   const imageCanvasRef = useRef(null);
+
+  // ── Chat state ─────────────────────────────────────────────────────────────
+  const [chatPreviewMask,  setChatPreviewMask]  = useState(null);  // { binary, width, height }
+  const [correctionIntent, setCorrectionIntent] = useState(null);  // intent from ChatPanel
+  const chatPanelRef = useRef(null);
+
+  const handleOpenCorrection = useCallback((intent) => {
+    setCorrectionIntent(intent);
+  }, []);
+
+  const handleCorrectionComplete = useCallback((mask) => {
+    setCorrectionIntent(null);
+    // Pass corrected mask back to ChatPanel to execute
+    if (chatPanelRef.current?.confirmWithMask) {
+      chatPanelRef.current.confirmWithMask(mask);
+    }
+  }, []);
 
   const projectId = pid ? parseInt(pid, 10) : project?.id;
   // imageUrl: use store if already set, otherwise wait for fetch
@@ -209,19 +228,40 @@ function EditorPage() {
         {/* Canvas */}
         <main className="ep-canvas-area">
           {imageUrl ? (
-            <div className="ep-canvas-wrap">
-              <RoomCanvas
-                imageSrc={imageUrl}
-                projectId={projectId}
-                onMasksChange={setCanvasSegments}
-                onEncodingChange={handleEncodingChange}
-              />
-              {(isProcessing || isAnalyzing) && (
-                <ProcessingOverlay
-                  message={isAnalyzing ? '이미지를 분석하고 있습니다...' : processingMessage}
-                  isColdStart={isColdStart}
+            <div className="ep-canvas-wrap" style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+              <div style={{ position: 'relative', flex: 1 }}>
+                <RoomCanvas
+                  imageSrc={imageUrl}
+                  projectId={projectId}
+                  onMasksChange={setCanvasSegments}
+                  onEncodingChange={handleEncodingChange}
                 />
-              )}
+                {/* Chat mask preview overlay */}
+                {chatPreviewMask && (
+                  <SegmentOverlay
+                    masks={[{ ...chatPreviewMask, color: '#f59e0b' }]}
+                    width={chatPreviewMask.width}
+                    height={chatPreviewMask.height}
+                    style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none', zIndex: 10 }}
+                  />
+                )}
+                {(isProcessing || isAnalyzing) && (
+                  <ProcessingOverlay
+                    message={isAnalyzing ? '이미지를 분석하고 있습니다...' : processingMessage}
+                    isColdStart={isColdStart}
+                  />
+                )}
+              </div>
+              {/* Chat panel below canvas */}
+              <ChatPanel
+                ref={chatPanelRef}
+                projectId={projectId}
+                creditBalance={creditBalance}
+                onShowMask={setChatPreviewMask}
+                onOpenCorrection={handleOpenCorrection}
+                onResult={handleResult}
+                onSwitchTool={setActiveTool}
+              />
             </div>
           ) : (
             <div className="ep-canvas-placeholder">
@@ -280,6 +320,16 @@ function EditorPage() {
           </aside>
         )}
       </div>
+
+      {/* Correction Mode modal */}
+      {correctionIntent && (
+        <CorrectionMode
+          imageUrl={imageUrl}
+          initialLabel={correctionIntent.target}
+          onComplete={handleCorrectionComplete}
+          onCancel={() => setCorrectionIntent(null)}
+        />
+      )}
     </div>
   );
 }

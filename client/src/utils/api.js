@@ -365,4 +365,16 @@ export async function runFinalRender(projectId, payload, onEvent, signal) {
   }
 }
 
+// ── Chat-based editing ────────────────────────────────────────────────────────
+
+/**
+ * Analyze a Korean chat message → intent.
+ * @param {string} message
+ * @returns {{ action, target, description, prompt, confirmMessage }}
+ */
+export async function analyzeChatMessage(message) {
+  const { data } = await api.post('/v1/chat/analyze', { message });
+  return data;
+}
+
 export default api;
