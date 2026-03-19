@@ -211,7 +211,70 @@ export async function getCreditBalance() {
  * @returns {StylePresetInfo[]}
  */
 export async function getStylePresets() {
-  const { data } = await api.get('/v1/circle-ai/styles');
+  const { data } = await api.get('/v1/presets');
+  return data;
+}
+
+/**
+ * Analyze a reference image with Claude API (admin only).
+ * @param {string} imageUrl
+ * @param {string} adminKey
+ * @returns {{ name, label, description, prompt, tags, ip_adapter_weight }}
+ */
+export async function analyzeStyleImage(imageUrl, adminKey) {
+  const { data } = await api.post(
+    '/v1/presets/analyze',
+    { image_url: imageUrl },
+    { headers: { 'x-admin-key': adminKey } },
+  );
+  return data;
+}
+
+/**
+ * Create a new system style preset (admin only).
+ */
+export async function createStylePreset(payload, adminKey) {
+  const { data } = await api.post('/v1/presets', payload, {
+    headers: { 'x-admin-key': adminKey },
+  });
+  return data;
+}
+
+/**
+ * Update a system preset (admin only).
+ */
+export async function updateStylePreset(id, payload, adminKey) {
+  const { data } = await api.put(`/v1/presets/${id}`, payload, {
+    headers: { 'x-admin-key': adminKey },
+  });
+  return data;
+}
+
+/**
+ * Delete a system preset (admin only).
+ */
+export async function deleteStylePreset(id, adminKey) {
+  const { data } = await api.delete(`/v1/presets/${id}`, {
+    headers: { 'x-admin-key': adminKey },
+  });
+  return data;
+}
+
+/**
+ * Save a user custom style preset.
+ * Auto-analyzes with Claude if name/label are omitted.
+ * @param {{ reference_image_url, name?, label?, description?, prompt?, tags?, ip_adapter_weight? }} payload
+ */
+export async function saveUserPreset(payload) {
+  const { data } = await api.post('/v1/presets/user', payload);
+  return data;
+}
+
+/**
+ * List the authenticated user's saved custom presets.
+ */
+export async function getUserPresets() {
+  const { data } = await api.get('/v1/presets/user');
   return data;
 }
 

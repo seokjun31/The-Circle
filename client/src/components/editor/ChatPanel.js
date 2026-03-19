@@ -19,17 +19,8 @@
 import React, { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { roomSegmenter } from '../../lib/segmentation/semanticSegmentation';
 import { binaryToPng } from '../../lib/sam/samUtils';
-import { analyzeChatMessage, saveMask, applyMaterial, copyMood } from '../../utils/api';
+import { analyzeChatMessage, saveMask, applyMaterial, copyMood, getStylePresets, saveUserPreset } from '../../utils/api';
 import './ChatPanel.css';
-
-const STYLE_PRESETS = [
-  { id: 'modern',        label: '모던',      msg: '모던 스타일로 변환해줘' },
-  { id: 'scandinavian',  label: '스칸디',    msg: '스칸디나비아 스타일로 변환해줘' },
-  { id: 'japanese',      label: '재팬디',    msg: '재팬디 스타일로 변환해줘' },
-  { id: 'industrial',    label: '인더스트리얼', msg: '인더스트리얼 스타일로 변환해줘' },
-  { id: 'korean_modern', label: '한국 모던', msg: '한국 모던 스타일로 변환해줘' },
-  { id: 'classic',       label: '클래식',    msg: '클래식 스타일로 변환해줘' },
-];
 
 const LABEL_KR = {
   wall: '벽', floor: '바닥', ceiling: '천장',
@@ -55,7 +46,15 @@ const ChatPanel = forwardRef(function ChatPanel(
   const [loading, setLoading]         = useState(false);
   const [pendingIntent, setPendingIntent] = useState(null);
   const [showPresets, setShowPresets]     = useState(false);
+  const [stylePresets, setStylePresets]   = useState([]);
   const fileInputRef = useRef(null);
+
+  // Load style presets from API on mount
+  useEffect(() => {
+    getStylePresets()
+      .then((data) => setStylePresets(data))
+      .catch(() => {}); // silently ignore — chat still works without presets
+  }, []);
   const listRef = useRef(null);
   const msgId   = useRef(1);
 
@@ -178,17 +177,20 @@ const ChatPanel = forwardRef(function ChatPanel(
     e.target.value = '';
     addMsg('user', `📎 ${file.name} — 이 이미지처럼 분위기를 바꿔줘`);
     setLoading(true);
+    let referenceDataUrl = null;
     try {
       const reader = new FileReader();
-      const dataUrl = await new Promise((res) => {
+      referenceDataUrl = await new Promise((res) => {
         reader.onload = () => res(reader.result);
         reader.readAsDataURL(file);
       });
-      const result = await copyMood(projectId, { referenceImage: dataUrl, strength: 0.75 });
+      const result = await copyMood(projectId, { referenceImage: referenceDataUrl, strength: 0.75 });
       const id = ++msgId.current;
       setMessages((prev) => [...prev, {
         id, role: 'ai', text: '분위기를 적용했어요!',
         resultUrl: result.result_url,
+        referenceImage: referenceDataUrl,   // used for "save style" button
+        canSaveStyle: true,
       }]);
       onResult?.(result);
     } catch (err) {
@@ -197,6 +199,17 @@ const ChatPanel = forwardRef(function ChatPanel(
       setLoading(false);
     }
   }, [projectId, addMsg, onResult]);
+
+  const handleSaveStyle = useCallback(async (referenceImage) => {
+    if (!referenceImage) return;
+    try {
+      const saved = await saveUserPreset({ reference_image_url: referenceImage });
+      setStylePresets((prev) => [...prev, { id: saved.name, label: saved.label, msg: `${saved.label} 스타일로 변환해줘` }]);
+      addMsg('ai', `✅ "${saved.label}" 스타일로 저장됐어요! 다음에도 사용할 수 있습니다.`);
+    } catch (err) {
+      addMsg('ai', `스타일 저장 실패: ${err.message}`);
+    }
+  }, [addMsg]);
 
   // Expose confirmWithMask so EditorPage can call it after CorrectionMode returns
   useImperativeHandle(ref, () => ({
@@ -229,6 +242,12 @@ const ChatPanel = forwardRef(function ChatPanel(
                       } catch { window.open(m.resultUrl, '_blank'); }
                     }}
                   >↓ 저장</button>
+                  {m.canSaveStyle && (
+                    <button
+                      className="chat-btn chat-btn--save-style"
+                      onClick={() => handleSaveStyle(m.referenceImage)}
+                    >⭐ 이 스타일 저장하기</button>
+                  )}
                 </div>
               </div>
             )}
@@ -257,11 +276,19 @@ const ChatPanel = forwardRef(function ChatPanel(
       {/* Style preset popup */}
       {showPresets && (
         <div className="chat-presets">
-          {STYLE_PRESETS.map((p) => (
-            <button key={p.id} className="chat-preset-btn" onClick={() => handlePresetSelect(p)}>
+          {stylePresets.map((p) => (
+            <button
+              key={p.dbId || p.id}
+              className={`chat-preset-btn ${p.isUserPreset ? 'user-preset' : ''}`}
+              onClick={() => handlePresetSelect({ ...p, msg: `${p.label} 스타일로 변환해줘` })}
+            >
+              {p.isUserPreset && <span className="chat-preset-user-mark">★ </span>}
               {p.label}
             </button>
           ))}
+          {stylePresets.length === 0 && (
+            <span className="chat-presets-empty">프리셋을 불러오는 중...</span>
+          )}
         </div>
       )}
 

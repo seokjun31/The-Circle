@@ -19,6 +19,7 @@ import RegisterPage      from './pages/RegisterPage';
 import OAuthCallbackPage from './pages/OAuthCallbackPage';
 import CreditsPage       from './pages/CreditsPage';
 import BenchmarkPage    from './pages/BenchmarkPage';
+import AdminPresets     from './pages/AdminPresets';
 
 import './styles/global.css';
 
@@ -41,7 +42,8 @@ function AppLayout() {
           <Route path="/login"         element={<LoginPage />} />
           <Route path="/register"      element={<RegisterPage />} />
           <Route path="/auth/callback" element={<OAuthCallbackPage />} />
-          <Route path="/benchmark"   element={<BenchmarkPage />} />
+          <Route path="/benchmark"     element={<BenchmarkPage />} />
+          <Route path="/admin/presets" element={<AdminPresets />} />
 
           {/* Legacy step-by-step upload flow */}
           <Route path="/upload" element={<UploadPage />} />

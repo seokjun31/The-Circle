@@ -10,8 +10,9 @@ const uploadRouter = require('./routes/upload');
 const renderRouter = require('./routes/render');
 const materialsRouter = require('./routes/materials');
 const ordersRouter = require('./routes/orders');
-const chatRouter = require('./routes/chat');
-const errorHandler = require('./middleware/errorHandler');
+const chatRouter    = require('./routes/chat');
+const presetsRouter = require('./routes/presets');
+const errorHandler  = require('./middleware/errorHandler');
 const { initDb } = require('./db');
 
 const app = express();
@@ -36,7 +37,8 @@ app.use('/api/upload', uploadRouter);
 app.use('/api/render', renderRouter);
 app.use('/api/materials', materialsRouter);
 app.use('/api/orders', ordersRouter);
-app.use('/api/v1/chat', chatRouter);
+app.use('/api/v1/chat',    chatRouter);
+app.use('/api/v1/presets', presetsRouter);
 
 // Health check
 app.get('/api/health', (req, res) => {
