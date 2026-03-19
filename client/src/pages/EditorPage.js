@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import useEditorStore from '../stores/editorStore';
@@ -11,6 +11,7 @@ import FinalRender from '../components/editor/FinalRender';
 import LayerPanel from '../components/editor/LayerPanel';
 import ProcessingOverlay from '../components/editor/ProcessingOverlay';
 import RoomCanvas from '../components/editor/RoomCanvas';
+import { useSemanticSegmentation } from '../hooks/useSemanticSegmentation';
 import './EditorPage.css';
 
 // ── Sidebar tool definitions ──────────────────────────────────────────────────
@@ -56,14 +57,21 @@ function EditorPage() {
   const [rightPanelOpen, setRightPanelOpen]   = useState(true);
   const [loadingProject, setLoadingProject]   = useState(false);
 
+  const { isAnalyzing, analyzeRoom } = useSemanticSegmentation();
+  // Ref to the room canvas element — passed to analyzeRoom for edge refinement
+  const imageCanvasRef = useRef(null);
+
   const projectId = pid ? parseInt(pid, 10) : project?.id;
   // imageUrl: use store if already set, otherwise wait for fetch
   const imageUrl  = project?.original_image_url || null;
 
   const handleEncodingChange = useCallback(
-    ({ isEncoding }) =>
-      isEncoding ? setProcessing(true, 'SAM 이미지 분석 중...') : setProcessing(false),
-    [setProcessing]
+    ({ isEncoding }) => {
+      // Don't override the semantic segmentation message if it's running
+      if (isEncoding) setProcessing(true, 'SAM 이미지 분석 중...');
+      else if (!isAnalyzing) setProcessing(false);
+    },
+    [setProcessing, isAnalyzing]
   );
 
   // ── Bootstrap: fetch project if not in store ───────────────────────────────
@@ -93,6 +101,14 @@ function EditorPage() {
       })
       .finally(() => setLoadingProject(false));
   }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Background: Semantic Segmentation (SegFormer ADE20K) ──────────────────
+  // Runs once per imageUrl, invisible to the user.
+  // Results are cached in roomSegmenter singleton for the chat system.
+  useEffect(() => {
+    if (!imageUrl) return;
+    analyzeRoom(imageUrl, imageCanvasRef.current);
+  }, [imageUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const refreshLayers = useCallback(() => {
     if (!projectId) return;
@@ -200,8 +216,11 @@ function EditorPage() {
                 onMasksChange={setCanvasSegments}
                 onEncodingChange={handleEncodingChange}
               />
-              {isProcessing && (
-                <ProcessingOverlay message={processingMessage} isColdStart={isColdStart} />
+              {(isProcessing || isAnalyzing) && (
+                <ProcessingOverlay
+                  message={isAnalyzing ? '이미지를 분석하고 있습니다...' : processingMessage}
+                  isColdStart={isColdStart}
+                />
               )}
             </div>
           ) : (
