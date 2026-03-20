@@ -3,7 +3,7 @@
 #  The Circle — ComfyUI + RunPod handler startup script
 #
 #  Execution order:
-#    1. (Optional) Download missing models from Network Volume
+#    1. Always run download_models.sh (skips files already on disk)
 #    2. Start ComfyUI server in background
 #    3. Wait for ComfyUI to respond on :8188
 #    4. Start RunPod Serverless handler (blocks)
@@ -15,14 +15,14 @@ COMFYUI_PORT="${COMFYUI_PORT:-8188}"
 COMFYUI_READY_TIMEOUT="${COMFYUI_READY_TIMEOUT:-120}"
 LOG_FILE="/tmp/comfyui.log"
 
-# ── 1. Download models if Network Volume is available ─────────────────────────
-if [[ -d /runpod-volume ]] && [[ "${SKIP_MODEL_DOWNLOAD:-false}" != "true" ]]; then
-    echo "[start.sh] Network Volume detected — checking models..."
-    /download_models.sh 2>&1 | tee /tmp/model_download.log || {
+# ── 1. Always download/verify models before ComfyUI starts ────────────────────
+if [[ "${SKIP_MODEL_DOWNLOAD:-false}" == "true" ]]; then
+    echo "[start.sh] Skipping model download (SKIP_MODEL_DOWNLOAD=true)"
+else
+    echo "[start.sh] Running model download/verification..."
+    bash /download_models.sh 2>&1 | tee /tmp/model_download.log || {
         echo "[start.sh] WARN: model download had errors — continuing anyway"
     }
-else
-    echo "[start.sh] Skipping model download (no network volume or SKIP_MODEL_DOWNLOAD=true)"
 fi
 
 # ── 2. Start ComfyUI in background ────────────────────────────────────────────

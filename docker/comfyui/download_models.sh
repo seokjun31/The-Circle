@@ -16,7 +16,7 @@
 #      checkpoints/         SDXL base, SDXL refiner
 #      controlnet/          depth-sdxl, canny-sdxl, normal-sdxl
 #      clip_vision/         CLIP-ViT-H-14 (for IP-Adapter SDXL)
-#      ipadapter/           ip-adapter-plus_sdxl_vit-h.bin
+#      ipadapter/           IP-Adapter-Plus_SDXL.safetensors
 #      segment_anything/    sam_vit_h_4b8939.pth
 #      loras/               korea-apartment-style_v1.safetensors
 #      vae/                 (built into SDXL checkpoint — optional standalone)
@@ -92,7 +92,7 @@ mkdir -p \
 #  1. SDXL Base 1.0
 # ═══════════════════════════════════════════════════════════════════════════════
 download_if_missing \
-    "${MODEL_DIR}/checkpoints/sdxl_base_1.0.safetensors" \
+    "${MODEL_DIR}/checkpoints/sd_xl_base_1.0.safetensors" \
     "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors" \
     "SDXL Base 1.0 (~6.9 GB)"
 
@@ -119,8 +119,8 @@ download_if_missing \
 #     Style transfer + material texture application
 # ═══════════════════════════════════════════════════════════════════════════════
 download_if_missing \
-    "${MODEL_DIR}/ipadapter/ip-adapter-plus_sdxl_vit-h.bin" \
-    "https://huggingface.co/h94/IP-Adapter/resolve/main/sdxl_models/ip-adapter-plus_sdxl_vit-h.bin" \
+    "${MODEL_DIR}/ipadapter/IP-Adapter-Plus_SDXL.safetensors" \
+    "https://huggingface.co/h94/IP-Adapter/resolve/main/sdxl_models/ip-adapter-plus_sdxl_vit-h.safetensors" \
     "IP-Adapter SDXL Plus ViT-H (~858 MB)"
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -144,6 +144,18 @@ download_if_missing \
     "${MODEL_DIR}/controlnet/controlnet-normal-sdxl-1.0.safetensors" \
     "https://huggingface.co/xinsir/controlnet-union-sdxl-1.0/resolve/main/diffusion_pytorch_model_promax.safetensors" \
     "ControlNet Normal/Union SDXL (~2.5 GB)"
+
+# MistoLine rank256 (high-quality lineart/edge ControlNet for SDXL)
+download_if_missing \
+    "${MODEL_DIR}/controlnet/mistoLine_rank256.safetensors" \
+    "https://huggingface.co/TheMistoAI/MistoLine/resolve/main/mistoLine_rank256.safetensors" \
+    "MistoLine rank256 (~722 MB)"
+
+# Control-LoRA Depth rank256 (depth-guided structure for SDXL)
+download_if_missing \
+    "${MODEL_DIR}/controlnet/control-lora-depth-rank256.safetensors" \
+    "https://huggingface.co/stabilityai/control-lora/resolve/main/control-LoRAs-rank256/control-lora-depth-rank256.safetensors" \
+    "Control-LoRA Depth rank256 (~690 MB)"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  6. SAM ViT-H (Segment Anything — server-side fallback for precise masking)
