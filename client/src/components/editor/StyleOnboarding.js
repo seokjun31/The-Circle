@@ -150,53 +150,76 @@ export default function StyleOnboarding({ projectId, imageUrl, creditBalance, on
   // ── RESULT step ─────────────────────────────────────────────────────────────
   if (step === 'result') {
     return (
-      <div className="so-root so-root--result">
-        <div className="so-result-header">
-          <div className="so-result-title-row">
-            <h2 className="so-result-title">변환 완료!</h2>
-            <div className="so-retry-dots" title={`재시도 ${retriesLeft}회 남음`}>
-              {[...Array(MAX_RETRIES)].map((_, i) => (
-                <span key={i} className={`so-retry-dot ${i < retriesLeft ? 'active' : ''}`} />
-              ))}
-              <span className="so-retry-label">재시도 {retriesLeft}회 남음</span>
+      <div className="h-full flex flex-col gap-6 p-6 bg-surface-container-lowest">
+
+        {/* Header */}
+        <div className="flex-shrink-0 flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <span
+                className="material-symbols-outlined text-primary text-2xl"
+                style={{ fontVariationSettings: "'FILL' 1" }}
+              >
+                auto_awesome
+              </span>
+              <h2 className="font-headline text-2xl font-bold text-white tracking-tight">변환 완료!</h2>
             </div>
+            <p className="text-xs text-on-surface-variant ml-9">슬라이더를 드래그해서 비교해보세요</p>
           </div>
-          <p className="so-result-sub">슬라이더를 드래그해서 비교해보세요</p>
+          <div className="flex items-center gap-2 bg-surface-container-high px-4 py-2 rounded-full border border-outline-variant/20">
+            <span className="text-xs text-on-surface-variant font-medium">재시도</span>
+            <div className="flex gap-1.5">
+              {[...Array(MAX_RETRIES)].map((_, i) => (
+                <span
+                  key={i}
+                  className={`w-2 h-2 rounded-full transition-all ${i < retriesLeft ? 'bg-primary' : 'bg-outline-variant/40'}`}
+                />
+              ))}
+            </div>
+            <span className="text-xs font-bold text-white">{retriesLeft}회 남음</span>
+          </div>
         </div>
 
-        <div className="so-compare-wrap">
+        {/* Comparison Slider */}
+        <div className="flex-1 min-h-0 relative rounded-xl overflow-hidden shadow-2xl border border-outline-variant/20">
           <ReactCompareSlider
-            itemOne={<ReactCompareSliderImage src={imageUrl} alt="원본" />}
-            itemTwo={<ReactCompareSliderImage src={resultUrl} alt="변환" />}
-            style={{ width: '100%', height: '100%', borderRadius: '14px', overflow: 'hidden' }}
+            itemOne={<ReactCompareSliderImage src={imageUrl} alt="원본" style={{ objectFit: 'cover' }} />}
+            itemTwo={<ReactCompareSliderImage src={resultUrl} alt="AI 변환" style={{ objectFit: 'cover' }} />}
+            style={{ width: '100%', height: '100%' }}
           />
-          <div className="so-compare-labels">
-            <span className="so-compare-tag">원본</span>
-            <span className="so-compare-tag so-compare-tag--right">AI 변환</span>
-          </div>
+          <span className="absolute top-4 left-4 text-xs font-bold uppercase tracking-wider bg-black/50 backdrop-blur-sm px-3 py-1.5 rounded-full text-white border border-white/10">
+            원본
+          </span>
+          <span className="absolute top-4 right-4 text-xs font-bold uppercase tracking-wider bg-primary/20 backdrop-blur-sm px-3 py-1.5 rounded-full text-primary border border-primary/30"
+            style={{ boxShadow: '0 0 20px rgba(124, 58, 237, 0.2)' }}
+          >
+            AI 변환
+          </span>
         </div>
 
-        <div className="so-result-actions">
+        {/* Action Buttons */}
+        <div className="flex-shrink-0 flex gap-3">
           <button
-            className="so-btn so-btn--ghost"
+            className="flex-1 py-3 px-4 rounded-xl border border-outline-variant/30 text-on-surface-variant hover:text-white hover:border-outline-variant/60 transition-all text-sm font-medium"
             onClick={() => { setResultUrl(null); setStep('select'); }}
           >
-            ← 처음부터 다시
+            ← 처음부터
           </button>
           <button
-            className="so-btn so-btn--outline"
+            className="flex-1 py-3 px-4 rounded-xl border border-primary/30 text-primary hover:bg-primary/10 transition-all text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             onClick={handleRetry}
             disabled={loading || retriesLeft <= 0}
           >
-            {loading ? <><span className="spinner so-spinner" /> 재변환 중...</>
+            {loading
+              ? <><span className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />재변환 중...</>
               : retriesLeft > 0 ? `🔄 다시 해볼게요 (${retriesLeft}회)` : '재시도 횟수 소진'
             }
           </button>
           <button
-            className="so-btn so-btn--primary"
+            className="flex-1 py-3 px-6 rounded-xl bg-gradient-to-r from-[#7c3aed] to-primary text-white font-headline font-bold text-sm shadow-lg hover:shadow-primary/20 transition-all active:scale-[0.98]"
             onClick={() => onDone({ result_url: resultUrl })}
           >
-            이렇게 할게요 →
+            이대로 쓸래요 →
           </button>
         </div>
       </div>

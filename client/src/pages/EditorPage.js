@@ -393,7 +393,7 @@ function EditorPage() {
                 </div>
                 <div className="relative group">
                   <input
-                    className="w-full bg-surface-container-high border border-outline-variant/50 focus:border-primary focus:outline-none text-on-surface px-6 py-4 pr-36 rounded-xl transition-all"
+                    className="w-full bg-surface-container-high border-b border-outline-variant/50 focus:border-primary focus:ring-0 text-on-surface px-6 py-4 pr-36 rounded-xl transition-all"
                     placeholder="Type a request to refine your design..."
                     type="text"
                     value={chatInput}
@@ -689,7 +689,7 @@ function EditorPage() {
 
       {/* StyleOnboarding overlay */}
       {editorStep === 'onboarding' && (
-        <div className="fixed inset-0 z-30 pt-20">
+        <div className="fixed inset-0 z-30 pt-20 h-full">
           <StyleOnboarding
             projectId={projectId}
             imageUrl={imageUrl}
