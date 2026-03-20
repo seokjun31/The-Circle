@@ -202,7 +202,17 @@ export default function MaterialsEditor({
               style={{ color: '#bd9dff', fontVariationSettings: "'FILL' 1" }}>diamond</span>
             <span className="text-sm font-bold tracking-tight">{creditBalance ?? '—'}</span>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            {onAddToLayout && (
+              <button
+                onClick={onAddToLayout}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-bold transition-all hover:bg-[#2c2c2d]"
+                style={{ borderColor: 'rgba(189,157,255,0.4)', color: '#bd9dff' }}
+              >
+                <span className="material-symbols-outlined text-sm">add_photo_alternate</span>
+                레이아웃 추가
+              </button>
+            )}
             <button className="px-4 py-1.5 rounded-full text-xs font-bold border transition-all hover:bg-[#2c2c2d]"
               style={{ borderColor: '#767576' }}>
               Save
@@ -325,17 +335,18 @@ export default function MaterialsEditor({
               </div>
             </button>
 
-            {/* Circle.ai 메이커 button */}
-            <button
-              className="w-full py-3 rounded-full text-xs font-extrabold transition-all active:scale-95 shadow-lg"
+            {/* Circle.ai label */}
+            <div
+              className="w-full py-3 rounded-full text-xs font-extrabold text-center"
               style={{
                 background: 'linear-gradient(135deg, #bd9dff, #8a4cfc)',
                 color: '#3c0089',
                 boxShadow: '0 4px 20px rgba(189,157,255,0.2)',
+                cursor: 'default',
               }}
             >
-              Circle.ai 메이커
-            </button>
+              Circle.ai
+            </div>
           </div>
         </aside>
 
@@ -458,6 +469,7 @@ export default function MaterialsEditor({
                 onMasksChange={setCanvasSegments}
                 onEncodingChange={handleEncodingChange}
                 externalMode={canvasMode}
+                hideSidebar={true}
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center"

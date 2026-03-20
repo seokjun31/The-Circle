@@ -64,6 +64,9 @@ function EditorPage() {
       return;
     }
     setLoadingProject(true);
+    setLastResult(null);
+    setMoodResultUrl(null);
+    setMoodPhase('select');
     getProject(projectId)
       .then(proj => { setProject(proj); getCreditBalance().then(d => setCreditBalance(d.balance)).catch(() => {}); })
       .catch(() => { toast.error('프로젝트를 불러오지 못했습니다.'); navigate('/dashboard'); })
@@ -103,10 +106,11 @@ function EditorPage() {
 
   /* ── Layout bar: add current result to layout ── */
   const handleAddToLayout = useCallback(() => {
-    if (!lastResult?.result_url) { toast.error('추가할 변환 결과가 없습니다.'); return; }
+    const url = lastResult?.result_url || imageUrl;
+    if (!url) { toast.error('추가할 이미지가 없습니다.'); return; }
     refreshLayers();
     toast.success('레이아웃에 추가되었습니다!', { icon: '✅' });
-  }, [lastResult, refreshLayers]);
+  }, [lastResult, imageUrl, refreshLayers]);
 
   /* ── Correction Mode ── */
   const handleCorrectionComplete = useCallback((mask) => {
@@ -289,16 +293,17 @@ function EditorPage() {
             </div>
           </button>
 
-          <button
-            className="w-full py-2.5 rounded-full text-xs font-extrabold transition-all active:scale-95 shadow-lg"
+          <div
+            className="w-full py-2.5 rounded-full text-xs font-extrabold text-center"
             style={{
               background: 'linear-gradient(135deg, #bd9dff, #8a4cfc)',
               color: '#3c0089',
               boxShadow: '0 4px 20px rgba(189,157,255,0.2)',
+              cursor: 'default',
             }}
           >
-            Circle.ai 메이커
-          </button>
+            Circle.ai
+          </div>
         </div>
       </nav>
 
@@ -320,7 +325,7 @@ function EditorPage() {
                     style={{ width: '100%', height: '100%' }}
                   />
                 ) : displayUrl ? (
-                  <img className="w-full h-full object-cover" src={displayUrl} alt="Interior" />
+                  <img className="w-full h-full object-contain" src={displayUrl} alt="Interior" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-on-surface-variant">
                     {loadingProject ? '불러오는 중...' : '이미지를 불러오는 중...'}
@@ -363,7 +368,7 @@ function EditorPage() {
           {activeTool === 'lighting' && (
             <div className="relative w-full flex-1 rounded-xl overflow-hidden shadow-2xl bg-surface-container border border-outline-variant/20">
               {displayUrl ? (
-                <img className="w-full h-full object-cover" src={displayUrl} alt="Interior" />
+                <img className="w-full h-full object-contain" src={displayUrl} alt="Interior" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-on-surface-variant">
                   {loadingProject ? '불러오는 중...' : '이미지를 불러오는 중...'}
@@ -470,7 +475,7 @@ function EditorPage() {
           {activeTool === 'lighting' && (
             <LightingPanel
               projectId={projectId}
-              originalImageUrl={imageUrl}
+              originalImageUrl={displayUrl}
               creditBalance={creditBalance}
               onResult={handleResult}
             />

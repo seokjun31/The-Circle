@@ -80,7 +80,7 @@ const LARGE_PREV_W = 280;
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, className = '', externalMode }) {
+function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, className = '', externalMode, hideSidebar = false }) {
   // ── SAM hook ──────────────────────────────────────────────────────────────
   const {
     initModel,
@@ -567,7 +567,7 @@ function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, clas
     <div className={`room-canvas-root ${className}`}>
 
       {/* ── Left panel ─────────────────────────────────────────────────── */}
-      <div className="room-canvas-sidebar">
+      {!hideSidebar && <div className="room-canvas-sidebar">
 
         {/* Quick label selector */}
         <div className="rcs-section">
@@ -714,7 +714,7 @@ function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, clas
             </button>
           </div>
         )}
-      </div>
+      </div>}
 
       {/* ── Main canvas area ────────────────────────────────────────────── */}
       <div className="room-canvas-main">
