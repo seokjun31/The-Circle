@@ -34,6 +34,7 @@ export default function MoodPanel({
   creditBalance,
   onResult,
   onPhaseChange,
+  onAddToLayout,
   phase,
   retriesLeft,
   setRetries,
@@ -121,16 +122,25 @@ export default function MoodPanel({
           </div>
         </div>
 
+        {/* Add to layout */}
+        <button
+          className="w-full py-3 rounded-xl border border-primary/50 text-primary hover:bg-primary/10 transition-all text-sm font-medium flex items-center justify-center gap-2"
+          onClick={onAddToLayout}
+        >
+          <span className="material-symbols-outlined text-base">add_photo_alternate</span>
+          레이아웃 추가
+        </button>
+
         {/* Retry: go back to select phase to adjust strength */}
         <button
-          className="w-full py-3 rounded-xl border border-primary/30 text-primary hover:bg-primary/10 transition-all text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+          className="w-full py-3 rounded-xl border border-outline-variant/30 text-on-surface-variant hover:border-outline-variant/60 transition-all text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
           onClick={() => onPhaseChange('select')}
           disabled={retriesLeft <= 0}
         >
           🔄 강도 조절 후 다시 해볼게요 ({retriesLeft}회 남음)
         </button>
 
-        {/* Accept → back to select for new transformation */}
+        {/* Accept */}
         <button
           className="w-full py-3 rounded-xl bg-gradient-to-r from-[#7c3aed] to-primary text-white font-headline font-bold text-sm shadow-lg hover:shadow-primary/20 transition-all active:scale-[0.98]"
           onClick={() => { setRetries(0); onPhaseChange('done'); }}
