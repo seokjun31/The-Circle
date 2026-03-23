@@ -10,7 +10,7 @@ const useEditorStore = create((set, get) => ({
   layers: [],             // EditLayer[]
 
   // ── Active tool ──────────────────────────────────────────────────────────
-  activeTool: 'circle_ai', // 'circle_ai'|'material'|'mood_copy'|'furniture'|'final_render'|'layers'
+  activeTool: 'mood', // 'mood'|'materials'|'lighting'|'layout'
 
   // ── SAM / segmentation ────────────────────────────────────────────────────
   selectedSegments: [],   // confirmed segment masks
@@ -80,7 +80,7 @@ const useEditorStore = create((set, get) => ({
   canRedo: () => get().historyIndex < get().history.length - 1,
 
   reset: () => set({
-    project: null, layers: [], activeTool: 'circle_ai',
+    project: null, layers: [], activeTool: 'mood',
     selectedSegments: [], samEmbedding: null, referenceScale: null,
     isProcessing: false, processingMessage: '', isColdStart: false,
     history: [], historyIndex: -1, creditBalance: null, lastResult: null,

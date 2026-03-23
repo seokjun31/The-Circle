@@ -1,402 +1,557 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { ReactCompareSlider, ReactCompareSliderImage } from 'react-compare-slider';
 import toast from 'react-hot-toast';
 import useEditorStore from '../stores/editorStore';
 import { getCreditBalance, getProject, getProjectLayers } from '../utils/api';
-import StyleTransform from '../components/editor/StyleTransform';
-import MoodCopy from '../components/editor/MoodCopy';
-import MaterialPanel from '../components/editor/MaterialPanel';
-import FurniturePanel from '../components/editor/FurniturePanel';
-import FinalRender from '../components/editor/FinalRender';
-import LayerPanel from '../components/editor/LayerPanel';
+import MoodPanel      from '../components/editor/MoodPanel';
+import LightingPanel  from '../components/editor/LightingPanel';
+import LayerPanel     from '../components/editor/LayerPanel';
 import ProcessingOverlay from '../components/editor/ProcessingOverlay';
-import RoomCanvas from '../components/editor/RoomCanvas';
-import ChatPanel from '../components/editor/ChatPanel';
 import CorrectionMode from '../components/editor/CorrectionMode';
-import SegmentOverlay from '../components/editor/SegmentOverlay';
-import StyleOnboarding from '../components/editor/StyleOnboarding';
-import EditorHub from '../components/editor/EditorHub';
+import MaterialsEditor from '../components/editor/MaterialsEditor';
 import { useSemanticSegmentation } from '../hooks/useSemanticSegmentation';
-import './EditorPage.css';
 
-// ── Sidebar tool definitions ──────────────────────────────────────────────────
-const TOOLS = [
-  { id: 'circle_ai',    icon: 'auto_awesome', label: 'Circle.ai',  sub: '스타일 변환'   },
-  { id: 'material',     icon: 'texture',      label: '자재',        sub: '영역 텍스처'   },
-  { id: 'mood_copy',    icon: 'photo_library',label: '분위기',      sub: '레퍼런스 복사' },
-  { id: 'furniture',    icon: 'chair',        label: '가구',        sub: 'AI 합성'       },
-  { id: 'final_render', icon: 'download',     label: '렌더링',      sub: '고품질 출력'   },
-  { id: 'layers',       icon: 'layers',       label: '레이어',      sub: '히스토리'      },
+/* ── Nav tabs (non-materials) ────────────────────────────────────── */
+const SIDE_NAV = [
+  { id: 'mood',     icon: 'palette',         label: 'Mood',     sub: '분위기 변환' },
+  { id: 'lighting', icon: 'wb_incandescent', label: 'Lighting', sub: '조명 조절'  },
 ];
 
-// ─────────────────────────────────────────────────────────────────────────────
+/* ─────────────────────────────────────────────────────────────────── */
 
 function EditorPage() {
-  const navigate = useNavigate();
+  const navigate   = useNavigate();
   const { projectId: pid } = useParams();
 
   const {
-    project,
-    activeTool,
-    isProcessing,
-    processingMessage,
-    isColdStart,
-    creditBalance,
-    lastResult,
-    layers,
-    setProject,
-    setActiveTool,
-    setCreditBalance,
-    setLayers,
-    setLastResult,
-    setProcessing,
-    pushHistory,
-    undo,
-    redo,
-    canUndo,
-    canRedo,
+    project, activeTool, isProcessing, processingMessage,
+    isColdStart, creditBalance, lastResult, layers,
+    setProject, setActiveTool, setCreditBalance,
+    setLayers, setLastResult, setProcessing, pushHistory,
   } = useEditorStore();
 
+  const [loadingProject, setLoadingProject] = useState(false);
   const [selectedLayerId, setSelectedLayerId] = useState(null);
-  const [canvasSegments, setCanvasSegments]   = useState([]);
-  const [rightPanelOpen, setRightPanelOpen]   = useState(true);
-  const [loadingProject, setLoadingProject]   = useState(false);
-  const [advancedMode,   setAdvancedMode]     = useState(false);  // chat-first (false) vs full editor (true)
-  const [imageFullscreen, setImageFullscreen] = useState(false);
-  // 'onboarding' → style selection first; 'chat' → main editor
-  const [editorStep, setEditorStep] = useState('onboarding');
+
+  /* Mood state (lifted for center viewport) */
+  const [moodPhase,    setMoodPhase]    = useState('select');
+  const [moodResultUrl,setMoodResultUrl]= useState(null);
+  const [moodRetries,  setMoodRetries]  = useState(0);
+
+  /* Materials free retries */
+  const [matFreeRetries, setMatFreeRetries] = useState(0);
+
+  /* Correction Mode */
+  const [correctionIntent, setCorrectionIntent] = useState(null);
 
   const { isAnalyzing, analyzeRoom } = useSemanticSegmentation();
   const imageCanvasRef = useRef(null);
 
-  // ── Chat state ─────────────────────────────────────────────────────────────
-  const [chatPreviewMask,  setChatPreviewMask]  = useState(null);  // { binary, width, height }
-  const [correctionIntent, setCorrectionIntent] = useState(null);  // intent from ChatPanel
-  const chatPanelRef = useRef(null);
-
-  const handleOpenCorrection = useCallback((intent) => {
-    setCorrectionIntent(intent);
-  }, []);
-
-  const handleCorrectionComplete = useCallback((mask) => {
-    setCorrectionIntent(null);
-    // Pass corrected mask back to ChatPanel to execute
-    if (chatPanelRef.current?.confirmWithMask) {
-      chatPanelRef.current.confirmWithMask(mask);
-    }
-  }, []);
-
   const projectId = pid ? parseInt(pid, 10) : project?.id;
-  // imageUrl: use store if already set, otherwise wait for fetch
   const imageUrl  = project?.original_image_url || null;
 
-  const handleEncodingChange = useCallback(
-    ({ isEncoding }) => {
-      // Don't override the semantic segmentation message if it's running
-      if (isEncoding) setProcessing(true, 'SAM 이미지 분석 중...');
-      else if (!isAnalyzing) setProcessing(false);
-    },
-    [setProcessing, isAnalyzing]
-  );
-
-  // ── Bootstrap: fetch project if not in store ───────────────────────────────
+  /* activeTool default */
   useEffect(() => {
-    if (!projectId) {
-      toast.error('프로젝트를 먼저 생성해주세요.');
-      navigate('/dashboard');
-      return;
-    }
+    if (!activeTool) setActiveTool('mood');
+  }, []); // eslint-disable-line
 
-    // Already loaded in store for this project
+  /* ── Load project ── */
+  useEffect(() => {
+    if (!projectId) { toast.error('프로젝트를 먼저 생성해주세요.'); navigate('/dashboard'); return; }
     if (project?.id === projectId) {
-      getCreditBalance().then((d) => setCreditBalance(d.balance)).catch(() => {});
+      getCreditBalance().then(d => setCreditBalance(d.balance)).catch(() => {});
       return;
     }
-
-    // Fetch from server
     setLoadingProject(true);
+    setLastResult(null);
+    setMoodResultUrl(null);
+    setMoodPhase('select');
     getProject(projectId)
-      .then((proj) => {
-        setProject(proj);
-        getCreditBalance().then((d) => setCreditBalance(d.balance)).catch(() => {});
-      })
-      .catch(() => {
-        toast.error('프로젝트를 불러오지 못했습니다.');
-        navigate('/dashboard');
-      })
+      .then(proj => { setProject(proj); getCreditBalance().then(d => setCreditBalance(d.balance)).catch(() => {}); })
+      .catch(() => { toast.error('프로젝트를 불러오지 못했습니다.'); navigate('/dashboard'); })
       .finally(() => setLoadingProject(false));
-  }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [projectId]); // eslint-disable-line
 
-  // ── Background: Semantic Segmentation (SegFormer ADE20K) ──────────────────
-  // Runs once per imageUrl, invisible to the user.
-  // Results are cached in roomSegmenter singleton for the chat system.
+  /* ── Auto-analyze room on image load ── */
   useEffect(() => {
     if (!imageUrl) return;
     analyzeRoom(imageUrl, imageCanvasRef.current);
-  }, [imageUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [imageUrl]); // eslint-disable-line
 
+  /* ── Refresh layers ── */
   const refreshLayers = useCallback(() => {
     if (!projectId) return;
     getProjectLayers(projectId)
-      .then((d) => setLayers(d.layers || []))
+      .then(d => setLayers(d.layers || []))
       .catch(() => {});
   }, [projectId, setLayers]);
 
   useEffect(() => { refreshLayers(); }, [refreshLayers]);
 
-  // ── AI result handler ──────────────────────────────────────────────────────
+  /* ── Generic result handler ── */
   const handleResult = useCallback((result) => {
     setLastResult(result);
     if (result.remaining_balance !== undefined) setCreditBalance(result.remaining_balance);
-    pushHistory();
+    pushHistory?.();
     refreshLayers();
-    getCreditBalance().then((d) => setCreditBalance(d.balance)).catch(() => {});
+    getCreditBalance().then(d => setCreditBalance(d.balance)).catch(() => {});
   }, [setLastResult, setCreditBalance, pushHistory, refreshLayers]);
 
-  const handleFinalRenderResult = useCallback(({ resultUrl, layerId }) => {
-    setLastResult({ result_url: resultUrl, layer_id: layerId });
-    getCreditBalance().then((d) => setCreditBalance(d.balance)).catch(() => {});
+  /* ── Mood handlers ── */
+  const handleMoodPhaseChange = useCallback((phase, resultUrl) => {
+    setMoodPhase(phase);
+    if (resultUrl) setMoodResultUrl(resultUrl);
+  }, []);
+
+  /* ── Layout bar: add current result to layout ── */
+  const handleAddToLayout = useCallback(() => {
+    const url = lastResult?.result_url || imageUrl;
+    if (!url) { toast.error('추가할 이미지가 없습니다.'); return; }
     refreshLayers();
-  }, [setLastResult, setCreditBalance, refreshLayers]);
+    toast.success('레이아웃에 추가되었습니다!', { icon: '✅' });
+  }, [lastResult, imageUrl, refreshLayers]);
 
-  const activeMeta = TOOLS.find((t) => t.id === activeTool);
+  /* ── Correction Mode ── */
+  const handleCorrectionComplete = useCallback((mask) => {
+    setCorrectionIntent(null);
+  }, []);
 
-  // Called by StyleOnboarding when done (result or skip)
-  const handleOnboardingDone = useCallback((result) => {
-    if (result) {
-      setLastResult(result);
-      refreshLayers();
-      getCreditBalance().then((d) => setCreditBalance(d.balance)).catch(() => {});
-    }
-    setEditorStep('chat');
-  }, [setLastResult, refreshLayers, setCreditBalance]);
+  const displayUrl = lastResult?.result_url || imageUrl;
 
-  // ── Right panel content ────────────────────────────────────────────────────
-  const renderPanel = () => {
-    const common = { projectId, originalImageUrl: imageUrl, creditBalance, onResult: handleResult };
-    switch (activeTool) {
-      case 'circle_ai':    return <StyleTransform  {...common} />;
-      case 'material':     return <MaterialPanel   {...common} confirmedMasks={canvasSegments} />;
-      case 'mood_copy':    return <MoodCopy        {...common} />;
-      case 'furniture':    return <FurniturePanel  projectId={projectId} originalImageUrl={imageUrl} creditBalance={creditBalance} onResult={handleResult} />;
-      case 'final_render': return <FinalRender     {...common} onResult={handleFinalRenderResult} />;
-      case 'layers':       return (
-        <LayerPanel
-          projectId={projectId}
-          layers={layers}
-          selected={selectedLayerId}
-          onSelect={setSelectedLayerId}
-          onLayersChange={refreshLayers}
-        />
-      );
-      default: return null;
-    }
-  };
+  /* ── MATERIALS: render standalone full-page MaterialsEditor ── */
+  if (activeTool === 'materials') {
+    return (
+      <MaterialsEditor
+        projectId={projectId}
+        projectTitle={project?.title}
+        imageUrl={imageUrl}
+        creditBalance={creditBalance}
+        layers={layers}
+        activeTool={activeTool}
+        setActiveTool={setActiveTool}
+        onResult={handleResult}
+        onNavigateBack={() => navigate('/dashboard')}
+        isProcessing={isProcessing}
+        processingMessage={processingMessage}
+        isColdStart={isColdStart}
+        setProcessing={setProcessing}
+        isAnalyzing={isAnalyzing}
+        onAddToLayout={handleAddToLayout}
+        freeRetries={matFreeRetries}
+        setFreeRetries={setMatFreeRetries}
+      />
+    );
+  }
 
+  /* ── All other tabs: shared layout ── */
   return (
-    <div className="ep-root">
+    <div className="h-screen flex flex-col overflow-hidden bg-background text-on-surface font-body selection:bg-primary/30">
 
-      {/* ── Top bar ──────────────────────────────────────────────────────── */}
-      <header className="ep-topbar">
-        <div className="ep-topbar-left">
-          <button className="ep-back-btn" onClick={() => navigate('/dashboard')} title="대시보드로">
+      {/* ══ TOP NAV (h-20) ════════════════════════════════════════ */}
+      <header className="fixed top-0 w-full z-50 bg-[#0e0e0f]/80 backdrop-blur-xl flex justify-between items-center px-8 h-20 shadow-[0_24px_48px_rgba(0,0,0,0.4)]">
+        <div className="flex items-center gap-6">
+          <button onClick={() => navigate('/dashboard')}
+            className="text-on-surface-variant hover:text-white transition-transform active:scale-95">
             <span className="material-symbols-outlined">arrow_back</span>
           </button>
-          <div className="ep-title-group">
-            <span className="ep-project-name">{project?.title || 'AI 인테리어 에디터'}</span>
-            {activeMeta && (
-              <span className="ep-tool-name">Circle.ai — {activeMeta.label}</span>
-            )}
+          <div className="flex flex-col">
+            <h1 className="font-headline text-lg font-bold tracking-tight text-white leading-tight">
+              {project?.title || 'AI 인테리어 에디터'}
+            </h1>
+            <p className="font-label text-xs tracking-widest text-primary uppercase">
+              Circle.ai — {activeTool === 'mood' ? 'Mood' : activeTool === 'lighting' ? 'Lighting' : 'Layout'}
+            </p>
           </div>
         </div>
-        <div className="ep-topbar-center">
-          <button className="ep-hist-btn" onClick={undo} disabled={!canUndo()} title="실행 취소">
-            <span className="material-symbols-outlined" style={{ fontSize: '1.1rem' }}>undo</span>
-          </button>
-          <button className="ep-hist-btn" onClick={redo} disabled={!canRedo()} title="다시 실행">
-            <span className="material-symbols-outlined" style={{ fontSize: '1.1rem' }}>redo</span>
-          </button>
-        </div>
-        <div className="ep-topbar-right">
-          {creditBalance !== null && creditBalance < 5 && (
-            <span className="ep-low-credit-warn">크레딧 부족</span>
+
+        <div className="flex items-center gap-4">
+          {/* Layout add button (always visible in nav) */}
+          {lastResult?.result_url && (
+            <button
+              onClick={handleAddToLayout}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-primary/30 text-primary text-xs font-bold hover:bg-primary/10 transition-all"
+            >
+              <span className="material-symbols-outlined text-sm">add_photo_alternate</span>
+              레이아웃 추가
+            </button>
           )}
-          <div className="ep-credit-chip">
-            <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>generating_tokens</span>
-            <span>{creditBalance !== null ? creditBalance : '—'}</span>
+          <div className="flex items-center gap-2 bg-surface-container-high px-4 py-2 rounded-full border border-outline-variant/20">
+            <span className="material-symbols-outlined text-primary text-sm"
+              style={{ fontVariationSettings: "'FILL' 1" }}>generating_tokens</span>
+            <span className="font-headline font-bold text-sm tracking-tight text-white">
+              {creditBalance !== null ? creditBalance : '—'}
+            </span>
           </div>
-          {editorStep === 'onboarding' && (
-            <button className="ep-panel-toggle">① 분위기 설정</button>
-          )}
-          {editorStep === 'chat' && (
-            <button
-              className="ep-panel-toggle"
-              onClick={() => setEditorStep('onboarding')}
-              title="분위기 다시 설정"
-            >
-              분위기 변경
-            </button>
-          )}
-          {editorStep === 'chat' && (
-            <button
-              className={`ep-panel-toggle ${advancedMode ? 'active' : ''}`}
-              onClick={() => setAdvancedMode((v) => !v)}
-              title={advancedMode ? '채팅 모드로 전환' : '고급 에디터 열기'}
-            >
-              {advancedMode ? '채팅 모드' : '고급 에디터'}
-            </button>
-          )}
-          {advancedMode && (
-            <button className="ep-panel-toggle" onClick={() => setRightPanelOpen((v) => !v)} title="옵션 패널 토글">
-              {rightPanelOpen ? '⊳' : '⊲'}
-            </button>
-          )}
         </div>
       </header>
 
-      {/* ── Workspace ────────────────────────────────────────────────────── */}
-      <div className={`ep-workspace ${editorStep === 'onboarding' ? 'ep-workspace--onboarding' : advancedMode ? '' : 'ep-workspace--chat'}`}>
-
-        {/* ── ONBOARDING STEP ──────────────────────────────────────────────── */}
-        {editorStep === 'onboarding' && (
-          <StyleOnboarding
-            projectId={projectId}
-            imageUrl={imageUrl}
-            creditBalance={creditBalance}
-            onDone={handleOnboardingDone}
-          />
-        )}
-
-        {editorStep === 'chat' && <>
-
-        {/* Left sidebar — advanced mode only */}
-        {advancedMode && (
-          <aside className="ep-sidebar">
-            {TOOLS.map((t) => (
-              <button
-                key={t.id}
-                className={`ep-tool-btn ${activeTool === t.id ? 'active' : ''}`}
-                onClick={() => setActiveTool(t.id)}
-                title={`${t.label} — ${t.sub}`}
-              >
-                <span className="material-symbols-outlined ep-tool-icon">{t.icon}</span>
-                <span className="ep-tool-label">{t.label}</span>
-              </button>
-            ))}
-          </aside>
-        )}
-
-        {/* ── HUB MODE (default after onboarding) ──────────────────────────── */}
-        {!advancedMode && (
-          <EditorHub
-            projectId={projectId}
-            imageUrl={imageUrl}
-            resultUrl={lastResult?.result_url || null}
-            creditBalance={creditBalance}
-            isProcessing={isProcessing || isAnalyzing}
-            processingMsg={processingMessage || (isAnalyzing ? '이미지 분석 중...' : '')}
-            onSwitchService={(serviceId) => {
-              if (serviceId === 'skip') return;          // "변경 안할래요" — stay in hub
-              setAdvancedMode(true);
-              setActiveTool(serviceId);
-            }}
-            onFinalRender={() => { setAdvancedMode(true); setActiveTool('final_render'); }}
-            onMiniChatSend={(text) => {
-              // proxy to ChatPanel if available, otherwise open advanced chat
-              if (chatPanelRef.current?.sendMessage) {
-                chatPanelRef.current.sendMessage(text);
-              } else {
-                setAdvancedMode(true);
-                setActiveTool('circle_ai');
+      {/* ══ ALWAYS-VISIBLE LAYOUT BAR (h-12, top-20) ════════════ */}
+      <div className="fixed top-20 left-0 w-full z-40 h-12 flex items-center gap-3 bg-[#0e0e0f]/90 backdrop-blur-md border-b border-outline-variant/10 md:pl-[200px]"
+        style={{ paddingLeft: 'max(200px, 0px)' }}>
+        <div className="flex items-center gap-2 px-4 flex-shrink-0">
+          <span className="material-symbols-outlined text-sm text-on-surface-variant">layers</span>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">레이아웃</span>
+        </div>
+        {/* Thumbnail strip */}
+        <div className="flex gap-2 overflow-x-auto flex-1 py-1 pr-2">
+          {[...layers].reverse().map(layer => (
+            <div key={layer.id}
+              className={`flex-shrink-0 w-8 h-8 rounded-lg overflow-hidden border transition-all cursor-pointer ${
+                selectedLayerId === layer.id ? 'border-primary' : 'border-outline-variant/20 hover:border-outline-variant/60'
+              }`}
+              onClick={() => { setSelectedLayerId(layer.id); setActiveTool('layout'); }}
+            >
+              {layer.result_url
+                ? <img src={layer.result_url} alt="" className="w-full h-full object-cover" />
+                : <div className="w-full h-full bg-surface-container-high" />
               }
-            }}
-            chatMessages={[]}
-          />
-        )}
-
-        {/* ── ADVANCED MODE — original canvas + panels ────────────────────── */}
-        {advancedMode && (
-          <main className="ep-canvas-area">
-            {imageUrl ? (
-              <div className="ep-canvas-wrap" style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-                <div style={{ position: 'relative', flex: 1 }}>
-                  <RoomCanvas
-                    imageSrc={imageUrl}
-                    projectId={projectId}
-                    onMasksChange={setCanvasSegments}
-                    onEncodingChange={handleEncodingChange}
-                  />
-                  {chatPreviewMask && (
-                    <SegmentOverlay
-                      masks={[{ ...chatPreviewMask, color: '#f59e0b' }]}
-                      width={chatPreviewMask.width}
-                      height={chatPreviewMask.height}
-                      style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none', zIndex: 10 }}
-                    />
-                  )}
-                  {isProcessing && (
-                    <ProcessingOverlay message={processingMessage} isColdStart={isColdStart} />
-                  )}
-                </div>
-                {lastResult?.result_url && (
-                  <div className="ep-result-strip">
-                    <img src={lastResult.result_url} alt="최근 결과" />
-                    <div className="ep-result-meta">
-                      <span>{lastResult.style_preset ? `Circle AI — ${lastResult.style_preset}` : `레이어 #${lastResult.layer_id || '?'}`}</span>
-                      {lastResult.elapsed_s && <span>{lastResult.elapsed_s.toFixed(1)}s</span>}
-                    </div>
-                    <button
-                      className="ep-download-btn"
-                      onClick={async () => {
-                        try {
-                          const token = localStorage.getItem('auth_token');
-                          const res   = await fetch(lastResult.result_url, { credentials: 'include', headers: token ? { Authorization: `Bearer ${token}` } : {} });
-                          const blob  = await res.blob();
-                          const href  = URL.createObjectURL(blob);
-                          const a = document.createElement('a');
-                          a.href = href; a.download = 'result.jpg';
-                          document.body.appendChild(a); a.click();
-                          document.body.removeChild(a); URL.revokeObjectURL(href);
-                        } catch { window.open(lastResult.result_url, '_blank'); }
-                      }}
-                    >↓ 다운로드</button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="ep-canvas-placeholder">
-                {loadingProject
-                  ? <><span className="spinner spinner-lg" /><p>프로젝트 불러오는 중...</p></>
-                  : <><span>🏠</span><p>이미지를 불러오는 중...</p></>
-                }
-              </div>
-            )}
-          </main>
-        )}
-
-        {/* Right panel — advanced mode only */}
-        {advancedMode && rightPanelOpen && (
-          <aside className="ep-options-panel">
-            <div className="ep-options-header">
-              {activeMeta && <><span>{activeMeta.icon} {activeMeta.label}</span><span className="ep-options-sub">{activeMeta.sub}</span></>}
             </div>
-            <div className="ep-options-body">
-              {renderPanel()}
-            </div>
-          </aside>
-        )}
-        </>}  {/* end editorStep === 'chat' */}
+          ))}
+        </div>
+        {/* "레이아웃 추가" button */}
+        <button
+          onClick={handleAddToLayout}
+          className="flex-shrink-0 flex items-center gap-1.5 mr-3 px-3 py-1 rounded-lg border border-outline-variant/30 text-on-surface-variant text-[10px] font-bold hover:border-primary/50 hover:text-primary transition-all"
+        >
+          <span className="material-symbols-outlined text-sm">add</span>
+          레이아웃 추가
+        </button>
       </div>
 
-      {/* Fullscreen image overlay */}
-      {imageFullscreen && (
-        <div className="ep-fullscreen-overlay" onClick={() => setImageFullscreen(false)}>
-          <img src={lastResult?.result_url || imageUrl} alt="전체화면" className="ep-fullscreen-img" />
-          <button className="ep-fullscreen-close">✕</button>
-        </div>
-      )}
+      {/* ══ DESKTOP LEFT NAV (w-[200px], fixed) ════════════════ */}
+      <nav className="hidden md:flex fixed left-0 top-32 h-[calc(100vh-128px)] flex-col py-6 px-4 border-r border-outline-variant/10 z-40"
+        style={{ width: '200px', background: '#0e0e0f' }}>
 
-      {/* Correction Mode modal */}
+        <div className="mb-8">
+          <h2 className="font-headline text-sm font-bold text-white">Design Tools</h2>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant">
+              AI Assistant Active
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2 flex-1">
+          {/* Mood */}
+          {SIDE_NAV.map(item => {
+            const isActive = activeTool === item.id;
+            return (
+              <button key={item.id}
+                className={`flex items-center gap-3 p-3 rounded-xl transition-all text-left ${
+                  isActive
+                    ? 'text-[#bd9dff] border-l-4 border-[#7c3aed]'
+                    : 'text-[#adaaab] border-l-4 border-transparent hover:bg-white/5'
+                }`}
+                style={isActive ? { background: 'rgba(124,58,237,0.1)' } : {}}
+                onClick={() => setActiveTool(item.id)}
+              >
+                <span className="material-symbols-outlined"
+                  style={isActive ? { fontVariationSettings: "'FILL' 1" } : {}}>
+                  {item.icon}
+                </span>
+                <div>
+                  <p className="text-xs font-bold tracking-tight">{item.label}</p>
+                  <p className="text-[9px] opacity-60">{item.sub}</p>
+                </div>
+              </button>
+            );
+          })}
+
+          {/* Materials — navigates to full MaterialsEditor */}
+          <button
+            className="flex items-center gap-3 p-3 rounded-xl transition-all text-left text-[#adaaab] hover:bg-white/5 border-l-4 border-transparent"
+            onClick={() => setActiveTool('materials')}
+          >
+            <span className="material-symbols-outlined">texture</span>
+            <div>
+              <p className="text-xs font-bold tracking-tight">Materials</p>
+              <p className="text-[9px] opacity-60">자재 &amp; SAM</p>
+            </div>
+          </button>
+        </div>
+
+        {/* Bottom: Layout + Circle.ai 메이커 */}
+        <div className="border-t border-outline-variant/10 pt-4 space-y-3">
+          <button
+            className={`flex items-center gap-3 p-3 rounded-xl transition-all text-left w-full border-l-4 ${
+              activeTool === 'layout'
+                ? 'text-[#bd9dff] border-[#7c3aed]'
+                : 'text-[#adaaab] border-transparent hover:bg-white/5'
+            }`}
+            style={activeTool === 'layout' ? { background: 'rgba(124,58,237,0.1)' } : {}}
+            onClick={() => setActiveTool('layout')}
+          >
+            <span className="material-symbols-outlined"
+              style={activeTool === 'layout' ? { fontVariationSettings: "'FILL' 1" } : {}}>
+              grid_view
+            </span>
+            <div>
+              <p className="text-[10px] font-bold tracking-tight">Layout</p>
+              <p className="text-[9px] opacity-60">변경 전체 목록</p>
+            </div>
+          </button>
+
+          <div
+            className="w-full py-2.5 rounded-full text-xs font-extrabold text-center"
+            style={{
+              background: 'linear-gradient(135deg, #bd9dff, #8a4cfc)',
+              color: '#3c0089',
+              boxShadow: '0 4px 20px rgba(189,157,255,0.2)',
+              cursor: 'default',
+            }}
+          >
+            Circle.ai
+          </div>
+        </div>
+      </nav>
+
+      {/* ══ MAIN (offset for nav + layout bar) ════════════════════ */}
+      {/* top-20 (nav) + h-12 (layout bar) = pt-32 */}
+      <main className="pt-32 h-screen flex overflow-hidden md:pl-[200px]">
+
+        {/* ── CENTER Viewport ── */}
+        <section className="flex-1 flex flex-col relative bg-surface-container-lowest p-6 min-w-0">
+
+          {/* MOOD center */}
+          {activeTool === 'mood' && (
+            <>
+              <div className="relative w-full flex-1 rounded-xl overflow-hidden shadow-2xl bg-surface-container border border-outline-variant/20">
+                {moodPhase === 'result' && moodResultUrl && imageUrl ? (
+                  <ReactCompareSlider
+                    itemOne={<ReactCompareSliderImage src={imageUrl} alt="원본" style={{ objectFit: 'cover' }} />}
+                    itemTwo={<ReactCompareSliderImage src={moodResultUrl} alt="변환" style={{ objectFit: 'cover' }} />}
+                    style={{ width: '100%', height: '100%' }}
+                  />
+                ) : displayUrl ? (
+                  <img className="w-full h-full object-contain" src={displayUrl} alt="Interior" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-on-surface-variant">
+                    {loadingProject ? '불러오는 중...' : '이미지를 불러오는 중...'}
+                  </div>
+                )}
+
+                {(moodResultUrl || lastResult?.result_url) && (
+                  <div className="absolute top-6 left-6 flex items-center gap-2 bg-[#1a191b]/60 backdrop-blur-xl px-4 py-2 rounded-full border border-primary/30"
+                    style={{ boxShadow: '0 0 20px rgba(124,58,237,0.2)' }}>
+                    <span className="material-symbols-outlined text-primary text-sm"
+                      style={{ fontVariationSettings: "'FILL' 1" }}>colors_spark</span>
+                    <span className="text-xs font-headline font-bold tracking-tight text-white uppercase">AI Transformed</span>
+                  </div>
+                )}
+
+                {moodPhase === 'result' && (
+                  <>
+                    <span className="absolute top-4 right-4 text-[10px] font-bold bg-primary/20 backdrop-blur-sm px-2 py-1 rounded-full text-primary border border-primary/30">AI 변환</span>
+                    <span className="absolute top-4 left-16 text-[10px] font-bold bg-black/50 backdrop-blur-sm px-2 py-1 rounded-full text-white">원본</span>
+                  </>
+                )}
+
+                {(isProcessing || isAnalyzing) && (
+                  <ProcessingOverlay
+                    message={processingMessage || (isAnalyzing ? '이미지 분석 중...' : '')}
+                    isColdStart={isColdStart}
+                  />
+                )}
+              </div>
+
+              {moodPhase === 'select' && (
+                <p className="text-center text-xs text-on-surface-variant mt-3 flex-shrink-0">
+                  오른쪽 패널에서 참조 이미지를 업로드하고 변환하세요
+                </p>
+              )}
+            </>
+          )}
+
+          {/* LIGHTING center */}
+          {activeTool === 'lighting' && (
+            <div className="relative w-full flex-1 rounded-xl overflow-hidden shadow-2xl bg-surface-container border border-outline-variant/20">
+              {displayUrl ? (
+                <img className="w-full h-full object-contain" src={displayUrl} alt="Interior" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-on-surface-variant">
+                  {loadingProject ? '불러오는 중...' : '이미지를 불러오는 중...'}
+                </div>
+              )}
+              <div className="absolute top-6 left-6 flex items-center gap-2 bg-[#1a191b]/60 backdrop-blur-xl px-4 py-2 rounded-full border border-outline-variant/20">
+                <span className="material-symbols-outlined text-primary text-sm"
+                  style={{ fontVariationSettings: "'FILL' 1" }}>wb_incandescent</span>
+                <span className="text-xs font-headline font-bold text-white uppercase tracking-wider">Lighting</span>
+              </div>
+              {isProcessing && <ProcessingOverlay message={processingMessage} isColdStart={isColdStart} />}
+            </div>
+          )}
+
+          {/* LAYOUT center */}
+          {activeTool === 'layout' && (
+            <div className="flex flex-col flex-1 gap-4 overflow-hidden">
+              <div className="relative flex-1 rounded-xl overflow-hidden shadow-2xl bg-surface-container border border-outline-variant/20">
+                {displayUrl ? (
+                  <img className="w-full h-full object-cover" src={displayUrl} alt="Interior" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-on-surface-variant">
+                    {loadingProject ? '불러오는 중...' : '이미지를 불러오는 중...'}
+                  </div>
+                )}
+                <div className="absolute top-6 left-6 flex items-center gap-2 bg-[#1a191b]/60 backdrop-blur-xl px-4 py-2 rounded-full border border-outline-variant/20">
+                  <span className="material-symbols-outlined text-primary text-sm"
+                    style={{ fontVariationSettings: "'FILL' 1" }}>layers</span>
+                  <span className="text-xs font-headline font-bold text-white uppercase tracking-wider">
+                    {layers.length}개의 변경 레이어
+                  </span>
+                </div>
+              </div>
+              {/* Thumbnail strip */}
+              {layers.length > 0 && (
+                <div className="flex-shrink-0 flex gap-3 overflow-x-auto pb-1">
+                  {[...layers].reverse().map((layer, i) => (
+                    <div key={layer.id}
+                      className={`flex-shrink-0 w-24 flex flex-col gap-1 cursor-pointer`}
+                      onClick={() => setSelectedLayerId(layer.id)}
+                    >
+                      <div className={`relative rounded-lg overflow-hidden h-16 border transition-all ${
+                        selectedLayerId === layer.id ? 'border-primary' : 'border-outline-variant/20'
+                      }`}>
+                        {layer.result_url
+                          ? <img src={layer.result_url} alt={layer.name} className="w-full h-full object-cover" />
+                          : <div className="w-full h-full bg-surface-container-high flex items-center justify-center">
+                              <span className="material-symbols-outlined text-on-surface-variant text-sm">image</span>
+                            </div>
+                        }
+                        <span className="absolute bottom-1 left-1 text-[9px] bg-black/70 px-1 py-0.5 rounded text-white">
+                          {layers.length - i}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-on-surface-variant truncate text-center">
+                        {layer.name || `레이어 ${layers.length - i}`}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+
+        {/* ── RIGHT PANEL ── */}
+        <aside className="w-[400px] flex-shrink-0 bg-surface-container-low border-l border-outline-variant/10 p-6 flex flex-col gap-6 overflow-y-auto">
+
+          {/* Panel title */}
+          {activeTool === 'mood' && (
+            <div className="flex-shrink-0 flex flex-col gap-1">
+              <h3 className="font-headline text-base font-bold text-white">Mood</h3>
+              <p className="text-xs text-on-surface-variant">분위기 변환</p>
+            </div>
+          )}
+          {activeTool === 'lighting' && (
+            <div className="flex-shrink-0 flex flex-col gap-1">
+              <h3 className="font-headline text-base font-bold text-white">Lighting</h3>
+              <p className="text-xs text-on-surface-variant">조명 조절</p>
+            </div>
+          )}
+          {activeTool === 'layout' && (
+            <div className="flex-shrink-0 flex flex-col gap-1">
+              <h3 className="font-headline text-base font-bold text-white">Layout</h3>
+              <p className="text-xs text-on-surface-variant">변경 전체 목록</p>
+            </div>
+          )}
+
+          {/* MOOD panel */}
+          {activeTool === 'mood' && (
+            <MoodPanel
+              projectId={projectId}
+              creditBalance={creditBalance}
+              onResult={handleResult}
+              onPhaseChange={handleMoodPhaseChange}
+              onAddToLayout={handleAddToLayout}
+              phase={moodPhase}
+              retriesLeft={moodRetries}
+              setRetries={setMoodRetries}
+            />
+          )}
+
+          {/* LIGHTING panel */}
+          {activeTool === 'lighting' && (
+            <LightingPanel
+              projectId={projectId}
+              originalImageUrl={displayUrl}
+              creditBalance={creditBalance}
+              onResult={handleResult}
+            />
+          )}
+
+          {/* LAYOUT panel */}
+          {activeTool === 'layout' && (
+            <div className="flex-1 overflow-y-auto">
+              {layers.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-48 gap-3 text-on-surface-variant">
+                  <span className="material-symbols-outlined text-4xl opacity-40">layers</span>
+                  <p className="text-sm text-center">아직 변경 내역이 없습니다.<br />Mood, Materials, Lighting 탭에서 편집을 시작하세요.</p>
+                </div>
+              ) : (
+                <LayerPanel
+                  projectId={projectId}
+                  layers={layers}
+                  selected={selectedLayerId}
+                  onSelect={setSelectedLayerId}
+                  onLayersChange={refreshLayers}
+                />
+              )}
+            </div>
+          )}
+
+          {/* Export card for mood/layout */}
+          {(activeTool === 'mood' || activeTool === 'layout') && (
+            <div className="mt-auto pt-4 flex-shrink-0">
+              <button
+                className="w-full relative group overflow-hidden rounded-2xl p-6 transition-all active:scale-[0.98]"
+                onClick={() => setActiveTool('lighting')}
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-[#7c3aed] to-[#bd9dff] group-hover:opacity-90 transition-opacity" />
+                <div className="absolute -right-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500" />
+                <div className="relative flex flex-col items-start gap-1">
+                  <div className="flex items-center justify-between w-full mb-2">
+                    <span className="material-symbols-outlined text-white"
+                      style={{ fontVariationSettings: "'FILL' 1" }}>download</span>
+                    <span className="bg-black/20 text-[10px] text-white font-bold py-1 px-2 rounded-full uppercase">Pro</span>
+                  </div>
+                  <p className="text-lg font-headline font-bold text-white tracking-tight">Export High Quality Image</p>
+                  <p className="text-xs text-white/80 font-medium">SDXL Refiner + Upscale 4K</p>
+                </div>
+              </button>
+            </div>
+          )}
+        </aside>
+      </main>
+
+      {/* ══ MOBILE BOTTOM NAV ═════════════════════════════════════ */}
+      <nav className="md:hidden fixed bottom-0 left-0 w-full flex justify-around items-center h-20 bg-[#0e0e0f]/90 backdrop-blur-2xl z-50 rounded-t-3xl border-t border-white/10 shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
+        <a href="#" onClick={e => { e.preventDefault(); navigate('/dashboard'); }}
+          className="flex flex-col items-center justify-center text-[#adaaab] px-4 py-2 hover:text-white transition-all">
+          <span className="material-symbols-outlined">home</span>
+          <span className="text-[10px] font-bold uppercase tracking-widest">Home</span>
+        </a>
+        {['mood', 'materials', 'lighting', 'layout'].map(tool => {
+          const icons = { mood: 'palette', materials: 'texture', lighting: 'wb_incandescent', layout: 'grid_view' };
+          return (
+            <a key={tool} href="#"
+              className={`flex flex-col items-center justify-center px-4 py-2 transition-all ${
+                activeTool === tool
+                  ? 'text-[#bd9dff] bg-[#7c3aed]/20 rounded-xl scale-110'
+                  : 'text-[#adaaab] hover:text-white'
+              }`}
+              onClick={e => { e.preventDefault(); setActiveTool(tool); }}
+            >
+              <span className="material-symbols-outlined"
+                style={activeTool === tool ? { fontVariationSettings: "'FILL' 1" } : {}}>{icons[tool]}</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest capitalize">{tool}</span>
+            </a>
+          );
+        })}
+      </nav>
+
+      {/* ══ CORRECTION MODE ═══════════════════════════════════════ */}
       {correctionIntent && (
         <CorrectionMode
           imageUrl={imageUrl}

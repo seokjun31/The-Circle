@@ -80,7 +80,7 @@ const LARGE_PREV_W = 280;
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, className = '' }) {
+function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, className = '', externalMode, hideSidebar = false }) {
   // ── SAM hook ──────────────────────────────────────────────────────────────
   const {
     initModel,
@@ -113,7 +113,11 @@ function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, clas
   const panStart  = useRef({ mx: 0, my: 0, px: 0, py: 0 });
 
   // ── Input mode ────────────────────────────────────────────────────────────
-  const [inputMode, setInputMode] = useState('lasso');
+  const [inputMode, setInputMode] = useState(externalMode || 'lasso');
+  // Sync with external mode prop
+  useEffect(() => {
+    if (externalMode && externalMode !== inputMode) setInputMode(externalMode);
+  }, [externalMode]); // eslint-disable-line
   const [brushSize, setBrushSize] = useState(BRUSH_INIT);
   const strokeCountRef = useRef(0);
   const brushMode = inputMode === 'brush';
@@ -563,7 +567,7 @@ function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, clas
     <div className={`room-canvas-root ${className}`}>
 
       {/* ── Left panel ─────────────────────────────────────────────────── */}
-      <div className="room-canvas-sidebar">
+      {!hideSidebar && <div className="room-canvas-sidebar">
 
         {/* Quick label selector */}
         <div className="rcs-section">
@@ -710,7 +714,7 @@ function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, clas
             </button>
           </div>
         )}
-      </div>
+      </div>}
 
       {/* ── Main canvas area ────────────────────────────────────────────── */}
       <div className="room-canvas-main">
