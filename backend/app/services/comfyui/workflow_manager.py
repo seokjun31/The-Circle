@@ -295,53 +295,73 @@ class WorkflowManager:
         reference_image_url: Union[str, bytes],
         strength:            float = 0.70,
         prompt:              str   = (
-            "photorealistic interior photography, perfect lighting, "
-            "architectural visualization, 8k resolution"
+            "interior photography, beautiful lighting, high quality, 8k, "
+            "professional photo, warm ambient light, realistic textures, soft shadows"
         ),
-        negative_prompt:     str   = _NEGATIVE_BASE,
-        steps:               int   = 25,
-        cfg:                 float = 7.0,
+        negative_prompt:     str   = (
+            "((built-in oven, microwave, square ceiling panels, black boxes on wall:1.5)),"
+            "(CGI, 3D render:1.2), (mirror floor, extreme reflection, glossy floor:1.2), "
+            "blurry, watercolor, painting, distorted, deformed, low quality, worst quality, "
+            "cartoon, anime, illustration, sketch, oversaturated, spots, polka dots, holes, "
+            "trypophobia, heavy noise, dirt, stain, black dots, wet floor, floating objects, "
+            "dark spots on ceiling, unrealistic, square lights, ceiling vents, track lights, "
+            "floating panels, cracked floor, broken marble, chaotic lines, complex ceiling, "
+            "watermark, text, signature, logo"
+        ),
+        steps:               int   = 30,
+        cfg:                 float = 5.0,
+        denoise:             float = 0.62,
+        depth_strength:      float = 0.85,
+        canny_strength:      float = 0.75,
+        ipadapter_weight:    float = 0.70,
+        ipadapter_end_at:    float = 0.77,
         seed:                Optional[int] = None,
     ) -> dict[str, Any]:
         """
         Copy the mood, lighting, and atmosphere of a reference image onto
-        the source room (img2img via IP-Adapter).
+        the source room using IP-Adapter Advanced + dual ControlNet (Depth + Canny).
 
         Args:
             source_image_url:    Room to transform.
             reference_image_url: Inspiration / mood board image.
-            strength:            0.5–0.9; maps to IP-Adapter weight + denoise.
-            prompt:              Additional positive conditioning.
+            strength:            0.5–0.9; used to derive IP-Adapter weight + denoise
+                                 when explicit values are not provided.
+            prompt:              Positive conditioning.
             negative_prompt:     Negative conditioning.
             steps:               KSampler steps.
             cfg:                 CFG scale.
+            denoise:             KSampler denoise strength.
+            depth_strength:      ControlNet Depth strength (0.5–1.0).
+            canny_strength:      ControlNet Canny strength (0.3–0.9).
+            ipadapter_weight:    IP-Adapter weight (0.4–0.9).
+            ipadapter_end_at:    IP-Adapter end_at (0.5–1.0).
             seed:                Fixed seed; None = random.
 
         Returns:
             ComfyUI API-format workflow dict.
         """
-        src_b64     = _ensure_base64(source_image_url)
-        ref_b64     = _ensure_base64(reference_image_url)
-        seed        = seed if seed is not None else _rand_seed()
-        w, h        = _image_size_from_b64(src_b64)
-        nw, nh      = self.calc_sdxl_size(w, h)
-        ipadapter_w = min(strength + 0.1, 0.95)
-        denoise     = max(strength - 0.1, 0.30)
+        src_b64 = _ensure_base64(source_image_url)
+        ref_b64 = _ensure_base64(reference_image_url)
+        seed    = seed if seed is not None else _rand_seed()
 
         return self.load_and_inject_workflow("mood", {
-            "2":   {"image": src_b64},
-            "3":   {"image": ref_b64},
-            "4":   {"ipadapter_file": _IPADAPTER_SDXL},
-            "6":   {"weight": ipadapter_w},
-            "7":   {"text": prompt},
-            "8":   {"text": negative_prompt},
-            "10":  {
+            "1":   {"image": src_b64},
+            "2":   {"image": ref_b64},
+            "4":   {"text": prompt},
+            "5":   {"text": negative_prompt},
+            "10":  {"strength": depth_strength},
+            "13":  {"strength": canny_strength},
+            "14":  {"ipadapter_file": _IPADAPTER_SDXL},
+            "17":  {
                 "seed":    seed,
                 "steps":   steps,
                 "cfg":     cfg,
                 "denoise": denoise,
             },
-            "100": {"width": nw, "height": nh},
+            "24":  {
+                "weight": ipadapter_weight,
+                "end_at": ipadapter_end_at,
+            },
         })
 
     async def build_material_workflow(
