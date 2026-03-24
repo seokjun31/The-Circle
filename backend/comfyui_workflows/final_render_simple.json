@@ -1,0 +1,95 @@
+{
+  "_comment": "The Circle — Final Render Simple Workflow (Base only, no refiner/upscale, API format)",
+  "_description": [
+    "Pipeline: SDXL Base only (no refiner, no upscale).",
+    "Used for quality='standard' renders (3 credits).",
+    "",
+    "Runtime injections (WorkflowManager.build_final_render_workflow, upscale=False):",
+    "  Node 2   image           — composite edited room base64",
+    "  Node 3   text            — positive prompt",
+    "  Node 4   text            — negative prompt",
+    "  Node 6   seed/steps/cfg/denoise",
+    "  Node 100 width/height    — SDXL-optimal dimensions"
+  ],
+  "1": {
+    "class_type": "CheckpointLoaderSimple",
+    "_label": "Load SDXL Base",
+    "inputs": {
+      "ckpt_name": "sd_xl_base_1.0.safetensors"
+    }
+  },
+  "2": {
+    "class_type": "ETN_LoadImageBase64",
+    "_label": "Load Composite Edited Room",
+    "inputs": {
+      "image": ""
+    }
+  },
+  "100": {
+    "class_type": "ImageScale",
+    "_label": "Scale to SDXL-optimal resolution",
+    "inputs": {
+      "image":          ["2", 0],
+      "upscale_method": "lanczos",
+      "width":          1024,
+      "height":         1024,
+      "crop":           "disabled"
+    }
+  },
+  "3": {
+    "class_type": "CLIPTextEncode",
+    "_label": "Positive Prompt",
+    "inputs": {
+      "clip": ["1", 1],
+      "text": "photorealistic interior architectural photography, soft natural daylight, 8k resolution, perfect composition, ultra detailed, sharp focus, professional interior design"
+    }
+  },
+  "4": {
+    "class_type": "CLIPTextEncode",
+    "_label": "Negative Prompt",
+    "inputs": {
+      "clip": ["1", 1],
+      "text": "people, person, human, text, watermark, logo, blurry, low quality, artifacts, distorted, oversaturated, cartoon, anime, illustration, painting, unrealistic, dark, gloomy"
+    }
+  },
+  "5": {
+    "class_type": "VAEEncode",
+    "_label": "Encode for img2img",
+    "inputs": {
+      "pixels": ["100", 0],
+      "vae":    ["1",   2]
+    }
+  },
+  "6": {
+    "class_type": "KSampler",
+    "_label": "KSampler (standard quality render)",
+    "inputs": {
+      "model":        ["1", 0],
+      "positive":     ["3", 0],
+      "negative":     ["4", 0],
+      "latent_image": ["5", 0],
+      "seed":         42,
+      "steps":        25,
+      "cfg":          7.5,
+      "sampler_name": "dpmpp_2m",
+      "scheduler":    "karras",
+      "denoise":      0.25
+    }
+  },
+  "7": {
+    "class_type": "VAEDecode",
+    "_label": "Decode Latent",
+    "inputs": {
+      "samples": ["6", 0],
+      "vae":     ["1", 2]
+    }
+  },
+  "8": {
+    "class_type": "SaveImage",
+    "_label": "Save Result",
+    "inputs": {
+      "images":          ["7", 0],
+      "filename_prefix": "final_render_simple"
+    }
+  }
+}

@@ -147,7 +147,7 @@ class CircleAIService:
         )
 
         # ── 3. Build ComfyUI workflow ─────────────────────────────────────────
-        workflow = self._wm.build_circle_ai_workflow(
+        workflow = await self._wm.build_circle_ai_workflow(
             image_url        = project.original_image_url,
             style_prompt     = style_prompt,
             denoise_strength = strength,

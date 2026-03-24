@@ -1,0 +1,135 @@
+{
+  "_comment": "The Circle — Mood Copy Workflow (API format)",
+  "_description": [
+    "Pipeline: SDXL Base + IP-Adapter (high weight) + img2img",
+    "Copies mood, lighting, and atmosphere from a reference image.",
+    "",
+    "Runtime injections (WorkflowManager.build_mood_copy_workflow):",
+    "  Node 2   image           — source room base64",
+    "  Node 3   image           — reference/mood board base64",
+    "  Node 4   ipadapter_file  — IP-Adapter model name",
+    "  Node 6   weight          — IP-Adapter weight (derived from strength)",
+    "  Node 7   text            — positive prompt",
+    "  Node 8   text            — negative prompt",
+    "  Node 10  seed/steps/cfg/denoise",
+    "  Node 100 width/height    — SDXL-optimal dimensions from calc_sdxl_size()"
+  ],
+  "1": {
+    "class_type": "CheckpointLoaderSimple",
+    "_label": "Load SDXL Base",
+    "inputs": {
+      "ckpt_name": "sd_xl_base_1.0.safetensors"
+    }
+  },
+  "2": {
+    "class_type": "ETN_LoadImageBase64",
+    "_label": "Load Source Room Image",
+    "inputs": {
+      "image": ""
+    }
+  },
+  "100": {
+    "class_type": "ImageScale",
+    "_label": "Scale to SDXL-optimal resolution",
+    "inputs": {
+      "image":          ["2", 0],
+      "upscale_method": "lanczos",
+      "width":          1024,
+      "height":         1024,
+      "crop":           "disabled"
+    }
+  },
+  "3": {
+    "class_type": "ETN_LoadImageBase64",
+    "_label": "Load Reference / Mood Board Image",
+    "inputs": {
+      "image": ""
+    }
+  },
+  "4": {
+    "class_type": "IPAdapterModelLoader",
+    "_label": "Load IP-Adapter SDXL Plus ViT-H",
+    "inputs": {
+      "ipadapter_file": "IP-Adapter-Plus_SDXL.safetensors"
+    }
+  },
+  "5": {
+    "class_type": "CLIPVisionLoader",
+    "_label": "Load CLIP Vision Encoder (ViT-H-14)",
+    "inputs": {
+      "clip_name": "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors"
+    }
+  },
+  "6": {
+    "class_type": "IPAdapterApply",
+    "_label": "Apply IP-Adapter (reference mood → style transfer)",
+    "inputs": {
+      "ipadapter":    ["4", 0],
+      "clip_vision":  ["5", 0],
+      "image":        ["3", 0],
+      "model":        ["1", 0],
+      "weight":       0.80,
+      "noise":        0.0,
+      "weight_type":  "ease in",
+      "start_at":     0.0,
+      "end_at":       1.0,
+      "unfold_batch": false
+    }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "_label": "Positive Prompt",
+    "inputs": {
+      "clip": ["1", 1],
+      "text": "photorealistic interior photography, perfect lighting, architectural visualization, 8k resolution"
+    }
+  },
+  "8": {
+    "class_type": "CLIPTextEncode",
+    "_label": "Negative Prompt",
+    "inputs": {
+      "clip": ["1", 1],
+      "text": "people, person, human, text, watermark, logo, blurry, low quality, artifacts, distorted, oversaturated, cartoon, anime, illustration, painting, unrealistic, dark, gloomy"
+    }
+  },
+  "9": {
+    "class_type": "VAEEncode",
+    "_label": "Encode for img2img",
+    "inputs": {
+      "pixels": ["100", 0],
+      "vae":    ["1",   2]
+    }
+  },
+  "10": {
+    "class_type": "KSampler",
+    "_label": "KSampler (mood transfer)",
+    "inputs": {
+      "model":        ["6", 0],
+      "positive":     ["7", 0],
+      "negative":     ["8", 0],
+      "latent_image": ["9", 0],
+      "seed":         42,
+      "steps":        25,
+      "cfg":          7.0,
+      "sampler_name": "dpmpp_2m",
+      "scheduler":    "karras",
+      "denoise":      0.60
+    }
+  },
+  "11": {
+    "class_type": "VAEDecode",
+    "_label": "Decode Latent",
+    "inputs": {
+      "samples": ["10", 0],
+      "vae":     ["1",  2]
+    }
+  },
+  "12": {
+    "class_type": "SaveImage",
+    "_label": "Save Result",
+    "inputs": {
+      "images":          ["11", 0],
+      "filename_prefix": "mood_copy"
+    }
+  }
+}

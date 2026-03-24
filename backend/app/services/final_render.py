@@ -300,14 +300,14 @@ class FinalRenderService:
         lighting_prompt = _LIGHTING_PROMPTS[lighting]
         is_high = quality == "high"
 
-        workflow = self._wm.build_final_render_workflow(
-            image_url   = composite_b64,
-            lighting    = lighting_prompt,
-            quality     = quality,
-            base_denoise = 0.30 if is_high else 0.25,
-            base_steps   = 40 if is_high else 25,
+        workflow = await self._wm.build_final_render_workflow(
+            image_url     = composite_b64,
+            lighting      = lighting_prompt,
+            quality       = quality,
+            base_denoise  = 0.30 if is_high else 0.25,
+            base_steps    = 40 if is_high else 25,
             refiner_steps = 10 if is_high else 0,
-            upscale      = is_high,
+            upscale       = is_high,
         )
 
         yield _sse_event({"progress": 45, "step": "AI 렌더링 실행 중..." })

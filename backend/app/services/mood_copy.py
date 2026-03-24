@@ -104,7 +104,7 @@ class MoodCopyService:
 
         # ── 2. Build ComfyUI workflow ─────────────────────────────────────────
         # WorkflowManager._ensure_base64() handles URLs, data-URLs, and raw b64.
-        workflow = self._wm.build_mood_copy_workflow(
+        workflow = await self._wm.build_mood_copy_workflow(
             source_image_url    = project.original_image_url,
             reference_image_url = reference_image,
             strength            = strength,

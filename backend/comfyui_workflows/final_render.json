@@ -1,0 +1,169 @@
+{
+  "_comment": "The Circle — Final Render Workflow (Base + Refiner + 2x Upscale, API format)",
+  "_description": [
+    "Pipeline: SDXL Base → KSamplerAdvanced → SDXL Refiner → Real-ESRGAN 2× → downscale 2048px",
+    "Used for quality='high' renders.",
+    "",
+    "Runtime injections (WorkflowManager.build_final_render_workflow, upscale=True):",
+    "  Node 2   image                        — composite edited room base64",
+    "  Node 3   text                         — positive prompt (base)",
+    "  Node 4   text                         — negative prompt (base)",
+    "  Node 6   noise_seed/steps/cfg/end_at_step",
+    "  Node 8   text                         — positive prompt (refiner)",
+    "  Node 9   text                         — negative prompt (refiner)",
+    "  Node 10  noise_seed/steps/cfg/start_at_step/end_at_step",
+    "  Node 100 width/height                 — SDXL-optimal dimensions"
+  ],
+  "1": {
+    "class_type": "CheckpointLoaderSimple",
+    "_label": "Load SDXL Base",
+    "inputs": {
+      "ckpt_name": "sd_xl_base_1.0.safetensors"
+    }
+  },
+  "2": {
+    "class_type": "ETN_LoadImageBase64",
+    "_label": "Load Composite Edited Room",
+    "inputs": {
+      "image": ""
+    }
+  },
+  "100": {
+    "class_type": "ImageScale",
+    "_label": "Scale to SDXL-optimal resolution",
+    "inputs": {
+      "image":          ["2", 0],
+      "upscale_method": "lanczos",
+      "width":          1024,
+      "height":         1024,
+      "crop":           "disabled"
+    }
+  },
+  "3": {
+    "class_type": "CLIPTextEncode",
+    "_label": "Positive Prompt (Base)",
+    "inputs": {
+      "clip": ["1", 1],
+      "text": "photorealistic interior architectural photography, soft natural daylight, 8k resolution, perfect composition, ultra detailed, sharp focus, cinematic lighting, professional interior design"
+    }
+  },
+  "4": {
+    "class_type": "CLIPTextEncode",
+    "_label": "Negative Prompt (Base)",
+    "inputs": {
+      "clip": ["1", 1],
+      "text": "people, person, human, text, watermark, logo, blurry, low quality, artifacts, distorted, oversaturated, cartoon, anime, illustration, painting, unrealistic, dark, gloomy"
+    }
+  },
+  "5": {
+    "class_type": "VAEEncode",
+    "_label": "Encode for img2img (Base)",
+    "inputs": {
+      "pixels": ["100", 0],
+      "vae":    ["1",   2]
+    }
+  },
+  "6": {
+    "class_type": "KSamplerAdvanced",
+    "_label": "KSamplerAdvanced — Base Stage",
+    "inputs": {
+      "model":                      ["1", 0],
+      "positive":                   ["3", 0],
+      "negative":                   ["4", 0],
+      "latent_image":               ["5", 0],
+      "noise_seed":                 42,
+      "steps":                      30,
+      "cfg":                        7.5,
+      "sampler_name":               "dpmpp_2m",
+      "scheduler":                  "karras",
+      "start_at_step":              0,
+      "end_at_step":                20,
+      "add_noise":                  "enable",
+      "return_with_leftover_noise": "enable"
+    }
+  },
+  "7": {
+    "class_type": "CheckpointLoaderSimple",
+    "_label": "Load SDXL Refiner",
+    "inputs": {
+      "ckpt_name": "sdxl_refiner_1.0.safetensors"
+    }
+  },
+  "8": {
+    "class_type": "CLIPTextEncode",
+    "_label": "Positive Prompt (Refiner)",
+    "inputs": {
+      "clip": ["7", 1],
+      "text": "photorealistic interior architectural photography, soft natural daylight, 8k resolution, perfect composition, ultra detailed, sharp focus, cinematic lighting, professional interior design"
+    }
+  },
+  "9": {
+    "class_type": "CLIPTextEncode",
+    "_label": "Negative Prompt (Refiner)",
+    "inputs": {
+      "clip": ["7", 1],
+      "text": "people, person, human, text, watermark, logo, blurry, low quality, artifacts, distorted, oversaturated, cartoon, anime, illustration, painting, unrealistic, dark, gloomy"
+    }
+  },
+  "10": {
+    "class_type": "KSamplerAdvanced",
+    "_label": "KSamplerAdvanced — Refiner Stage",
+    "inputs": {
+      "model":                      ["7",  0],
+      "positive":                   ["8",  0],
+      "negative":                   ["9",  0],
+      "latent_image":               ["6",  0],
+      "noise_seed":                 42,
+      "steps":                      30,
+      "cfg":                        7.5,
+      "sampler_name":               "dpmpp_2m",
+      "scheduler":                  "karras",
+      "start_at_step":              20,
+      "end_at_step":                30,
+      "add_noise":                  "disable",
+      "return_with_leftover_noise": "disable"
+    }
+  },
+  "11": {
+    "class_type": "VAEDecode",
+    "_label": "Decode Latent",
+    "inputs": {
+      "samples": ["10", 0],
+      "vae":     ["1",  2]
+    }
+  },
+  "12": {
+    "class_type": "UpscaleModelLoader",
+    "_label": "Load Real-ESRGAN 2x Upscaler",
+    "inputs": {
+      "model_name": "RealESRGAN_x2plus.pth"
+    }
+  },
+  "13": {
+    "class_type": "ImageUpscaleWithModel",
+    "_label": "Real-ESRGAN 2x Upscale",
+    "inputs": {
+      "upscale_model": ["12", 0],
+      "image":         ["11", 0]
+    }
+  },
+  "14": {
+    "class_type": "ImageScale",
+    "_label": "Downscale to 2048px (print-ready)",
+    "inputs": {
+      "image":          ["13", 0],
+      "upscale_method": "lanczos",
+      "width":          2048,
+      "height":         0,
+      "crop":           "disabled"
+    }
+  },
+  "15": {
+    "class_type": "SaveImage",
+    "_label": "Save Final Result",
+    "inputs": {
+      "images":          ["14", 0],
+      "filename_prefix": "final_render"
+    }
+  }
+}
