@@ -305,7 +305,7 @@ export async function applyCircleAI(projectId, payload) {
  */
 export async function copyMood(projectId, payload) {
   const { data } = await api.post(
-    `/v1/projects/${projectId}/mood-copy`,
+    `/v1/projects/${projectId}/mood`,
     {
       reference_image: payload.referenceImage,
       strength:        payload.strength,
