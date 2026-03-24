@@ -1,5 +1,5 @@
 """
-FurniturePlaceService — composite + AI-blend a furniture item into a room photo.
+FurnitureService — composite + AI-blend a furniture item into a room photo.
 
 Pipeline
 --------
@@ -9,12 +9,12 @@ Pipeline
 4.  Alpha-composite furniture onto room at (position_x, position_y)
 5.  Generate blend mask: furniture bounding box + 40 px dilation
 6.  Encode composite + masked furniture as base64
-7.  Call WorkflowManager.build_furniture_place_workflow()
+7.  Call WorkflowManager.build_furniture_workflow()
 8.  Submit to RunPod via RunPodClient.run_async() (timeout: 90 s)
 9.  Save result to S3/local
 10. Compute fit check (furniture_width_cm vs space_width_cm)
 11. Create EditLayer(layer_type=furniture)
-12. Return FurniturePlaceResult
+12. Return FurnitureResult
 
 Fit-check categories
 --------------------
@@ -44,7 +44,7 @@ from app.services.comfyui.runpod_client import RunPodClient, RunPodError
 from app.services.comfyui.workflow_manager import WorkflowManager
 from app.services.s3 import storage
 
-logger = logging.getLogger("the_circle.furniture_place")
+logger = logging.getLogger("the_circle.furniture")
 
 CREDITS_PER_PLACEMENT = 1
 _PLACE_TIMEOUT_S      = 90
@@ -62,7 +62,7 @@ class FitCheck:
 
 
 @dataclass
-class FurniturePlaceResult:
+class FurnitureResult:
     result_url: str
     layer_id:   int
     elapsed_s:  float
@@ -94,11 +94,6 @@ def _make_blend_mask(
     furn_h: int,
     dilation: int = 40,
 ) -> Image.Image:
-    """
-    White/black mask for ComfyUI inpainting.
-    White = furniture bounding box + *dilation* px border (area to blend).
-    Black = rest of the image (keep intact).
-    """
     mask = Image.new("L", (canvas_w, canvas_h), 0)
     draw = ImageDraw.Draw(mask)
     x0 = max(0, furn_x - dilation)
@@ -133,7 +128,7 @@ def _compute_fit_check(
 
 # ── Service ───────────────────────────────────────────────────────────────────
 
-class FurniturePlaceService:
+class FurnitureService:
     """Orchestrate the full furniture-placement pipeline."""
 
     def __init__(self) -> None:
@@ -145,18 +140,15 @@ class FurniturePlaceService:
         project_id:           int,
         user_id:              int,
         db:                   Session,
-        # Furniture source (one required)
         furniture_id:         Optional[int]   = None,
         furniture_image_url:  Optional[str]   = None,
-        # Physical dimensions (cm) for fit check + metadata
         furniture_width_cm:   Optional[float] = None,
         furniture_height_cm:  Optional[float] = None,
         space_width_cm:       Optional[float] = None,
-        # Placement coordinates in original-image pixels
         position_x:           int             = 0,
         position_y:           int             = 0,
         target_width_px:      int             = 200,
-    ) -> FurniturePlaceResult:
+    ) -> FurnitureResult:
         """
         Composite a furniture PNG onto a room image and AI-blend it.
 
@@ -174,7 +166,7 @@ class FurniturePlaceService:
             target_width_px:     Desired rendered width in pixels.
 
         Returns:
-            FurniturePlaceResult with result_url, layer_id, fit_check, elapsed_s.
+            FurnitureResult with result_url, layer_id, fit_check, elapsed_s.
 
         Raises:
             ValueError:  Missing data or furniture not found.
@@ -201,19 +193,17 @@ class FurniturePlaceService:
             if not furn_meta.image_url and not furniture_image_url:
                 raise ValueError(f"Furniture {furniture_id} has no image URL")
 
-        # Effective image URL
         furn_url = furniture_image_url or (furn_meta.image_url if furn_meta else None)
         if not furn_url:
             raise ValueError(
                 "Provide either furniture_id (with image_url) or furniture_image_url"
             )
 
-        # Effective dimensions
         fw_cm = furniture_width_cm  or (furn_meta.width_cm  if furn_meta else None)
         fh_cm = furniture_height_cm or (furn_meta.height_cm if furn_meta else None)
 
         logger.info(
-            "furniture_place START: project=%d furniture_id=%s pos=(%d,%d) w_px=%d",
+            "furniture START: project=%d furniture_id=%s pos=(%d,%d) w_px=%d",
             project_id, furniture_id, position_x, position_y, target_width_px,
         )
 
@@ -239,7 +229,6 @@ class FurniturePlaceService:
         composite_rgb = composite.convert("RGB")
 
         # ── 7. Generate blend mask ────────────────────────────────────────────
-        # (furniture outline + dilation → inpainting will only touch this area)
         blend_mask = _make_blend_mask(
             canvas_w, canvas_h, px, py, scaled_w, scaled_h, dilation=40
         )
@@ -248,7 +237,7 @@ class FurniturePlaceService:
         composite_b64 = _image_to_b64(composite_rgb, fmt="JPEG")
         furn_b64      = _image_to_b64(furn_scaled,   fmt="PNG")
 
-        workflow = self._wm.build_furniture_place_workflow(
+        workflow = self._wm.build_furniture_workflow(
             image_url           = composite_b64,
             furniture_image_url = furn_b64,
         )
@@ -281,9 +270,10 @@ class FurniturePlaceService:
             project.status = ProjectStatus.error
             db.commit()
             raise ValueError(f"RunPod 결과 base64 디코딩 실패: {exc}") from exc
-        result_key   = storage.project_key(
+
+        result_key = storage.project_key(
             user_id, project_id,
-            f"results/furniture_place_{uuid.uuid4().hex[:8]}.jpg",
+            f"results/furniture_{uuid.uuid4().hex[:8]}.jpg",
         )
         result_url = storage.upload(
             data         = result_bytes,
@@ -302,7 +292,7 @@ class FurniturePlaceService:
             "target_width_px":  scaled_w,
             "target_height_px": scaled_h,
             "result_url":       result_url,
-            "source":           "furniture_place",
+            "source":           "furniture",
         }
         if furniture_id:
             params["furniture_id"] = furniture_id
@@ -333,11 +323,11 @@ class FurniturePlaceService:
 
         elapsed = round(time.monotonic() - t_start, 2)
         logger.info(
-            "furniture_place DONE: project=%d layer=%d result_url=%s elapsed=%.1fs",
+            "furniture DONE: project=%d layer=%d result_url=%s elapsed=%.1fs",
             project_id, layer.id, result_url, elapsed,
         )
 
-        return FurniturePlaceResult(
+        return FurnitureResult(
             result_url = result_url,
             layer_id   = layer.id,
             elapsed_s  = elapsed,
@@ -346,4 +336,4 @@ class FurniturePlaceService:
 
 
 # ── Module-level singleton ────────────────────────────────────────────────────
-furniture_place_service = FurniturePlaceService()
+furniture_service = FurnitureService()

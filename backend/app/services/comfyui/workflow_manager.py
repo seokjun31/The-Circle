@@ -21,14 +21,13 @@ Three core helpers
 
 Workflow catalogue
 ------------------
-| Async method                   | JSON file               | Use-case                       |
-|-------------------------------|-------------------------|--------------------------------|
-| build_circle_ai_workflow      | circle_ai.json          | Full-room style transform      |
-| build_material_apply_workflow | material_apply.json     | Texture on masked surface      |
-| build_mood_copy_workflow      | mood_copy.json          | Copy mood from reference image |
-| build_furniture_place_workflow| furniture_place.json    | Blend placed furniture         |
-| build_final_render_workflow   | final_render.json       | Base + Refiner + 2× Upscale    |
-|                               | final_render_simple.json| Base only (standard quality)   |
+| Async method               | JSON file       | Use-case                       |
+|---------------------------|-----------------|--------------------------------|
+| build_mood_workflow        | mood.json       | Copy mood from reference image |
+| build_material_workflow    | material.json   | Texture on masked surface      |
+| build_furniture_workflow   | furniture.json  | Blend placed furniture         |
+| build_lighting_workflow    | lighting.json   | Standalone lighting adjustment |
+| build_full_render_workflow | full_render.json| Base + Refiner + 2× Upscale    |
 
 Model names
 -----------
@@ -66,7 +65,6 @@ _CLIP_VISION_H     = "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors"
 _IPADAPTER_SDXL    = "IP-Adapter-Plus_SDXL.safetensors"
 _CN_DEPTH_SDXL     = "controlnet-depth-sdxl-1.0.safetensors"
 _CN_CANNY_SDXL     = "controlnet-canny-sdxl-1.0.safetensors"
-_LORA_KR_APT       = "korea-apartment-style_v1.safetensors"
 _UPSCALER          = "RealESRGAN_x2plus.pth"
 
 # ── Standard negative prompt ──────────────────────────────────────────────────
@@ -150,7 +148,7 @@ class WorkflowManager:
         ``_label`` and ``_comment`` keys are also removed.
 
         Args:
-            json_name:   Filename without extension, e.g. ``"material_apply"``.
+            json_name:   Filename without extension, e.g. ``"material"``.
             injections:  ``{ node_id: { input_field: value, … }, … }``
                          where node IDs are strings (ComfyUI API format).
 
@@ -291,124 +289,7 @@ class WorkflowManager:
     #  Build methods
     # ──────────────────────────────────────────────────────────────────────────
 
-    async def build_circle_ai_workflow(
-        self,
-        image_url:        Union[str, bytes],
-        style_prompt:     str,
-        denoise_strength: float = 0.65,
-        negative_prompt:  str   = _NEGATIVE_BASE,
-        steps:            int   = 25,
-        cfg:              float = 7.0,
-        seed:             Optional[int] = None,
-        use_lora:         bool  = True,
-    ) -> dict[str, Any]:
-        """
-        Transform an entire room image to match a style prompt (img2img).
-
-        Uses SDXL-base with Korea-apartment LoRA and ControlNet Canny for
-        structural line preservation.  Node 100 rescales the input image to
-        the optimal SDXL resolution before processing.
-
-        Args:
-            image_url:        Room photo (URL, base-64, or bytes).
-            style_prompt:     Positive style description in English.
-            denoise_strength: 0.0 = keep original, 1.0 = full generation.
-            negative_prompt:  Negative conditioning text.
-            steps:            KSampler denoising steps.
-            cfg:              Classifier-free guidance scale.
-            seed:             Fixed seed; None = random.
-            use_lora:         Apply the Korea-apartment LoRA (disable via weight=0).
-
-        Returns:
-            ComfyUI API-format workflow dict.
-        """
-        img_b64       = _ensure_base64(image_url)
-        seed          = seed if seed is not None else _rand_seed()
-        w, h          = _image_size_from_b64(img_b64)
-        nw, nh        = self.calc_sdxl_size(w, h)
-        lora_strength = 0.7 if use_lora else 0.0
-
-        return self.load_and_inject_workflow("circle_ai", {
-            "4":   {"image": img_b64},
-            "20":  {"strength_model": lora_strength, "strength_clip": lora_strength},
-            "2":   {"text": style_prompt},
-            "3":   {"text": negative_prompt},
-            "9":   {
-                "seed":    seed,
-                "steps":   steps,
-                "cfg":     cfg,
-                "denoise": denoise_strength,
-            },
-            "100": {"width": nw, "height": nh},
-        })
-
-    async def build_material_apply_workflow(
-        self,
-        image_url:            Union[str, bytes],
-        mask_data:            Union[str, bytes],
-        material_texture_url: Union[str, bytes],
-        prompt:               str   = (
-            "photorealistic interior, architectural photography, high-end material finish, "
-            "seamless texture, perfect lighting, 8k resolution"
-        ),
-        negative_prompt:      str   = _NEGATIVE_BASE,
-        ipadapter_weight:     float = 0.55,
-        controlnet_strength:  float = 0.65,
-        denoise:              float = 0.88,
-        steps:                int   = 28,
-        cfg:                  float = 7.5,
-        seed:                 Optional[int] = None,
-    ) -> dict[str, Any]:
-        """
-        Apply a material texture to the masked surface area.
-
-        Pipeline: IP-Adapter (material style) + ControlNet Depth (perspective)
-        + VAEEncodeForInpaint (masked inpainting).  Node 100 rescales the room
-        image to optimal SDXL dimensions; the mask is auto-resized by
-        ComfyUI's VAEEncodeForInpaint node.
-
-        Args:
-            image_url:            Original room photo.
-            mask_data:            White/black mask (white = area to retexture).
-            material_texture_url: Seamless tile image (512×512+ recommended).
-            prompt:               Positive prompt describing the desired material.
-            negative_prompt:      Negative conditioning.
-            ipadapter_weight:     IP-Adapter strength (0.4–0.7 recommended).
-            controlnet_strength:  ControlNet depth strength (0.5–0.8).
-            denoise:              Inpaint denoise strength (0.8–1.0).
-            steps:                KSampler steps.
-            cfg:                  CFG scale.
-            seed:                 Fixed seed; None = random.
-
-        Returns:
-            ComfyUI API-format workflow dict.
-        """
-        img_b64  = _ensure_base64(image_url)
-        mask_b64 = _ensure_base64(mask_data)
-        mat_b64  = _ensure_base64(material_texture_url)
-        seed     = seed if seed is not None else _rand_seed()
-        w, h     = _image_size_from_b64(img_b64)
-        nw, nh   = self.calc_sdxl_size(w, h)
-
-        return self.load_and_inject_workflow("material_apply", {
-            "2":   {"image": img_b64},
-            "3":   {"mask":  mask_b64},
-            "4":   {"image": mat_b64},
-            "5":   {"ipadapter_file": _IPADAPTER_SDXL},
-            "7":   {"weight": ipadapter_weight},
-            "10":  {"text": prompt},
-            "11":  {"text": negative_prompt},
-            "12":  {"strength": controlnet_strength},
-            "14":  {
-                "seed":    seed,
-                "steps":   steps,
-                "cfg":     cfg,
-                "denoise": denoise,
-            },
-            "100": {"width": nw, "height": nh},
-        })
-
-    async def build_mood_copy_workflow(
+    async def build_mood_workflow(
         self,
         source_image_url:    Union[str, bytes],
         reference_image_url: Union[str, bytes],
@@ -447,7 +328,7 @@ class WorkflowManager:
         ipadapter_w = min(strength + 0.1, 0.95)
         denoise     = max(strength - 0.1, 0.30)
 
-        return self.load_and_inject_workflow("mood_copy", {
+        return self.load_and_inject_workflow("mood", {
             "2":   {"image": src_b64},
             "3":   {"image": ref_b64},
             "4":   {"ipadapter_file": _IPADAPTER_SDXL},
@@ -463,7 +344,71 @@ class WorkflowManager:
             "100": {"width": nw, "height": nh},
         })
 
-    async def build_furniture_place_workflow(
+    async def build_material_workflow(
+        self,
+        image_url:            Union[str, bytes],
+        mask_data:            Union[str, bytes],
+        material_texture_url: Union[str, bytes],
+        prompt:               str   = (
+            "photorealistic interior, architectural photography, high-end material finish, "
+            "seamless texture, perfect lighting, 8k resolution"
+        ),
+        negative_prompt:      str   = _NEGATIVE_BASE,
+        ipadapter_weight:     float = 0.55,
+        controlnet_strength:  float = 0.65,
+        denoise:              float = 0.88,
+        steps:                int   = 28,
+        cfg:                  float = 7.5,
+        seed:                 Optional[int] = None,
+    ) -> dict[str, Any]:
+        """
+        Apply a material texture to the masked surface area.
+
+        Pipeline: IP-Adapter (material style) + ControlNet Depth (perspective)
+        + VAEEncodeForInpaint (masked inpainting).
+
+        Args:
+            image_url:            Original room photo.
+            mask_data:            White/black mask (white = area to retexture).
+            material_texture_url: Seamless tile image (512×512+ recommended).
+            prompt:               Positive prompt describing the desired material.
+            negative_prompt:      Negative conditioning.
+            ipadapter_weight:     IP-Adapter strength (0.4–0.7 recommended).
+            controlnet_strength:  ControlNet depth strength (0.5–0.8).
+            denoise:              Inpaint denoise strength (0.8–1.0).
+            steps:                KSampler steps.
+            cfg:                  CFG scale.
+            seed:                 Fixed seed; None = random.
+
+        Returns:
+            ComfyUI API-format workflow dict.
+        """
+        img_b64  = _ensure_base64(image_url)
+        mask_b64 = _ensure_base64(mask_data)
+        mat_b64  = _ensure_base64(material_texture_url)
+        seed     = seed if seed is not None else _rand_seed()
+        w, h     = _image_size_from_b64(img_b64)
+        nw, nh   = self.calc_sdxl_size(w, h)
+
+        return self.load_and_inject_workflow("material", {
+            "2":   {"image": img_b64},
+            "3":   {"mask":  mask_b64},
+            "4":   {"image": mat_b64},
+            "5":   {"ipadapter_file": _IPADAPTER_SDXL},
+            "7":   {"weight": ipadapter_weight},
+            "10":  {"text": prompt},
+            "11":  {"text": negative_prompt},
+            "12":  {"strength": controlnet_strength},
+            "14":  {
+                "seed":    seed,
+                "steps":   steps,
+                "cfg":     cfg,
+                "denoise": denoise,
+            },
+            "100": {"width": nw, "height": nh},
+        })
+
+    async def build_furniture_workflow(
         self,
         image_url:           Union[str, bytes],
         furniture_image_url: Union[str, bytes],
@@ -483,9 +428,7 @@ class WorkflowManager:
         Blend a pre-composited furniture image into a room scene.
 
         Assumes the client has alpha-composited the furniture onto the room
-        canvas and passed the result as *image_url*.  The workflow uses
-        inpainting around the furniture boundary to remove artefacts and
-        add natural shadows.
+        canvas and passed the result as *image_url*.
 
         Args:
             image_url:           Composite scene (room + placed furniture).
@@ -508,7 +451,7 @@ class WorkflowManager:
         w, h     = _image_size_from_b64(img_b64)
         nw, nh   = self.calc_sdxl_size(w, h)
 
-        return self.load_and_inject_workflow("furniture_place", {
+        return self.load_and_inject_workflow("furniture", {
             "2":   {"image": img_b64},
             "3":   {"image": furn_b64},
             "6":   {"text": prompt},
@@ -522,38 +465,30 @@ class WorkflowManager:
             "100": {"width": nw, "height": nh},
         })
 
-    async def build_final_render_workflow(
+    async def build_lighting_workflow(
         self,
-        image_url:     Union[str, bytes],
-        lighting:      str   = "soft natural daylight, warm interior lighting",
-        quality:       str   = "high",
-        prompt_prefix: str   = "",
-        negative_prompt: str = _NEGATIVE_BASE,
-        base_denoise:  float = 0.45,
-        base_steps:    int   = 20,
-        refiner_steps: int   = 10,
-        cfg:           float = 7.5,
-        seed:          Optional[int] = None,
-        upscale:       bool  = True,
+        image_url:       Union[str, bytes],
+        lighting:        str   = "soft natural daylight, warm interior lighting",
+        negative_prompt: str   = _NEGATIVE_BASE,
+        denoise:         float = 0.35,
+        steps:           int   = 20,
+        cfg:             float = 7.0,
+        seed:            Optional[int] = None,
     ) -> dict[str, Any]:
         """
-        High-quality render pipeline.
+        Apply a lighting atmosphere to the room (SDXL Base img2img, low denoise).
 
-        * ``upscale=True``  (quality="high"):  SDXL Base → Refiner → Real-ESRGAN 2×.
-        * ``upscale=False`` (quality="standard"): SDXL Base only, no refiner.
+        Uses a lighting-focused prompt with low denoise to change the atmosphere
+        while preserving room structure and contents.
 
         Args:
-            image_url:       Source room image (after all edits applied).
-            lighting:        Lighting description appended to positive prompt.
-            quality:         ``"high"`` (more steps + refiner) or ``"standard"``.
-            prompt_prefix:   Optional custom text prepended to the prompt.
+            image_url:       Source room image.
+            lighting:        Lighting description (e.g. "warm morning light").
             negative_prompt: Negative conditioning.
-            base_denoise:    Base-stage denoise (0.3–0.6).
-            base_steps:      Base-stage KSampler steps.
-            refiner_steps:   Refiner steps (ignored when ``upscale=False``).
+            denoise:         Denoise strength (0.25–0.45 recommended).
+            steps:           KSampler steps.
             cfg:             CFG scale.
             seed:            Fixed seed; None = random.
-            upscale:         Use Real-ESRGAN 2× + Refiner when True.
 
         Returns:
             ComfyUI API-format workflow dict.
@@ -563,9 +498,57 @@ class WorkflowManager:
         w, h    = _image_size_from_b64(img_b64)
         nw, nh  = self.calc_sdxl_size(w, h)
 
-        if quality == "fast":
-            base_steps    = max(base_steps - 8, 10)
-            refiner_steps = max(refiner_steps - 4, 5)
+        positive_text = (
+            f"photorealistic interior architectural photography, {lighting}, "
+            "professional interior design, natural atmosphere, 8k resolution"
+        )
+
+        return self.load_and_inject_workflow("lighting", {
+            "2":   {"image": img_b64},
+            "3":   {"text": positive_text},
+            "4":   {"text": negative_prompt},
+            "6":   {
+                "seed":    seed,
+                "steps":   steps,
+                "cfg":     cfg,
+                "denoise": denoise,
+            },
+            "100": {"width": nw, "height": nh},
+        })
+
+    async def build_full_render_workflow(
+        self,
+        image_url:       Union[str, bytes],
+        lighting:        str   = "soft natural daylight, warm interior lighting",
+        prompt_prefix:   str   = "",
+        negative_prompt: str   = _NEGATIVE_BASE,
+        base_denoise:    float = 0.30,
+        base_steps:      int   = 40,
+        refiner_steps:   int   = 10,
+        cfg:             float = 7.5,
+        seed:            Optional[int] = None,
+    ) -> dict[str, Any]:
+        """
+        High-quality render pipeline: SDXL Base → Refiner → Real-ESRGAN 2×.
+
+        Args:
+            image_url:       Source room image (after all edits applied).
+            lighting:        Lighting description appended to positive prompt.
+            prompt_prefix:   Optional custom text prepended to the prompt.
+            negative_prompt: Negative conditioning.
+            base_denoise:    Base-stage denoise (0.25–0.45).
+            base_steps:      Base-stage KSampler steps.
+            refiner_steps:   Refiner steps.
+            cfg:             CFG scale.
+            seed:            Fixed seed; None = random.
+
+        Returns:
+            ComfyUI API-format workflow dict.
+        """
+        img_b64 = _ensure_base64(image_url)
+        seed    = seed if seed is not None else _rand_seed()
+        w, h    = _image_size_from_b64(img_b64)
+        nw, nh  = self.calc_sdxl_size(w, h)
 
         positive_text = (
             f"{prompt_prefix + ', ' if prompt_prefix else ''}"
@@ -574,39 +557,25 @@ class WorkflowManager:
             "cinematic lighting, professional interior design"
         )
 
-        if upscale:
-            total_steps = base_steps + refiner_steps
-            return self.load_and_inject_workflow("final_render", {
-                "2":   {"image": img_b64},
-                "3":   {"text": positive_text},
-                "4":   {"text": negative_prompt},
-                "6":   {
-                    "noise_seed":  seed,
-                    "steps":       total_steps,
-                    "cfg":         cfg,
-                    "end_at_step": base_steps,
-                },
-                "8":   {"text": positive_text},
-                "9":   {"text": negative_prompt},
-                "10":  {
-                    "noise_seed":    seed,
-                    "steps":         total_steps,
-                    "cfg":           cfg,
-                    "start_at_step": base_steps,
-                    "end_at_step":   total_steps,
-                },
-                "100": {"width": nw, "height": nh},
-            })
-        else:
-            return self.load_and_inject_workflow("final_render_simple", {
-                "2":   {"image": img_b64},
-                "3":   {"text": positive_text},
-                "4":   {"text": negative_prompt},
-                "6":   {
-                    "seed":    seed,
-                    "steps":   base_steps,
-                    "cfg":     cfg,
-                    "denoise": base_denoise,
-                },
-                "100": {"width": nw, "height": nh},
-            })
+        total_steps = base_steps + refiner_steps
+        return self.load_and_inject_workflow("full_render", {
+            "2":   {"image": img_b64},
+            "3":   {"text": positive_text},
+            "4":   {"text": negative_prompt},
+            "6":   {
+                "noise_seed":  seed,
+                "steps":       total_steps,
+                "cfg":         cfg,
+                "end_at_step": base_steps,
+            },
+            "8":   {"text": positive_text},
+            "9":   {"text": negative_prompt},
+            "10":  {
+                "noise_seed":    seed,
+                "steps":         total_steps,
+                "cfg":           cfg,
+                "start_at_step": base_steps,
+                "end_at_step":   total_steps,
+            },
+            "100": {"width": nw, "height": nh},
+        })

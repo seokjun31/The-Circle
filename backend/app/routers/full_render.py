@@ -1,10 +1,10 @@
 """
-Final Render & Layer Management — Phase 7 API endpoints
+Full Render & Layer Management — API endpoints
 
 GET    /api/v1/projects/{id}/layers                  — 레이어 목록
 PATCH  /api/v1/projects/{id}/layers/{layer_id}       — 레이어 업데이트 (visibility / order)
 DELETE /api/v1/projects/{id}/layers/{layer_id}       — 레이어 삭제
-POST   /api/v1/projects/{id}/final-render            — 최종 렌더링 (SSE streaming)
+POST   /api/v1/projects/{id}/full-render             — 최종 고품질 렌더링 (SSE streaming)
 """
 from __future__ import annotations
 
@@ -21,13 +21,9 @@ from app.models.edit_layer import EditLayer, LayerType
 from app.models.project import Project
 from app.models.user import User
 from app.schemas.edit_layer import EditLayerResponse
-from app.services.final_render import (
-    CREDITS_HIGH,
-    CREDITS_STANDARD,
-    final_render_service,
-)
+from app.services.full_render import CREDITS_FULL_RENDER, full_render_service
 
-router = APIRouter(tags=["Final Render"])
+router = APIRouter(tags=["Full Render"])
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -121,23 +117,19 @@ def delete_layer(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  Final Render — SSE streaming
+#  Full Render — SSE streaming
 # ═══════════════════════════════════════════════════════════════════════════════
 
-class FinalRenderRequest(BaseModel):
+class FullRenderRequest(BaseModel):
     lighting: str = Field(
         "morning",
         description="조명 환경: morning | evening | night",
     )
-    quality: str = Field(
-        "standard",
-        description="렌더링 품질: standard (크레딧 3) | high (크레딧 5)",
-    )
 
 
 @router.post(
-    "/projects/{project_id}/final-render",
-    summary="최종 렌더링 — SSE streaming (text/event-stream)",
+    "/projects/{project_id}/full-render",
+    summary="최종 고품질 렌더링 — SSE streaming (text/event-stream)",
     response_class=StreamingResponse,
     responses={
         200: {
@@ -147,18 +139,18 @@ class FinalRenderRequest(BaseModel):
         402: {"description": "크레딧 부족"},
     },
 )
-def run_final_render(
+def run_full_render(
     project_id: int,
-    body: FinalRenderRequest,
+    body:       FullRenderRequest,
     db:           Session = Depends(get_db),
     current_user: User    = Depends(get_current_user),
 ):
     """
-    Start the final render pipeline and stream progress via Server-Sent Events.
+    Start the full-quality render pipeline and stream progress via Server-Sent Events.
 
-    **Credit costs:**
-    - `standard`: {std} credits  (~20 s — 25 steps, no upscale)
-    - `high`:     {high} credits (~60 s — 40 steps + refiner + 2× upscale)
+    Pipeline: SDXL Base (40 steps) → Refiner → Real-ESRGAN 2× Upscale.
+
+    **Credit cost:** {credits} credits (~60 s)
 
     **SSE event format:**
     ```json
@@ -168,77 +160,58 @@ def run_final_render(
     ```json
     {{ "done": true, "result_url": "...", "layer_id": 42, "elapsed_s": 38.2, ... }}
     ```
-    On error:
-    ```json
-    {{ "error": "메시지", "code": "ERROR_CODE" }}
-    ```
-    """.format(std=CREDITS_STANDARD, high=CREDITS_HIGH)
-
-    # Validate quality
-    if body.quality not in ("standard", "high"):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={"message": "quality는 'standard' 또는 'high'이어야 합니다.", "code": "INVALID_QUALITY"},
-        )
-
-    credits_needed = CREDITS_STANDARD if body.quality == "standard" else CREDITS_HIGH
+    """.format(credits=CREDITS_FULL_RENDER)
 
     # ── Credit check & deduction (before streaming) ───────────────────────────
-    if current_user.credit_balance < credits_needed:
+    if current_user.credit_balance < CREDITS_FULL_RENDER:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail={
                 "message": (
                     f"크레딧이 부족합니다. "
-                    f"(잔액: {current_user.credit_balance}, 필요: {credits_needed})"
+                    f"(잔액: {current_user.credit_balance}, 필요: {CREDITS_FULL_RENDER})"
                 ),
                 "code":     "INSUFFICIENT_CREDITS",
                 "balance":  current_user.credit_balance,
-                "required": credits_needed,
+                "required": CREDITS_FULL_RENDER,
             },
         )
 
-    current_user.credit_balance -= credits_needed
+    current_user.credit_balance -= CREDITS_FULL_RENDER
     db.commit()
 
     async def event_stream():
-        """Wrap the service generator and handle refund on early failure."""
         got_done = False
         try:
-            async for chunk in final_render_service.render_final_stream(
+            async for chunk in full_render_service.render_stream(
                 project_id = project_id,
                 user_id    = current_user.id,
                 db         = db,
                 lighting   = body.lighting,
-                quality    = body.quality,
             ):
                 yield chunk
-                # Check if this is the final done event
                 try:
                     payload = json.loads(chunk.removeprefix("data: ").strip())
                     if payload.get("done") or payload.get("error"):
                         got_done = True
                         if payload.get("error"):
-                            # Refund on AI failure
-                            current_user.credit_balance += credits_needed
+                            current_user.credit_balance += CREDITS_FULL_RENDER
                             db.commit()
                 except Exception:
                     pass
-
         except Exception as exc:
             import traceback
             error_msg = f"렌더링 스트림 오류: {exc}"
             yield f"data: {json.dumps({'error': error_msg, 'code': 'STREAM_ERROR'}, ensure_ascii=False)}\n\n"
-            # Refund
             if not got_done:
-                current_user.credit_balance += credits_needed
+                current_user.credit_balance += CREDITS_FULL_RENDER
                 db.commit()
 
     return StreamingResponse(
         event_stream(),
         media_type="text/event-stream",
         headers={
-            "Cache-Control":  "no-cache",
+            "Cache-Control":     "no-cache",
             "X-Accel-Buffering": "no",
         },
     )

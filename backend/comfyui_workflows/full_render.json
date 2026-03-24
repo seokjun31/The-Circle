@@ -4,7 +4,7 @@
     "Pipeline: SDXL Base → KSamplerAdvanced → SDXL Refiner → Real-ESRGAN 2× → downscale 2048px",
     "Used for quality='high' renders.",
     "",
-    "Runtime injections (WorkflowManager.build_final_render_workflow, upscale=True):",
+    "Runtime injections (WorkflowManager.build_full_render_workflow, upscale=True):",
     "  Node 2   image                        — composite edited room base64",
     "  Node 3   text                         — positive prompt (base)",
     "  Node 4   text                         — negative prompt (base)",

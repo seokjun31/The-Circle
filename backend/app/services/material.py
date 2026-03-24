@@ -1,39 +1,34 @@
 """
-MaterialApplyService — Apply a material texture to a masked room region.
+MaterialService — Apply a material texture to a masked room region.
 
 Pipeline
 --------
 1. Load project original image URL + mask URL (from EditLayer.parameters)
 2. Load material tile_image_url + name/category
 3. Build a text prompt from material metadata
-4. Call WorkflowManager.build_material_apply_workflow() → ComfyUI workflow dict
+4. Call WorkflowManager.build_material_workflow() → ComfyUI workflow dict
 5. Submit to RunPod via RunPodClient.run_async() (timeout: 120 s)
 6. Save result image to S3/local
 7. Update EditLayer.result_image_url + project.status
-8. Return ApplyResult(result_url, layer_id, elapsed_s)
+8. Return MaterialResult(result_url, layer_id, elapsed_s)
 
 The ComfyUI workflow uses:
   - IP-Adapter (texture / colour fidelity from tile image)
   - ControlNet Depth (MiDaS depth map → perspective-aware placement)
   - Inpaint (VAEEncodeForInpaint, mask restricts generation to selected area)
-  ★ NO perspective-warp nodes — depth-guided AI handles all perspective.
 """
 
 from __future__ import annotations
 
 import base64
-import io
 import logging
 import time
 import uuid
 from dataclasses import dataclass
 from typing import Optional
 
-import httpx
-from PIL import Image
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.models.edit_layer import EditLayer, LayerType
 from app.models.material import Material
 from app.models.project import Project, ProjectStatus
@@ -41,7 +36,7 @@ from app.services.comfyui.runpod_client import RunPodClient, RunPodError
 from app.services.comfyui.workflow_manager import WorkflowManager
 from app.services.s3 import storage
 
-logger = logging.getLogger("the_circle.material_apply")
+logger = logging.getLogger("the_circle.material")
 
 # ── Category → English description (for prompt building) ─────────────────────
 _CATEGORY_PROMPTS = {
@@ -55,65 +50,63 @@ _CATEGORY_PROMPTS = {
 # ── Default ComfyUI generation parameters ─────────────────────────────────────
 _DEFAULT_STEPS       = 25
 _DEFAULT_CFG         = 7.0
-_DEFAULT_DENOISE     = 0.60      # 0.5–0.7: preserve room structure well
-_DEFAULT_IPADAPTER_W = 0.80      # texture fidelity
-_DEFAULT_CN_DEPTH_W  = 0.90      # perspective/structure preservation
+_DEFAULT_DENOISE     = 0.60
+_DEFAULT_IPADAPTER_W = 0.80
+_DEFAULT_CN_DEPTH_W  = 0.90
 _APPLY_TIMEOUT_S     = 120
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 
 @dataclass
-class ApplyResult:
+class MaterialResult:
     result_url: str
-    layer_id: int
-    elapsed_s: float
+    layer_id:   int
+    elapsed_s:  float
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 
-class MaterialApplyService:
+class MaterialService:
     """Orchestrates the full material-apply pipeline."""
 
     def __init__(self) -> None:
         self._wm     = WorkflowManager()
         self._runpod = RunPodClient()
 
-    async def apply_material_to_region(
+    async def apply_material(
         self,
-        project_id: int,
-        layer_id: int,
-        material_id: int,
-        user_id: int,
-        db: Session,
-        custom_prompt: Optional[str] = None,
-        ipadapter_weight: Optional[float] = None,
-        controlnet_weight: float = _DEFAULT_CN_DEPTH_W,
-        denoise: Optional[float] = None,
-        steps: int = _DEFAULT_STEPS,
-        cfg: float = _DEFAULT_CFG,
-    ) -> ApplyResult:
+        project_id:        int,
+        layer_id:          int,
+        material_id:       int,
+        user_id:           int,
+        db:                Session,
+        custom_prompt:     Optional[str]   = None,
+        ipadapter_weight:  Optional[float] = None,
+        controlnet_weight: float           = _DEFAULT_CN_DEPTH_W,
+        denoise:           Optional[float] = None,
+        steps:             int             = _DEFAULT_STEPS,
+        cfg:               float           = _DEFAULT_CFG,
+    ) -> MaterialResult:
         """
         Apply *material_id* to the region defined by *layer_id*.
 
         Args:
             project_id:        Project to process.
             layer_id:          EditLayer whose ``parameters.mask_url`` specifies
-                               the mask region (created by POST /projects/{id}/masks).
+                               the mask region.
             material_id:       Material to apply.
             user_id:           Owner of the project (for S3 key).
             db:                SQLAlchemy session.
             custom_prompt:     Optional extra text appended to the material's prompt.
-            ipadapter_weight:  IP-Adapter weight override. If None, uses
-                               ``material.ip_adapter_weight`` (per-material tuned value).
+            ipadapter_weight:  IP-Adapter weight override.
             controlnet_weight: ControlNet Depth weight (0.0–1.0; default 0.90).
-            denoise:           KSampler denoise override. If None, uses
-                               ``material.recommended_denoise`` (per-material tuned value).
+            denoise:           KSampler denoise override.
             steps:             KSampler denoising steps.
             cfg:               Classifier-free guidance scale.
 
         Returns:
-            ApplyResult with result_url, layer_id, elapsed_s.
+            MaterialResult with result_url, layer_id, elapsed_s.
 
         Raises:
             ValueError:  If project, layer, or material not found; or missing URLs.
@@ -122,7 +115,7 @@ class MaterialApplyService:
         t_start = time.monotonic()
 
         # ── 1. Load project + layer + material ───────────────────────────────
-        project  = db.query(Project).filter(
+        project = db.query(Project).filter(
             Project.id == project_id, Project.user_id == user_id
         ).first()
         if not project:
@@ -145,7 +138,6 @@ class MaterialApplyService:
             raise ValueError(f"Material {material_id} has no tile_image_url")
 
         # ── 2. Resolve per-material AI parameters ────────────────────────────
-        # Prefer the material's own tuned values; caller may override explicitly.
         effective_ipadapter_weight = (
             ipadapter_weight if ipadapter_weight is not None
             else material.ip_adapter_weight
@@ -156,8 +148,6 @@ class MaterialApplyService:
         )
 
         # ── 3. Build text prompt ──────────────────────────────────────────────
-        # If the material has a custom positive_prompt, use it as the base.
-        # Otherwise fall back to the auto-generated category description.
         if material.positive_prompt:
             base_prompt = material.positive_prompt
         else:
@@ -172,7 +162,6 @@ class MaterialApplyService:
         if custom_prompt:
             base_prompt = f"{base_prompt}, {custom_prompt.strip()}"
 
-        # Negative prompt: material-specific if set, otherwise empty (WorkflowManager uses its own default)
         negative_prompt = material.negative_prompt or None
 
         logger.info(
@@ -197,10 +186,9 @@ class MaterialApplyService:
         if negative_prompt:
             wf_kwargs["negative_prompt"] = negative_prompt
 
-        workflow = await self._wm.build_material_apply_workflow(**wf_kwargs)
+        workflow = await self._wm.build_material_workflow(**wf_kwargs)
 
         # ── 5. Submit to RunPod ───────────────────────────────────────────────
-        # Mark project as processing
         project.status = ProjectStatus.processing
         db.commit()
 
@@ -208,7 +196,7 @@ class MaterialApplyService:
             output = await self._runpod.run_async(
                 workflow      = workflow,
                 timeout       = _APPLY_TIMEOUT_S,
-                upload_result = False,   # we handle S3 ourselves
+                upload_result = False,
             )
         except RunPodError:
             project.status = ProjectStatus.error
@@ -228,9 +216,10 @@ class MaterialApplyService:
             project.status = ProjectStatus.error
             db.commit()
             raise ValueError(f"RunPod 결과 base64 디코딩 실패: {exc}") from exc
-        result_key    = storage.project_key(
+
+        result_key = storage.project_key(
             user_id, project_id,
-            f"results/material_apply_{layer_id}_{uuid.uuid4().hex[:8]}.jpg"
+            f"results/material_{layer_id}_{uuid.uuid4().hex[:8]}.jpg"
         )
         result_url = storage.upload(
             data         = result_bytes,
@@ -259,7 +248,7 @@ class MaterialApplyService:
             project_id, layer_id, result_url, elapsed,
         )
 
-        return ApplyResult(
+        return MaterialResult(
             result_url = result_url,
             layer_id   = layer_id,
             elapsed_s  = elapsed,
@@ -267,4 +256,4 @@ class MaterialApplyService:
 
 
 # ── Module-level singleton ────────────────────────────────────────────────────
-material_apply_service = MaterialApplyService()
+material_service = MaterialService()

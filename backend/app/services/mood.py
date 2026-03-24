@@ -1,15 +1,15 @@
 """
-MoodCopyService — Copy the mood / atmosphere of a reference image onto a room.
+MoodService — Copy the mood / atmosphere of a reference image onto a room.
 
 Pipeline
 --------
 1. Load project original image URL
 2. Accept reference image as HTTP URL or base64 data URL
-3. Call WorkflowManager.build_mood_copy_workflow() → ComfyUI workflow dict
+3. Call WorkflowManager.build_mood_workflow() → ComfyUI workflow dict
 4. Submit to RunPod via RunPodClient.run_async() (timeout: 120 s)
 5. Save result image to S3/local
 6. Create new EditLayer (layer_type=style) with result
-7. Return MoodCopyResult
+7. Return MoodResult
 
 The ComfyUI workflow uses:
   - IP-Adapter (high weight) — extracts style/mood from reference image
@@ -33,17 +33,17 @@ from app.services.comfyui.runpod_client import RunPodClient, RunPodError
 from app.services.comfyui.workflow_manager import WorkflowManager
 from app.services.s3 import storage
 
-logger = logging.getLogger("the_circle.mood_copy")
+logger = logging.getLogger("the_circle.mood")
 
 # ── Constants ─────────────────────────────────────────────────────────────────
-CREDITS_PER_MOOD_COPY  = 3
-_MOOD_COPY_TIMEOUT_S   = 120
+CREDITS_PER_MOOD  = 3
+_MOOD_TIMEOUT_S   = 120
 
 
 # ── Result dataclass ──────────────────────────────────────────────────────────
 
 @dataclass
-class MoodCopyResult:
+class MoodResult:
     result_url: str
     layer_id:   int
     elapsed_s:  float
@@ -51,21 +51,21 @@ class MoodCopyResult:
 
 # ── Service ───────────────────────────────────────────────────────────────────
 
-class MoodCopyService:
-    """Orchestrates the full Mood Copy pipeline."""
+class MoodService:
+    """Orchestrates the full Mood pipeline."""
 
     def __init__(self) -> None:
         self._wm     = WorkflowManager()
         self._runpod = RunPodClient()
 
-    async def copy_mood(
+    async def apply_mood(
         self,
-        project_id:           int,
-        reference_image:      str,
-        user_id:              int,
-        db:                   Session,
-        strength:             float = 0.5,
-    ) -> MoodCopyResult:
+        project_id:      int,
+        reference_image: str,
+        user_id:         int,
+        db:              Session,
+        strength:        float = 0.5,
+    ) -> MoodResult:
         """
         Transfer the mood / atmosphere of a reference image onto the room.
 
@@ -79,7 +79,7 @@ class MoodCopyService:
                               Maps to IP-Adapter weight + denoise internally.
 
         Returns:
-            MoodCopyResult with result_url, layer_id, elapsed_s.
+            MoodResult with result_url, layer_id, elapsed_s.
 
         Raises:
             ValueError:  Project not found / missing image.
@@ -98,13 +98,12 @@ class MoodCopyService:
             raise ValueError(f"Project {project_id} has no original image URL")
 
         logger.info(
-            "mood_copy START: project=%d strength=%.2f ref_prefix=%r",
+            "mood START: project=%d strength=%.2f ref_prefix=%r",
             project_id, strength, reference_image[:60],
         )
 
         # ── 2. Build ComfyUI workflow ─────────────────────────────────────────
-        # WorkflowManager._ensure_base64() handles URLs, data-URLs, and raw b64.
-        workflow = await self._wm.build_mood_copy_workflow(
+        workflow = await self._wm.build_mood_workflow(
             source_image_url    = project.original_image_url,
             reference_image_url = reference_image,
             strength            = strength,
@@ -117,7 +116,7 @@ class MoodCopyService:
         try:
             output = await self._runpod.run_async(
                 workflow      = workflow,
-                timeout       = _MOOD_COPY_TIMEOUT_S,
+                timeout       = _MOOD_TIMEOUT_S,
                 upload_result = False,
             )
         except RunPodError:
@@ -138,9 +137,10 @@ class MoodCopyService:
             project.status = ProjectStatus.error
             db.commit()
             raise ValueError(f"RunPod 결과 base64 디코딩 실패: {exc}") from exc
-        result_key   = storage.project_key(
+
+        result_key = storage.project_key(
             user_id, project_id,
-            f"results/mood_copy_{uuid.uuid4().hex[:8]}.jpg",
+            f"results/mood_{uuid.uuid4().hex[:8]}.jpg",
         )
         result_url = storage.upload(
             data         = result_bytes,
@@ -150,7 +150,6 @@ class MoodCopyService:
         )
 
         # ── 5. Create EditLayer ───────────────────────────────────────────────
-        # Store a truncated reference key (not full base64) to keep parameters lean
         ref_preview = (
             reference_image[:120]
             if reference_image.startswith(("http://", "https://"))
@@ -163,7 +162,7 @@ class MoodCopyService:
                 "reference_image_preview": ref_preview,
                 "strength":                strength,
                 "result_url":              result_url,
-                "source":                  "mood_copy",
+                "source":                  "mood",
             },
             result_image_url = result_url,
             is_visible       = True,
@@ -176,11 +175,11 @@ class MoodCopyService:
 
         elapsed = round(time.monotonic() - t_start, 2)
         logger.info(
-            "mood_copy DONE: project=%d layer=%d result_url=%s elapsed=%.1fs",
+            "mood DONE: project=%d layer=%d result_url=%s elapsed=%.1fs",
             project_id, layer.id, result_url, elapsed,
         )
 
-        return MoodCopyResult(
+        return MoodResult(
             result_url = result_url,
             layer_id   = layer.id,
             elapsed_s  = elapsed,
@@ -188,4 +187,4 @@ class MoodCopyService:
 
 
 # ── Module-level singleton ────────────────────────────────────────────────────
-mood_copy_service = MoodCopyService()
+mood_service = MoodService()
