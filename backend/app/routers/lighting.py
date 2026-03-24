@@ -3,8 +3,6 @@ Lighting — 조명 변환 API
 
 POST /api/v1/projects/{id}/lighting  — 조명 프리셋으로 방 분위기 조정
 """
-import asyncio
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -49,7 +47,7 @@ class LightingResponse(BaseModel):
     response_model=LightingResponse,
     summary="조명 변환 — 조명 프리셋으로 방 분위기 조정",
 )
-def apply_lighting(
+async def apply_lighting(
     project_id:   int,
     body:         LightingRequest,
     db:           Session = Depends(get_db),
@@ -85,14 +83,12 @@ def apply_lighting(
     db.commit()
 
     try:
-        result = asyncio.run(
-            lighting_service.apply_lighting(
-                project_id = project_id,
-                user_id    = current_user.id,
-                db         = db,
-                lighting   = body.lighting,
-                strength   = body.strength,
-            )
+        result = await lighting_service.apply_lighting(
+            project_id = project_id,
+            user_id    = current_user.id,
+            db         = db,
+            lighting   = body.lighting,
+            strength   = body.strength,
         )
     except ValueError as exc:
         current_user.credit_balance += CREDITS_PER_LIGHTING
@@ -107,6 +103,13 @@ def apply_lighting(
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail={"message": f"AI 처리 실패: {exc}", "code": "RUNPOD_ERROR"},
+        ) from exc
+    except Exception as exc:
+        current_user.credit_balance += CREDITS_PER_LIGHTING
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"message": f"처리 중 오류 발생: {exc}", "code": "INTERNAL_ERROR"},
         ) from exc
 
     db.refresh(current_user)

@@ -3,8 +3,6 @@ Mood — 분위기 변환 API
 
 POST /api/v1/projects/{id}/mood  — 참조 이미지의 분위기를 내 방에 적용
 """
-import asyncio
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -52,7 +50,7 @@ class MoodResponse(BaseModel):
     response_model=MoodResponse,
     summary="분위기 변환 — 참조 이미지의 분위기를 내 방에 적용",
 )
-def apply_mood(
+async def apply_mood(
     project_id:   int,
     body:         MoodRequest,
     db:           Session = Depends(get_db),
@@ -88,14 +86,12 @@ def apply_mood(
     db.commit()
 
     try:
-        result = asyncio.run(
-            mood_service.apply_mood(
-                project_id      = project_id,
-                reference_image = body.reference_image,
-                user_id         = current_user.id,
-                db              = db,
-                strength        = body.strength,
-            )
+        result = await mood_service.apply_mood(
+            project_id      = project_id,
+            reference_image = body.reference_image,
+            user_id         = current_user.id,
+            db              = db,
+            strength        = body.strength,
         )
     except ValueError as exc:
         current_user.credit_balance += CREDITS_PER_MOOD
@@ -110,6 +106,13 @@ def apply_mood(
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail={"message": f"AI 처리 실패: {exc}", "code": "RUNPOD_ERROR"},
+        ) from exc
+    except Exception as exc:
+        current_user.credit_balance += CREDITS_PER_MOOD
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"message": f"처리 중 오류 발생: {exc}", "code": "INTERNAL_ERROR"},
         ) from exc
 
     db.refresh(current_user)

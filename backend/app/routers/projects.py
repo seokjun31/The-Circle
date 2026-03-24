@@ -7,7 +7,6 @@ GET    /api/v1/projects/{id}                     — 프로젝트 상세 (레이
 DELETE /api/v1/projects/{id}                     — 프로젝트 삭제
 POST   /api/v1/projects/{id}/apply-material      — 자재 적용 (IP-Adapter + ControlNet Depth)
 """
-import asyncio
 import math
 from typing import Optional
 
@@ -288,7 +287,7 @@ class ApplyMaterialResponse(BaseModel):
     response_model=ApplyMaterialResponse,
     summary="AI 자재 적용 — IP-Adapter + ControlNet Depth + Inpainting",
 )
-def apply_material(
+async def apply_material(
     project_id: int,
     body: ApplyMaterialRequest,
     db: Session = Depends(get_db),
@@ -335,18 +334,16 @@ def apply_material(
     db.flush()
 
     try:
-        result = asyncio.run(
-            material_apply_service.apply_material(
-                project_id        = project_id,
-                layer_id          = body.layer_id,
-                material_id       = body.material_id,
-                user_id           = current_user.id,
-                db                = db,
-                custom_prompt     = body.custom_prompt,
-                ipadapter_weight  = body.ipadapter_weight,
-                controlnet_weight = body.controlnet_weight,
-                denoise           = body.denoise,
-            )
+        result = await material_apply_service.apply_material(
+            project_id        = project_id,
+            layer_id          = body.layer_id,
+            material_id       = body.material_id,
+            user_id           = current_user.id,
+            db                = db,
+            custom_prompt     = body.custom_prompt,
+            ipadapter_weight  = body.ipadapter_weight,
+            controlnet_weight = body.controlnet_weight,
+            denoise           = body.denoise,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -357,6 +354,11 @@ def apply_material(
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail={"message": f"AI 처리 실패: {exc}", "code": "RUNPOD_ERROR"},
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"message": f"처리 중 오류 발생: {exc}", "code": "INTERNAL_ERROR"},
         ) from exc
 
     return ApplyMaterialResponse(

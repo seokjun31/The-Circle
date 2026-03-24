@@ -9,7 +9,6 @@ POST /api/v1/projects/{id}/place-furniture     — AI 가구 배치 + 블렌딩
 """
 from __future__ import annotations
 
-import asyncio
 import math
 import uuid
 from typing import Optional
@@ -258,7 +257,7 @@ class PlaceFurnitureResponse(BaseModel):
     response_model=PlaceFurnitureResponse,
     summary="AI 가구 배치 — Pillow 합성 + ComfyUI 자연 블렌딩",
 )
-def place_furniture(
+async def place_furniture(
     project_id: int,
     body:       PlaceFurnitureRequest,
     db:         Session = Depends(get_db),
@@ -309,20 +308,18 @@ def place_furniture(
     db.commit()
 
     try:
-        result: FurnitureResult = asyncio.run(
-            furniture_service.place_furniture(
-                project_id          = project_id,
-                user_id             = current_user.id,
-                db                  = db,
-                furniture_id        = body.furniture_id,
-                furniture_image_url = body.furniture_image_url,
-                furniture_width_cm  = body.furniture_width_cm,
-                furniture_height_cm = body.furniture_height_cm,
-                space_width_cm      = body.space_width_cm,
-                position_x          = body.position_x,
-                position_y          = body.position_y,
-                target_width_px     = body.target_width_px,
-            )
+        result: FurnitureResult = await furniture_service.place_furniture(
+            project_id          = project_id,
+            user_id             = current_user.id,
+            db                  = db,
+            furniture_id        = body.furniture_id,
+            furniture_image_url = body.furniture_image_url,
+            furniture_width_cm  = body.furniture_width_cm,
+            furniture_height_cm = body.furniture_height_cm,
+            space_width_cm      = body.space_width_cm,
+            position_x          = body.position_x,
+            position_y          = body.position_y,
+            target_width_px     = body.target_width_px,
         )
     except ValueError as exc:
         current_user.credit_balance += CREDITS_PER_PLACEMENT
@@ -337,6 +334,13 @@ def place_furniture(
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail={"message": f"AI 처리 실패: {exc}", "code": "RUNPOD_ERROR"},
+        ) from exc
+    except Exception as exc:
+        current_user.credit_balance += CREDITS_PER_PLACEMENT
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"message": f"처리 중 오류 발생: {exc}", "code": "INTERNAL_ERROR"},
         ) from exc
 
     db.refresh(current_user)
