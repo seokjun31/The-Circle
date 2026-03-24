@@ -33,7 +33,7 @@ import httpx
 logger = logging.getLogger("the_circle.material_prompt_generator")
 
 # ── 모델 상수 ──────────────────────────────────────────────────────────────────
-_MODEL = "claude-sonnet-4-20250514"   # 사용자 지정 모델
+_MODEL = "claude-sonnet-4-6"
 
 # ── 시스템 프롬프트 ────────────────────────────────────────────────────────────
 _SYSTEM_PROMPT = """\

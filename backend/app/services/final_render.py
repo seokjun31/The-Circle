@@ -350,10 +350,10 @@ class FinalRenderService:
 
         try:
             output = await runpod_task
-        except RunPodError as exc:
-            project.status = ProjectStatus.draft
+        except RunPodError:
+            project.status = ProjectStatus.error
             db.commit()
-            yield _sse_event({"error": f"AI 렌더링 실패: {exc}", "code": "RUNPOD_ERROR"})
+            yield _sse_event({"error": "AI 렌더링에 실패했습니다. 잠시 후 다시 시도해주세요.", "code": "RUNPOD_ERROR"})
             return
 
         yield _sse_event({"progress": 92, "step": "결과 이미지 저장 중..."})
@@ -362,17 +362,17 @@ class FinalRenderService:
         # ── Save result ───────────────────────────────────────────────────────
         img_b64_out: Optional[str] = output.get("image_base64")
         if not img_b64_out:
-            project.status = ProjectStatus.draft
+            project.status = ProjectStatus.error
             db.commit()
             yield _sse_event({"error": "렌더링 결과가 없습니다.", "code": "NO_OUTPUT"})
             return
 
         try:
             result_bytes = base64.b64decode(img_b64_out)
-        except Exception as exc:
-            project.status = ProjectStatus.draft
+        except Exception:
+            project.status = ProjectStatus.error
             db.commit()
-            yield _sse_event({"error": f"결과 디코딩 실패: {exc}", "code": "DECODE_ERROR"})
+            yield _sse_event({"error": "결과 이미지 디코딩에 실패했습니다.", "code": "DECODE_ERROR"})
             return
 
         result_key = storage.project_key(

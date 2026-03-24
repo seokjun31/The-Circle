@@ -264,18 +264,23 @@ class FurniturePlaceService:
                 upload_result = False,
             )
         except RunPodError:
-            project.status = ProjectStatus.draft
+            project.status = ProjectStatus.error
             db.commit()
             raise
 
         # ── 10. Decode + save result ──────────────────────────────────────────
         img_b64_out: Optional[str] = output.get("image_base64")
         if not img_b64_out:
-            project.status = ProjectStatus.draft
+            project.status = ProjectStatus.error
             db.commit()
             raise ValueError("RunPod returned no image_base64 in output")
 
-        result_bytes = base64.b64decode(img_b64_out)
+        try:
+            result_bytes = base64.b64decode(img_b64_out)
+        except Exception as exc:
+            project.status = ProjectStatus.error
+            db.commit()
+            raise ValueError(f"RunPod 결과 base64 디코딩 실패: {exc}") from exc
         result_key   = storage.project_key(
             user_id, project_id,
             f"results/furniture_place_{uuid.uuid4().hex[:8]}.jpg",

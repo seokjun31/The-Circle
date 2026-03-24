@@ -2,10 +2,12 @@
  * LightingPanel — Right sidebar panel for Lighting tab
  * 조명 프리셋(아침/저녁/야간) 선택 후 렌더링
  */
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ReactCompareSlider, ReactCompareSliderImage } from 'react-compare-slider';
 import toast from 'react-hot-toast';
 import { runFinalRender } from '../../utils/api';
+
+const SSE_TIMEOUT_MS = 180_000; // 3분 — RunPod cold-start 포함
 
 const LIGHTING_OPTIONS = [
   { id: 'morning', label: '아침',   icon: 'wb_sunny',       desc: '따뜻한 아침 햇살',   gradient: 'from-amber-500/20 to-orange-400/10' },
@@ -25,7 +27,16 @@ export default function LightingPanel({
   const [loading,          setLoading]          = useState(false);
   const [progress,         setProgress]         = useState(null); // { step, pct }
   const [resultUrl,        setResultUrl]        = useState(null);
-  const abortRef = useRef(null);
+  const abortRef   = useRef(null);
+  const timeoutRef = useRef(null);
+
+  // 컴포넌트 언마운트 시 진행 중인 요청과 타이머를 정리
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+      clearTimeout(timeoutRef.current);
+    };
+  }, []);
 
   const handleApply = async () => {
     if ((creditBalance ?? 0) < CREDITS_COST) {
@@ -36,6 +47,12 @@ export default function LightingPanel({
     setLoading(true);
     setProgress({ step: '렌더링 준비 중...', pct: 0 });
 
+    // SSE 타임아웃 — 서버가 응답을 멈추면 자동 중단
+    timeoutRef.current = setTimeout(() => {
+      abortRef.current?.abort();
+      toast.error('렌더링 시간이 초과되었습니다. 다시 시도해주세요.');
+    }, SSE_TIMEOUT_MS);
+
     try {
       const result = await runFinalRender(
         projectId,
@@ -45,9 +62,11 @@ export default function LightingPanel({
         },
         abortRef.current.signal,
       );
+      clearTimeout(timeoutRef.current);
       setResultUrl(result.result_url);
       onResult?.({ result_url: result.result_url, remaining_balance: result.remaining_balance });
     } catch (err) {
+      clearTimeout(timeoutRef.current);
       if (err.name !== 'AbortError') toast.error('조명 변경 실패: ' + err.message);
     } finally {
       setLoading(false);
@@ -56,6 +75,7 @@ export default function LightingPanel({
   };
 
   const handleCancel = () => {
+    clearTimeout(timeoutRef.current);
     abortRef.current?.abort();
     setLoading(false);
     setProgress(null);

@@ -164,18 +164,23 @@ class CircleAIService:
                 upload_result = False,
             )
         except RunPodError:
-            project.status = ProjectStatus.draft
+            project.status = ProjectStatus.error
             db.commit()
             raise
 
         # ── 5. Decode + save result image ─────────────────────────────────────
         img_b64: Optional[str] = output.get("image_base64")
         if not img_b64:
-            project.status = ProjectStatus.draft
+            project.status = ProjectStatus.error
             db.commit()
             raise ValueError("RunPod returned no image_base64 in output")
 
-        result_bytes = base64.b64decode(img_b64)
+        try:
+            result_bytes = base64.b64decode(img_b64)
+        except Exception as exc:
+            project.status = ProjectStatus.error
+            db.commit()
+            raise ValueError(f"RunPod 결과 base64 디코딩 실패: {exc}") from exc
         result_key   = storage.project_key(
             user_id, project_id,
             f"results/circle_ai_{style_preset}_{uuid.uuid4().hex[:8]}.jpg",

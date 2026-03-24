@@ -23,6 +23,7 @@ class ProjectStatus(str, enum.Enum):
     draft = "draft"
     processing = "processing"
     completed = "completed"
+    error = "error"
 
 
 class Project(Base):

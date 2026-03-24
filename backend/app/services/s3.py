@@ -11,7 +11,9 @@ S3 path convention:
   materials/{material_id}/tile.png
 """
 import io
+import logging
 import os
+import time
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -21,6 +23,10 @@ import boto3
 from botocore.exceptions import ClientError
 
 from app.config import settings
+
+logger = logging.getLogger("the_circle.storage")
+
+_S3_UPLOAD_MAX_RETRIES = 3
 
 
 class StorageService:
@@ -63,13 +69,30 @@ class StorageService:
         if public:
             extra_args["ACL"] = "public-read"
 
-        self._s3.put_object(
-            Bucket=self._bucket,
-            Key=key,
-            Body=data,
-            **extra_args,
-        )
-        return f"https://{self._bucket}.s3.{settings.AWS_REGION}.amazonaws.com/{key}"
+        last_exc: Optional[Exception] = None
+        backoff = 2
+        for attempt in range(1, _S3_UPLOAD_MAX_RETRIES + 1):
+            try:
+                self._s3.put_object(
+                    Bucket=self._bucket,
+                    Key=key,
+                    Body=data,
+                    **extra_args,
+                )
+                return f"https://{self._bucket}.s3.{settings.AWS_REGION}.amazonaws.com/{key}"
+            except ClientError as exc:
+                last_exc = exc
+                if attempt < _S3_UPLOAD_MAX_RETRIES:
+                    logger.warning(
+                        "S3 upload failed (attempt %d/%d): %s — retrying in %ds",
+                        attempt, _S3_UPLOAD_MAX_RETRIES, exc, backoff,
+                    )
+                    time.sleep(backoff)
+                    backoff *= 2
+
+        raise RuntimeError(
+            f"S3 upload failed after {_S3_UPLOAD_MAX_RETRIES} attempts"
+        ) from last_exc
 
     def _upload_local(self, data: bytes, key: str) -> str:
         dest = self._local_dir / key
