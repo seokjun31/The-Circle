@@ -344,8 +344,8 @@ function Stop-Backend {
     }
     # 포트에 남아있는 모든 프로세스 정리 (uvicorn --reload 는 여러 PID 생성)
     $lingeringPids = Get-PidsOnPort $BePort
-    foreach ($pid in $lingeringPids) {
-        Stop-ProcessTree -ProcId $pid
+    foreach ($lPid in $lingeringPids) {
+        Stop-ProcessTree -ProcId $lPid
     }
     # 혹시 남아있는 uvicorn 관련 python 프로세스 추가 정리
     Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='python3.exe'" |
@@ -366,8 +366,8 @@ function Stop-Frontend {
     }
     # 포트에 남아있는 모든 프로세스 정리
     $lingeringPids = Get-PidsOnPort $FePort
-    foreach ($pid in $lingeringPids) {
-        Stop-ProcessTree -ProcId $pid
+    foreach ($lPid in $lingeringPids) {
+        Stop-ProcessTree -ProcId $lPid
     }
     # cmd.exe /c npm start 로 시작된 node 프로세스 추가 정리
     Get-CimInstance Win32_Process -Filter "Name='node.exe'" |
