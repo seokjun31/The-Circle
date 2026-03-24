@@ -15,6 +15,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
+from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_current_user, get_db
@@ -307,10 +308,12 @@ async def place_furniture(
     current_user.credit_balance -= CREDITS_PER_PLACEMENT
     db.commit()
 
+    user_id = current_user.id
+
     try:
         result: FurnitureResult = await furniture_service.place_furniture(
             project_id          = project_id,
-            user_id             = current_user.id,
+            user_id             = user_id,
             db                  = db,
             furniture_id        = body.furniture_id,
             furniture_image_url = body.furniture_image_url,
@@ -322,22 +325,19 @@ async def place_furniture(
             target_width_px     = body.target_width_px,
         )
     except ValueError as exc:
-        current_user.credit_balance += CREDITS_PER_PLACEMENT
-        db.commit()
+        _refund_credits(db, user_id, CREDITS_PER_PLACEMENT)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={"message": str(exc), "code": "INVALID_INPUT"},
         ) from exc
     except RunPodError as exc:
-        current_user.credit_balance += CREDITS_PER_PLACEMENT
-        db.commit()
+        _refund_credits(db, user_id, CREDITS_PER_PLACEMENT)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail={"message": f"AI 처리 실패: {exc}", "code": "RUNPOD_ERROR"},
         ) from exc
     except Exception as exc:
-        current_user.credit_balance += CREDITS_PER_PLACEMENT
-        db.commit()
+        _refund_credits(db, user_id, CREDITS_PER_PLACEMENT)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"message": f"처리 중 오류 발생: {exc}", "code": "INTERNAL_ERROR"},
@@ -366,7 +366,24 @@ async def place_furniture(
     )
 
 
-# ── Shared helper ─────────────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _refund_credits(db: Session, user_id: int, amount: int) -> None:
+    """Refund credits using direct SQL to avoid ORM lazy-load issues."""
+    try:
+        db.rollback()
+        db.execute(
+            sa_update(User)
+            .where(User.id == user_id)
+            .values(credit_balance=User.credit_balance + amount)
+        )
+        db.commit()
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
 
 def _get_owned_project(project_id: int, user: User, db: Session) -> Project:
     project = db.get(Project, project_id)

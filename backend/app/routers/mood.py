@@ -5,6 +5,7 @@ POST /api/v1/projects/{id}/mood  — 참조 이미지의 분위기를 내 방에
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
+from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_current_user, get_db
@@ -94,22 +95,19 @@ async def apply_mood(
             strength        = body.strength,
         )
     except ValueError as exc:
-        current_user.credit_balance += CREDITS_PER_MOOD
-        db.commit()
+        _refund_credits(db, current_user.id, CREDITS_PER_MOOD)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={"message": str(exc), "code": "INVALID_INPUT"},
         ) from exc
     except RunPodError as exc:
-        current_user.credit_balance += CREDITS_PER_MOOD
-        db.commit()
+        _refund_credits(db, current_user.id, CREDITS_PER_MOOD)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail={"message": f"AI 처리 실패: {exc}", "code": "RUNPOD_ERROR"},
         ) from exc
     except Exception as exc:
-        current_user.credit_balance += CREDITS_PER_MOOD
-        db.commit()
+        _refund_credits(db, current_user.id, CREDITS_PER_MOOD)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"message": f"처리 중 오류 발생: {exc}", "code": "INTERNAL_ERROR"},
@@ -125,7 +123,24 @@ async def apply_mood(
     )
 
 
-# ── Shared helper ─────────────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _refund_credits(db: Session, user_id: int, amount: int) -> None:
+    """Refund credits using direct SQL to avoid ORM lazy-load issues."""
+    try:
+        db.rollback()
+        db.execute(
+            sa_update(User)
+            .where(User.id == user_id)
+            .values(credit_balance=User.credit_balance + amount)
+        )
+        db.commit()
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
 
 def _get_owned_project(project_id: int, user: User, db: Session) -> Project:
     project = db.get(Project, project_id)

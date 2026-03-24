@@ -12,6 +12,7 @@ from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
+from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_current_user, get_db
@@ -346,16 +347,28 @@ async def apply_material(
             denoise           = body.denoise,
         )
     except ValueError as exc:
+        try:
+            db.rollback()
+        except Exception:
+            pass
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={"message": str(exc), "code": "INVALID_INPUT"},
         ) from exc
     except RunPodError as exc:
+        try:
+            db.rollback()
+        except Exception:
+            pass
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail={"message": f"AI 처리 실패: {exc}", "code": "RUNPOD_ERROR"},
         ) from exc
     except Exception as exc:
+        try:
+            db.rollback()
+        except Exception:
+            pass
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"message": f"처리 중 오류 발생: {exc}", "code": "INTERNAL_ERROR"},

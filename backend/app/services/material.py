@@ -27,6 +27,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Optional
 
+from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
 from app.models.edit_layer import EditLayer, LayerType
@@ -199,22 +200,19 @@ class MaterialService:
                 upload_result = False,
             )
         except RunPodError:
-            project.status = ProjectStatus.error
-            db.commit()
+            _set_project_status(db, project_id, ProjectStatus.error)
             raise
 
         # ── 6. Decode + save result image ─────────────────────────────────────
         img_b64: Optional[str] = output.get("image_base64")
         if not img_b64:
-            project.status = ProjectStatus.error
-            db.commit()
+            _set_project_status(db, project_id, ProjectStatus.error)
             raise ValueError("RunPod returned no image_base64 in output")
 
         try:
             result_bytes = base64.b64decode(img_b64)
         except Exception as exc:
-            project.status = ProjectStatus.error
-            db.commit()
+            _set_project_status(db, project_id, ProjectStatus.error)
             raise ValueError(f"RunPod 결과 base64 디코딩 실패: {exc}") from exc
 
         result_key = storage.project_key(
@@ -253,6 +251,26 @@ class MaterialService:
             layer_id   = layer_id,
             elapsed_s  = elapsed,
         )
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _set_project_status(db: Session, project_id: int, status: ProjectStatus) -> None:
+    """Update project status using direct SQL to avoid ORM lazy-load issues."""
+    try:
+        db.rollback()
+        db.execute(
+            sa_update(Project)
+            .where(Project.id == project_id)
+            .values(status=status)
+        )
+        db.commit()
+    except Exception as exc:
+        logger.error("Failed to set project %d status to %s: %s", project_id, status, exc)
+        try:
+            db.rollback()
+        except Exception:
+            pass
 
 
 # ── Module-level singleton ────────────────────────────────────────────────────
