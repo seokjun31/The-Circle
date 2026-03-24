@@ -197,7 +197,7 @@ class MaterialApplyService:
         if negative_prompt:
             wf_kwargs["negative_prompt"] = negative_prompt
 
-        workflow = self._wm.build_material_apply_workflow(**wf_kwargs)
+        workflow = await self._wm.build_material_apply_workflow(**wf_kwargs)
 
         # ── 5. Submit to RunPod ───────────────────────────────────────────────
         # Mark project as processing

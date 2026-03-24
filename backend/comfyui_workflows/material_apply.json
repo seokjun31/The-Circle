@@ -1,62 +1,69 @@
 {
-  "_comment": "The Circle — Material Apply ComfyUI Workflow (API format)",
+  "_comment": "The Circle — Material Apply Workflow (API format)",
   "_description": [
-    "Applies a material texture to a masked room region using:",
-    "  - IP-Adapter (texture/colour from tile image, weight=0.8)",
-    "  - ControlNet Depth (MiDaS depth map, weight=0.9 — preserves perspective)",
-    "  - VAEEncodeForInpaint (mask restricts generation to selected area)",
-    "  - KSampler: steps=25, cfg=7, denoise=0.6, dpmpp_2m + karras",
+    "Pipeline: SDXL Base + IP-Adapter (texture) + ControlNet Depth (perspective) + Inpainting",
     "",
-    "★ No perspective-warp nodes — ControlNet Depth guides perspective automatically.",
-    "",
-    "Dynamic inputs (injected at runtime by WorkflowManager):",
-    "  Node 2 image  — original room photo (base64)",
-    "  Node 3 mask   — SAM mask PNG (base64, white=inpaint area)",
-    "  Node 4 image  — material tile image (base64)",
-    "  Node 12 text  — material description prompt",
-    "  Node 14 seed  — random seed",
-    "",
-    "All image nodes use ETN_LoadImageBase64 / ETN_LoadMaskBase64",
-    "(ComfyUI_Essentials) — no file upload to ComfyUI required."
+    "Runtime injections (WorkflowManager.build_material_apply_workflow):",
+    "  Node 2   image           — room photo base64",
+    "  Node 3   mask            — SAM mask base64 (white=inpaint)",
+    "  Node 4   image           — material tile base64",
+    "  Node 5   ipadapter_file  — IP-Adapter model name",
+    "  Node 7   weight          — IP-Adapter weight",
+    "  Node 10  text            — positive prompt",
+    "  Node 11  text            — negative prompt",
+    "  Node 12  strength        — ControlNet strength",
+    "  Node 14  seed/steps/cfg/denoise",
+    "  Node 100 width/height    — SDXL-optimal dimensions from calc_sdxl_size()"
   ],
   "1": {
     "class_type": "CheckpointLoaderSimple",
-    "_label": "Load SDXL Base Checkpoint",
+    "_label": "Load SDXL Base",
     "inputs": {
-      "ckpt_name": "sdxl_base_1.0.safetensors"
+      "ckpt_name": "sd_xl_base_1.0.safetensors"
     }
   },
   "2": {
     "class_type": "ETN_LoadImageBase64",
-    "_label": "Load Room Image (base64)",
+    "_label": "Load Room Image",
     "inputs": {
-      "image": "__ROOM_IMAGE_BASE64__"
+      "image": ""
+    }
+  },
+  "100": {
+    "class_type": "ImageScale",
+    "_label": "Scale to SDXL-optimal resolution",
+    "inputs": {
+      "image":          ["2", 0],
+      "upscale_method": "lanczos",
+      "width":          1024,
+      "height":         1024,
+      "crop":           "disabled"
     }
   },
   "3": {
     "class_type": "ETN_LoadMaskBase64",
-    "_label": "Load Inpaint Mask (base64)",
+    "_label": "Load Inpaint Mask",
     "inputs": {
-      "mask": "__MASK_BASE64__"
+      "mask": ""
     }
   },
   "4": {
     "class_type": "ETN_LoadImageBase64",
-    "_label": "Load Material Tile Image (IP-Adapter reference, base64)",
+    "_label": "Load Material Tile (IP-Adapter reference)",
     "inputs": {
-      "image": "__MATERIAL_IMAGE_BASE64__"
+      "image": ""
     }
   },
   "5": {
     "class_type": "IPAdapterModelLoader",
-    "_label": "Load IP-Adapter Model (SDXL Plus ViT-H)",
+    "_label": "Load IP-Adapter SDXL Plus ViT-H",
     "inputs": {
-      "ipadapter_file": "ip-adapter-plus_sdxl_vit-h.bin"
+      "ipadapter_file": "IP-Adapter-Plus_SDXL.safetensors"
     }
   },
   "6": {
     "class_type": "CLIPVisionLoader",
-    "_label": "Load CLIP Vision Encoder (ViT-H-14 for IP-Adapter)",
+    "_label": "Load CLIP Vision Encoder (ViT-H-14)",
     "inputs": {
       "clip_name": "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors"
     }
@@ -69,11 +76,11 @@
       "clip_vision":  ["6", 0],
       "image":        ["4", 0],
       "model":        ["1", 0],
-      "weight":       0.8,
+      "weight":       0.55,
       "noise":        0.0,
       "weight_type":  "original",
       "start_at":     0.0,
-      "end_at":       1.0,
+      "end_at":       0.85,
       "unfold_batch": false
     }
   },
@@ -86,20 +93,20 @@
   },
   "9": {
     "class_type": "MiDaS-DepthMapPreprocessor",
-    "_label": "Generate Depth Map (MiDaS — room perspective)",
+    "_label": "Generate Depth Map (room perspective)",
     "inputs": {
-      "image":           ["2", 0],
-      "a":               6.283185,
-      "bg_threshold":    0.1,
-      "resolution":      1024
+      "image":        ["100", 0],
+      "a":            6.283185,
+      "bg_threshold": 0.1,
+      "resolution":   1024
     }
   },
   "10": {
     "class_type": "CLIPTextEncode",
-    "_label": "Positive Prompt (material description)",
+    "_label": "Positive Prompt",
     "inputs": {
       "clip": ["1", 1],
-      "text": "__POSITIVE_PROMPT__"
+      "text": "photorealistic interior, architectural photography, high-end material finish, seamless texture, perfect lighting, 8k resolution"
     }
   },
   "11": {
@@ -107,51 +114,51 @@
     "_label": "Negative Prompt",
     "inputs": {
       "clip": ["1", 1],
-      "text": "people, person, human, text, watermark, logo, blurry, low quality, artifacts, distorted, oversaturated, cartoon, anime, illustration, painting, unrealistic"
+      "text": "people, person, human, text, watermark, logo, blurry, low quality, artifacts, distorted, oversaturated, cartoon, anime, illustration, painting, unrealistic, dark, gloomy"
     }
   },
   "12": {
     "class_type": "ControlNetApplyAdvanced",
-    "_label": "Apply ControlNet Depth (structure + perspective preservation)",
+    "_label": "Apply ControlNet Depth (perspective preservation)",
     "inputs": {
-      "positive":        ["10", 0],
-      "negative":        ["11", 0],
-      "control_net":     ["8",  0],
-      "image":           ["9",  0],
-      "strength":        0.9,
-      "start_percent":   0.0,
-      "end_percent":     1.0
+      "positive":      ["10", 0],
+      "negative":      ["11", 0],
+      "control_net":   ["8",  0],
+      "image":         ["9",  0],
+      "strength":      0.65,
+      "start_percent": 0.0,
+      "end_percent":   0.8
     }
   },
   "13": {
     "class_type": "VAEEncodeForInpaint",
-    "_label": "Encode for Inpaint (mask → latent noise mask)",
+    "_label": "Encode for Inpainting (mask → latent noise mask)",
     "inputs": {
-      "pixels":         ["2", 0],
-      "vae":            ["1", 2],
-      "mask":           ["3", 0],
-      "grow_mask_by":   6
+      "pixels":       ["100", 0],
+      "vae":          ["1",   2],
+      "mask":         ["3",   0],
+      "grow_mask_by": 6
     }
   },
   "14": {
     "class_type": "KSampler",
     "_label": "KSampler (inpainting — material texture generation)",
     "inputs": {
-      "model":          ["7",  0],
-      "positive":       ["12", 0],
-      "negative":       ["12", 1],
-      "latent_image":   ["13", 0],
-      "seed":           42,
-      "steps":          25,
-      "cfg":            7.0,
-      "sampler_name":   "dpmpp_2m",
-      "scheduler":      "karras",
-      "denoise":        0.6
+      "model":        ["7",  0],
+      "positive":     ["12", 0],
+      "negative":     ["12", 1],
+      "latent_image": ["13", 0],
+      "seed":         42,
+      "steps":        28,
+      "cfg":          7.5,
+      "sampler_name": "dpmpp_2m",
+      "scheduler":    "karras",
+      "denoise":      0.88
     }
   },
   "15": {
     "class_type": "VAEDecode",
-    "_label": "Decode Latent → Image",
+    "_label": "Decode Latent",
     "inputs": {
       "samples": ["14", 0],
       "vae":     ["1",  2]
@@ -161,7 +168,7 @@
     "class_type": "SaveImage",
     "_label": "Save Result",
     "inputs": {
-      "images":       ["15", 0],
+      "images":          ["15", 0],
       "filename_prefix": "material_apply"
     }
   }

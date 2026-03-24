@@ -1,0 +1,123 @@
+{
+  "_comment": "The Circle — Furniture Place Workflow (API format)",
+  "_description": [
+    "Pipeline: SDXL Inpainting — blends placed furniture into the room scene.",
+    "Assumes the client has alpha-composited furniture onto the room canvas.",
+    "Uses the furniture alpha channel as the inpaint mask boundary.",
+    "",
+    "Runtime injections (WorkflowManager.build_furniture_place_workflow):",
+    "  Node 2   image           — composite scene (room + furniture) base64",
+    "  Node 3   image           — isolated furniture PNG base64",
+    "  Node 6   text            — positive prompt",
+    "  Node 7   text            — negative prompt",
+    "  Node 9   seed/steps/cfg/denoise",
+    "  Node 100 width/height    — SDXL-optimal dimensions from calc_sdxl_size()"
+  ],
+  "1": {
+    "class_type": "CheckpointLoaderSimple",
+    "_label": "Load SDXL Base",
+    "inputs": {
+      "ckpt_name": "sd_xl_base_1.0.safetensors"
+    }
+  },
+  "2": {
+    "class_type": "ETN_LoadImageBase64",
+    "_label": "Load Composite Scene (room + furniture)",
+    "inputs": {
+      "image": ""
+    }
+  },
+  "100": {
+    "class_type": "ImageScale",
+    "_label": "Scale to SDXL-optimal resolution",
+    "inputs": {
+      "image":          ["2", 0],
+      "upscale_method": "lanczos",
+      "width":          1024,
+      "height":         1024,
+      "crop":           "disabled"
+    }
+  },
+  "3": {
+    "class_type": "ETN_LoadImageBase64",
+    "_label": "Load Furniture PNG (background removed)",
+    "inputs": {
+      "image": ""
+    }
+  },
+  "4": {
+    "class_type": "ImageToMask",
+    "_label": "Extract Alpha Channel as Mask",
+    "inputs": {
+      "image":   ["3", 0],
+      "channel": "alpha"
+    }
+  },
+  "5": {
+    "class_type": "GrowMask",
+    "_label": "Dilate Mask (blend boundary)",
+    "inputs": {
+      "mask":            ["4", 0],
+      "expand":          20,
+      "tapered_corners": true
+    }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "_label": "Positive Prompt",
+    "inputs": {
+      "clip": ["1", 1],
+      "text": "photorealistic interior, furniture naturally placed in room, consistent lighting, soft shadow, architectural photography"
+    }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "_label": "Negative Prompt",
+    "inputs": {
+      "clip": ["1", 1],
+      "text": "people, person, human, text, watermark, logo, blurry, low quality, artifacts, distorted, oversaturated, cartoon, anime, illustration, painting, unrealistic, dark, gloomy"
+    }
+  },
+  "8": {
+    "class_type": "VAEEncodeForInpaint",
+    "_label": "Encode for Inpainting (furniture boundary blend)",
+    "inputs": {
+      "pixels":       ["100", 0],
+      "vae":          ["1",   2],
+      "mask":         ["5",   0],
+      "grow_mask_by": 8
+    }
+  },
+  "9": {
+    "class_type": "KSampler",
+    "_label": "KSampler (furniture blend)",
+    "inputs": {
+      "model":        ["1", 0],
+      "positive":     ["6", 0],
+      "negative":     ["7", 0],
+      "latent_image": ["8", 0],
+      "seed":         42,
+      "steps":        20,
+      "cfg":          7.0,
+      "sampler_name": "euler_ancestral",
+      "scheduler":    "normal",
+      "denoise":      0.55
+    }
+  },
+  "10": {
+    "class_type": "VAEDecode",
+    "_label": "Decode Latent",
+    "inputs": {
+      "samples": ["9", 0],
+      "vae":     ["1", 2]
+    }
+  },
+  "11": {
+    "class_type": "SaveImage",
+    "_label": "Save Result",
+    "inputs": {
+      "images":          ["10", 0],
+      "filename_prefix": "furniture_place"
+    }
+  }
+}
