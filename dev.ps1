@@ -97,10 +97,17 @@ function Test-PortInUse {
     return $null -ne $conn
 }
 
+function Get-PidsOnPort {
+    param([int]$Port)
+    $pids = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
+            Select-Object -ExpandProperty OwningProcess -Unique
+    return $pids
+}
+
 function Get-PidOnPort {
     param([int]$Port)
-    $conn = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($conn) { return $conn.OwningProcess }
+    $all = Get-PidsOnPort $Port
+    if ($all) { return $all | Select-Object -First 1 }
     return $null
 }
 
@@ -335,9 +342,15 @@ function Stop-Backend {
     } else {
         Write-Info "백엔드 실행 중이 아닙니다"
     }
-    # 포트에 남아있는 프로세스 정리
-    $lingering = Get-PidOnPort $BePort
-    if ($lingering) { Stop-Process -Id $lingering -Force -ErrorAction SilentlyContinue }
+    # 포트에 남아있는 모든 프로세스 정리 (uvicorn --reload 는 여러 PID 생성)
+    $lingeringPids = Get-PidsOnPort $BePort
+    foreach ($pid in $lingeringPids) {
+        Stop-ProcessTree -ProcId $pid
+    }
+    # 혹시 남아있는 uvicorn 관련 python 프로세스 추가 정리
+    Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='python3.exe'" |
+        Where-Object { $_.CommandLine -like "*uvicorn*" -or $_.CommandLine -like "*$BePort*" } |
+        ForEach-Object { Stop-ProcessTree -ProcId $_.ProcessId }
     Remove-SavedPid "BE"
 }
 
@@ -351,8 +364,15 @@ function Stop-Frontend {
     } else {
         Write-Info "프론트엔드 실행 중이 아닙니다"
     }
-    $lingering = Get-PidOnPort $FePort
-    if ($lingering) { Stop-Process -Id $lingering -Force -ErrorAction SilentlyContinue }
+    # 포트에 남아있는 모든 프로세스 정리
+    $lingeringPids = Get-PidsOnPort $FePort
+    foreach ($pid in $lingeringPids) {
+        Stop-ProcessTree -ProcId $pid
+    }
+    # cmd.exe /c npm start 로 시작된 node 프로세스 추가 정리
+    Get-CimInstance Win32_Process -Filter "Name='node.exe'" |
+        Where-Object { $_.CommandLine -like "*react-scripts*" -or $_.CommandLine -like "*$FePort*" } |
+        ForEach-Object { Stop-ProcessTree -ProcId $_.ProcessId }
     Remove-SavedPid "FE"
 }
 
