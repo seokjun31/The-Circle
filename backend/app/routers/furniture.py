@@ -24,10 +24,10 @@ from app.models.project import Project
 from app.models.user import User
 from app.schemas.furniture import FurnitureCreateRequest, FurnitureResponse
 from app.services.comfyui.runpod_client import RunPodError
-from app.services.furniture_place import (
+from app.services.furniture import (
     CREDITS_PER_PLACEMENT,
-    FurniturePlaceResult,
-    furniture_place_service,
+    FurnitureResult,
+    furniture_service,
 )
 from app.services.image_processor import validate_image, ImageValidationError
 from app.services.s3 import storage
@@ -309,8 +309,8 @@ def place_furniture(
     db.commit()
 
     try:
-        result: FurniturePlaceResult = asyncio.run(
-            furniture_place_service.place_furniture(
+        result: FurnitureResult = asyncio.run(
+            furniture_service.place_furniture(
                 project_id          = project_id,
                 user_id             = current_user.id,
                 db                  = db,

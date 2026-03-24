@@ -89,7 +89,7 @@
     "_label": "Save Result",
     "inputs": {
       "images":          ["7", 0],
-      "filename_prefix": "final_render_simple"
+      "filename_prefix": "lighting"
     }
   }
 }

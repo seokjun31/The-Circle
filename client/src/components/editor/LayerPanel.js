@@ -82,6 +82,11 @@ export default function LayerPanel({
     e.dataTransfer.effectAllowed = 'move';
   }
 
+  function handleDragEnd() {
+    dragSrcId.current = null;
+    setDragOver(null);
+  }
+
   function handleDragOver(e, layer) {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
@@ -150,6 +155,7 @@ export default function LayerPanel({
                 onClick={() => onSelect?.(layer.id)}
                 draggable
                 onDragStart={e => handleDragStart(e, layer)}
+                onDragEnd={handleDragEnd}
                 onDragOver={e => handleDragOver(e, layer)}
                 onDragLeave={handleDragLeave}
                 onDrop={e => handleDrop(e, layer)}

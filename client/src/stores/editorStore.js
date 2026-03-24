@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 
+const MAX_HISTORY = 50;
+
 /**
  * Editor global state (Zustand)
  * Shared across EditorPage, tool panels, and canvas components.
@@ -54,12 +56,15 @@ const useEditorStore = create((set, get) => ({
 
   setLastResult: (result) => set({ lastResult: result }),
 
-  // Push a snapshot to history (stores current layers)
+  // Push a snapshot to history (stores current layers, max MAX_HISTORY entries)
   pushHistory: () => {
     const { layers, history, historyIndex } = get();
     const entry = { layers: JSON.parse(JSON.stringify(layers)), ts: Date.now() };
     const trimmed = history.slice(0, historyIndex + 1);
-    set({ history: [...trimmed, entry], historyIndex: trimmed.length });
+    const next = [...trimmed, entry];
+    // Evict oldest entries when limit exceeded
+    const clamped = next.length > MAX_HISTORY ? next.slice(next.length - MAX_HISTORY) : next;
+    set({ history: clamped, historyIndex: clamped.length - 1 });
   },
 
   undo: () => {

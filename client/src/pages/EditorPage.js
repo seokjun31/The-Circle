@@ -4,9 +4,11 @@ import { ReactCompareSlider, ReactCompareSliderImage } from 'react-compare-slide
 import toast from 'react-hot-toast';
 import useEditorStore from '../stores/editorStore';
 import { getCreditBalance, getProject, getProjectLayers } from '../utils/api';
-import MoodPanel      from '../components/editor/MoodPanel';
-import LightingPanel  from '../components/editor/LightingPanel';
-import LayerPanel     from '../components/editor/LayerPanel';
+import MoodPanel       from '../components/editor/MoodPanel';
+import LightingPanel   from '../components/editor/LightingPanel';
+import LayerPanel      from '../components/editor/LayerPanel';
+import FurniturePanel  from '../components/editor/FurniturePanel';
+import FurniturePlacer from '../components/editor/FurniturePlacer';
 import ProcessingOverlay from '../components/editor/ProcessingOverlay';
 import CorrectionMode from '../components/editor/CorrectionMode';
 import MaterialsEditor from '../components/editor/MaterialsEditor';
@@ -14,8 +16,9 @@ import { useSemanticSegmentation } from '../hooks/useSemanticSegmentation';
 
 /* ── Nav tabs (non-materials) ────────────────────────────────────── */
 const SIDE_NAV = [
-  { id: 'mood',     icon: 'palette',         label: 'Mood',     sub: '분위기 변환' },
-  { id: 'lighting', icon: 'wb_incandescent', label: 'Lighting', sub: '조명 조절'  },
+  { id: 'mood',      icon: 'palette',         label: 'Mood',      sub: '분위기 변환' },
+  { id: 'lighting',  icon: 'wb_incandescent', label: 'Lighting',  sub: '조명 조절'   },
+  { id: 'furniture', icon: 'chair',           label: 'Furniture', sub: '가구 배치'   },
 ];
 
 /* ─────────────────────────────────────────────────────────────────── */
@@ -38,6 +41,9 @@ function EditorPage() {
   const [moodPhase,    setMoodPhase]    = useState('select');
   const [moodResultUrl,setMoodResultUrl]= useState(null);
   const [moodRetries,  setMoodRetries]  = useState(0);
+
+  /* Furniture state */
+  const [selectedFurniture, setSelectedFurniture] = useState(null);
 
   /* Materials free retries */
   const [matFreeRetries, setMatFreeRetries] = useState(0);
@@ -160,7 +166,7 @@ function EditorPage() {
               {project?.title || 'AI 인테리어 에디터'}
             </h1>
             <p className="font-label text-xs tracking-widest text-primary uppercase">
-              Circle.ai — {activeTool === 'mood' ? 'Mood' : activeTool === 'lighting' ? 'Lighting' : 'Layout'}
+              Circle.ai — {activeTool === 'mood' ? 'Mood' : activeTool === 'lighting' ? 'Lighting' : activeTool === 'furniture' ? 'Furniture' : 'Layout'}
             </p>
           </div>
         </div>
@@ -383,6 +389,33 @@ function EditorPage() {
             </div>
           )}
 
+          {/* FURNITURE center */}
+          {activeTool === 'furniture' && (
+            <div className="relative w-full flex-1 rounded-xl overflow-hidden shadow-2xl bg-surface-container border border-outline-variant/20">
+              {selectedFurniture ? (
+                <FurniturePlacer
+                  projectId={projectId}
+                  originalImageUrl={displayUrl}
+                  furniture={selectedFurniture}
+                  creditBalance={creditBalance}
+                  onResult={handleResult}
+                />
+              ) : displayUrl ? (
+                <img className="w-full h-full object-contain" src={displayUrl} alt="Interior" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-on-surface-variant">
+                  {loadingProject ? '불러오는 중...' : '이미지를 불러오는 중...'}
+                </div>
+              )}
+              <div className="absolute top-6 left-6 flex items-center gap-2 bg-[#1a191b]/60 backdrop-blur-xl px-4 py-2 rounded-full border border-outline-variant/20">
+                <span className="material-symbols-outlined text-primary text-sm"
+                  style={{ fontVariationSettings: "'FILL' 1" }}>chair</span>
+                <span className="text-xs font-headline font-bold text-white uppercase tracking-wider">Furniture</span>
+              </div>
+              {isProcessing && <ProcessingOverlay message={processingMessage} isColdStart={isColdStart} />}
+            </div>
+          )}
+
           {/* LAYOUT center */}
           {activeTool === 'layout' && (
             <div className="flex flex-col flex-1 gap-4 overflow-hidden">
@@ -450,6 +483,12 @@ function EditorPage() {
               <p className="text-xs text-on-surface-variant">조명 조절</p>
             </div>
           )}
+          {activeTool === 'furniture' && (
+            <div className="flex-shrink-0 flex flex-col gap-1">
+              <h3 className="font-headline text-base font-bold text-white">Furniture</h3>
+              <p className="text-xs text-on-surface-variant">가구 배치</p>
+            </div>
+          )}
           {activeTool === 'layout' && (
             <div className="flex-shrink-0 flex flex-col gap-1">
               <h3 className="font-headline text-base font-bold text-white">Layout</h3>
@@ -468,6 +507,14 @@ function EditorPage() {
               phase={moodPhase}
               retriesLeft={moodRetries}
               setRetries={setMoodRetries}
+            />
+          )}
+
+          {/* FURNITURE panel */}
+          {activeTool === 'furniture' && (
+            <FurniturePanel
+              selectedFurniture={selectedFurniture}
+              onSelect={setSelectedFurniture}
             />
           )}
 
@@ -501,8 +548,8 @@ function EditorPage() {
             </div>
           )}
 
-          {/* Export card for mood/layout */}
-          {(activeTool === 'mood' || activeTool === 'layout') && (
+          {/* Export card for mood/furniture/layout */}
+          {(activeTool === 'mood' || activeTool === 'furniture' || activeTool === 'layout') && (
             <div className="mt-auto pt-4 flex-shrink-0">
               <button
                 className="w-full relative group overflow-hidden rounded-2xl p-6 transition-all active:scale-[0.98]"
@@ -532,8 +579,8 @@ function EditorPage() {
           <span className="material-symbols-outlined">home</span>
           <span className="text-[10px] font-bold uppercase tracking-widest">Home</span>
         </a>
-        {['mood', 'materials', 'lighting', 'layout'].map(tool => {
-          const icons = { mood: 'palette', materials: 'texture', lighting: 'wb_incandescent', layout: 'grid_view' };
+        {['mood', 'materials', 'lighting', 'furniture', 'layout'].map(tool => {
+          const icons = { mood: 'palette', materials: 'texture', lighting: 'wb_incandescent', furniture: 'chair', layout: 'grid_view' };
           return (
             <a key={tool} href="#"
               className={`flex flex-col items-center justify-center px-4 py-2 transition-all ${

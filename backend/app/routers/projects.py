@@ -304,7 +304,7 @@ def apply_material(
     Costs 1 credit per area.
     """
     from app.models.credit_transaction import CreditTransaction, CreditType
-    from app.services.material_apply import material_apply_service
+    from app.services.material import material_service as material_apply_service
     from app.services.comfyui.runpod_client import RunPodError
 
     CREDITS_PER_MATERIAL_APPLY = 1
@@ -336,7 +336,7 @@ def apply_material(
 
     try:
         result = asyncio.run(
-            material_apply_service.apply_material_to_region(
+            material_apply_service.apply_material(
                 project_id        = project_id,
                 layer_id          = body.layer_id,
                 material_id       = body.material_id,
