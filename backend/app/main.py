@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
-from app.routers import auth, credits, full_render, furniture, lighting, materials, mood, projects, segments
+from app.routers import auth, credits, full_render, furniture, lighting, materials, mood, projects, room_analysis, segments
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
 @asynccontextmanager
@@ -64,7 +64,8 @@ app.include_router(mood.router,          prefix=API_PREFIX)
 app.include_router(lighting.router,      prefix=API_PREFIX)
 app.include_router(furniture.router,     prefix=API_PREFIX)
 app.include_router(furniture.place_router, prefix=API_PREFIX)
-app.include_router(full_render.router,   prefix=API_PREFIX)
+app.include_router(full_render.router,    prefix=API_PREFIX)
+app.include_router(room_analysis.router, prefix=API_PREFIX)
 
 # ── Unified error handlers ────────────────────────────────────────────────────
 @app.exception_handler(RequestValidationError)

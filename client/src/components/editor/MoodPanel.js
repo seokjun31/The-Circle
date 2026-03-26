@@ -4,10 +4,16 @@
  */
 import React, { useState, useRef, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { copyMood } from '../../utils/api';
+import { copyMood, applyMoodPreset } from '../../utils/api';
 
 const CREDITS_COST = 5;
 const MAX_RETRIES  = 3;
+
+const STYLE_PRESETS = [
+  { id: 'wood_white',   label: '우드 앤 화이트',    emoji: '🪵' },
+  { id: 'mid_century',  label: '미드센추리 모던',   emoji: '🛋️' },
+  { id: 'japandi',      label: '재팬디',            emoji: '🎋' },
+];
 
 function fileToDataURL(file) {
   return new Promise((res, rej) => {
@@ -39,11 +45,12 @@ export default function MoodPanel({
   retriesLeft,
   setRetries,
 }) {
-  const [refDataUrl, setRefDataUrl] = useState(null);
-  const [refPreview, setRefPreview] = useState(null);
-  const [strength,   setStrength]   = useState(0.65);
-  const [loading,    setLoading]    = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
+  const [refDataUrl,     setRefDataUrl]     = useState(null);
+  const [refPreview,     setRefPreview]     = useState(null);
+  const [strength,       setStrength]       = useState(0.65);
+  const [loading,        setLoading]        = useState(false);
+  const [isDragging,     setIsDragging]     = useState(false);
+  const [activePreset,   setActivePreset]   = useState(null);
   const fileRef    = useRef(null);
   const lastParams = useRef(null);
 
@@ -77,6 +84,26 @@ export default function MoodPanel({
       setLoading(false);
     }
   }, [projectId, onResult, onPhaseChange, setRetries]);
+
+  /* Preset transform */
+  const handlePreset = useCallback(async (presetId) => {
+    if ((creditBalance ?? 0) < CREDITS_COST) {
+      toast.error(`크레딧 부족 (잔액: ${creditBalance ?? 0})`); return;
+    }
+    setActivePreset(presetId);
+    setLoading(true);
+    try {
+      const result = await applyMoodPreset(projectId, { preset: presetId, strength });
+      setRetries(MAX_RETRIES);
+      onPhaseChange('result', result.result_url);
+      onResult?.(result);
+    } catch (err) {
+      toast.error('변환 실패: ' + err.message);
+    } finally {
+      setLoading(false);
+      setActivePreset(null);
+    }
+  }, [projectId, strength, creditBalance, onResult, onPhaseChange, setRetries]);
 
   /* First paid transform */
   const handleTransform = useCallback(async () => {
@@ -156,6 +183,40 @@ export default function MoodPanel({
 
   return (
     <div className="flex flex-col gap-5">
+
+      {/* Style preset buttons */}
+      <div>
+        <h3 className="font-label text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-3">
+          스타일 프리셋
+        </h3>
+        <div className="flex flex-col gap-2">
+          {STYLE_PRESETS.map((preset) => (
+            <button
+              key={preset.id}
+              className={`w-full py-3 px-4 rounded-xl border transition-all text-sm font-medium flex items-center gap-3 disabled:opacity-50 ${
+                activePreset === preset.id
+                  ? 'border-primary bg-primary/15 text-primary'
+                  : 'border-outline-variant/30 text-white hover:border-primary/50 hover:bg-primary/5'
+              }`}
+              onClick={() => handlePreset(preset.id)}
+              disabled={loading}
+            >
+              <span className="text-base">{preset.emoji}</span>
+              <span>{preset.label}</span>
+              {activePreset === preset.id && loading && (
+                <span className="ml-auto w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Divider */}
+      <div className="flex items-center gap-3">
+        <div className="flex-1 h-px bg-outline-variant/20" />
+        <span className="text-[10px] text-on-surface-variant uppercase tracking-widest">또는 직접 업로드</span>
+        <div className="flex-1 h-px bg-outline-variant/20" />
+      </div>
 
       {/* Upload zone */}
       <div>

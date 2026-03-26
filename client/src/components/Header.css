@@ -27,18 +27,10 @@
   white-space: nowrap;
 }
 
-.logo-icon {
-  color: #bd9dff;
-  font-size: 1.3rem;
-}
-
-.logo-text {
-  font-family: 'Manrope', sans-serif;
-  font-weight: 800;
-  font-size: 1rem;
-  color: #ffffff;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.logo-img {
+  height: 32px;
+  width: auto;
+  display: block;
 }
 
 /* ── Step nav (legacy flow) ────────────────────────────────────────── */
@@ -350,8 +342,3 @@
   }
 }
 
-@media (max-width: 480px) {
-  .logo-text {
-    display: none;
-  }
-}

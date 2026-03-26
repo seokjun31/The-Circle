@@ -45,8 +45,7 @@ function Header() {
       <div className="header-inner">
         {/* ── Logo ───────────────────────────────────────────────────────── */}
         <Link to="/" className="logo">
-          <span className="material-symbols-outlined logo-icon" style={{ fontVariationSettings: "'FILL' 1" }}>circle</span>
-          <span className="logo-text">The Circle</span>
+          <img src="/logo.png" alt="The Circle" className="logo-img" />
         </Link>
 
         {/* ── Step progress nav (legacy flow only) ──────────────────────── */}

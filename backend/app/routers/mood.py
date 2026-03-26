@@ -1,7 +1,8 @@
 """
 Mood — 분위기 변환 API
 
-POST /api/v1/projects/{id}/mood  — 참조 이미지의 분위기를 내 방에 적용
+POST /api/v1/projects/{id}/mood         — 참조 이미지의 분위기를 내 방에 적용
+POST /api/v1/projects/{id}/mood-preset  — 스타일 프리셋으로 분위기 변환
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -12,7 +13,7 @@ from app.dependencies import get_current_user, get_db
 from app.models.project import Project
 from app.models.user import User
 from app.services.comfyui.runpod_client import RunPodError
-from app.services.mood import CREDITS_PER_MOOD, mood_service
+from app.services.mood import CREDITS_PER_MOOD, mood_service, mood_preset_service, VALID_PRESETS
 
 router = APIRouter(tags=["Mood"])
 
@@ -108,6 +109,108 @@ async def apply_mood(
         ) from exc
     except Exception as exc:
         _refund_credits(db, current_user.id, CREDITS_PER_MOOD)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"message": f"처리 중 오류 발생: {exc}", "code": "INTERNAL_ERROR"},
+        ) from exc
+
+    db.refresh(current_user)
+    return MoodResponse(
+        result_url        = result.result_url,
+        layer_id          = result.layer_id,
+        elapsed_s         = result.elapsed_s,
+        credits_used      = CREDITS_PER_MOOD,
+        remaining_balance = current_user.credit_balance,
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  POST /projects/{id}/mood-preset
+# ─────────────────────────────────────────────────────────────────────────────
+
+class MoodPresetRequest(BaseModel):
+    preset: str = Field(
+        ...,
+        description=f"스타일 프리셋: {', '.join(VALID_PRESETS)}",
+    )
+    strength: float = Field(
+        0.55,
+        ge=0.3,
+        le=0.8,
+        description="변환 강도 (0.3=은은, 0.8=강렬)",
+    )
+
+
+@router.post(
+    "/projects/{project_id}/mood-preset",
+    response_model=MoodResponse,
+    summary="스타일 프리셋으로 분위기 변환",
+)
+async def apply_mood_preset(
+    project_id:   int,
+    body:         MoodPresetRequest,
+    db:           Session = Depends(get_db),
+    current_user: User    = Depends(get_current_user),
+):
+    """
+    Apply one of the curated style presets (wood_white / mid_century / japandi)
+    to the current room.  Uses optimised prompts tuned for each style.
+    Deducts **{credits}** credits before processing.
+    """.format(credits=CREDITS_PER_MOOD)
+
+    if body.preset not in VALID_PRESETS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": f"유효하지 않은 프리셋: {body.preset}",
+                "code": "INVALID_PRESET",
+                "valid": VALID_PRESETS,
+            },
+        )
+
+    _get_owned_project(project_id, current_user, db)
+
+    if current_user.credit_balance < CREDITS_PER_MOOD:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail={
+                "message": (
+                    f"크레딧이 부족합니다. "
+                    f"(잔액: {current_user.credit_balance}, 필요: {CREDITS_PER_MOOD})"
+                ),
+                "code":     "INSUFFICIENT_CREDITS",
+                "balance":  current_user.credit_balance,
+                "required": CREDITS_PER_MOOD,
+            },
+        )
+
+    current_user.credit_balance -= CREDITS_PER_MOOD
+    db.commit()
+
+    user_id = current_user.id
+
+    try:
+        result = await mood_preset_service.apply_preset(
+            project_id = project_id,
+            user_id    = user_id,
+            db         = db,
+            preset     = body.preset,
+            strength   = body.strength,
+        )
+    except ValueError as exc:
+        _refund_credits(db, user_id, CREDITS_PER_MOOD)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": str(exc), "code": "INVALID_INPUT"},
+        ) from exc
+    except RunPodError as exc:
+        _refund_credits(db, user_id, CREDITS_PER_MOOD)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"message": f"AI 처리 실패: {exc}", "code": "RUNPOD_ERROR"},
+        ) from exc
+    except Exception as exc:
+        _refund_credits(db, user_id, CREDITS_PER_MOOD)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"message": f"처리 중 오류 발생: {exc}", "code": "INTERNAL_ERROR"},
