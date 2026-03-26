@@ -47,10 +47,6 @@ class Settings(BaseSettings):
     # Where the frontend lives — used for OAuth redirect after login
     FRONTEND_URL: str = "http://localhost:3000"
 
-    # ── Claude API ────────────────────────────────────────────────────────────
-    # Used by MaterialPromptGenerator for AI-assisted prompt auto-generation.
-    ANTHROPIC_API_KEY: str = ""
-
     # ── Redis / Celery ────────────────────────────────────────────────────────
     REDIS_URL: str = "redis://localhost:6379/0"
 

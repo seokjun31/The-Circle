@@ -2,21 +2,20 @@
 Room Analysis — AI 공간 유형 자동 인식
 
 POST /api/v1/projects/{id}/analyze-room
-    Claude Vision으로 방 유형 자동 분석.
-    결과를 projects.room_type / room_type_confidence 에 저장.
+    방 유형 자동 분석 후 projects.room_type / room_type_confidence 저장.
+    현재: 모크 응답 반환 (테스트용)
+    추후: ComfyUI BLIP Analyze 또는 WD14 Tagger 노드로 교체 예정
 
 PATCH /api/v1/projects/{id}/room-type
     사용자가 직접 방 유형 확인/수정.
 """
 import logging
 
-import anthropic
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.dependencies import get_current_user, get_db
 from app.models.project import Project
 from app.models.user import User
@@ -25,7 +24,6 @@ logger = logging.getLogger("the_circle.room_analysis")
 
 router = APIRouter(tags=["Room Analysis"])
 
-# Valid room types (must match the prompt)
 VALID_ROOM_TYPES = [
     "living room",
     "master bedroom",
@@ -37,34 +35,26 @@ VALID_ROOM_TYPES = [
     "empty room",
 ]
 
-# Korean labels for display
 ROOM_TYPE_KR = {
-    "living room":   "거실",
+    "living room":    "거실",
     "master bedroom": "안방",
-    "kitchen":       "주방",
-    "bathroom":      "욕실",
-    "dining room":   "다이닝룸",
-    "study room":    "서재",
-    "balcony":       "발코니",
-    "empty room":    "빈 방",
+    "kitchen":        "주방",
+    "bathroom":       "욕실",
+    "dining room":    "다이닝룸",
+    "study room":     "서재",
+    "balcony":        "발코니",
+    "empty room":     "빈 방",
 }
-
-_VISION_PROMPT = (
-    "You are a highly accurate interior space recognition AI.\n"
-    "Analyze the provided image and categorize the room into one of the following exact English terms:\n"
-    "['living room', 'master bedroom', 'kitchen', 'bathroom', 'dining room', 'study room', 'balcony', 'empty room']\n"
-    "Rules: 1. No explanations. 2. Valid JSON only. 3. Use exact terms. 4. Confidence 0.0-1.0.\n"
-    'Output: { "room_type": "selected_term", "confidence": 0.95 }'
-)
 
 
 # ── Response schemas ───────────────────────────────────────────────────────────
 
 class AnalyzeRoomResponse(BaseModel):
-    room_type:            str
-    room_type_kr:         str
-    confidence:           float
-    project_id:           int
+    room_type:    str
+    room_type_kr: str
+    confidence:   float
+    project_id:   int
+    is_mock:      bool = False
 
 
 class UpdateRoomTypeRequest(BaseModel):
@@ -72,8 +62,8 @@ class UpdateRoomTypeRequest(BaseModel):
 
 
 class UpdateRoomTypeResponse(BaseModel):
-    project_id: int
-    room_type:  str
+    project_id:   int
+    room_type:    str
     room_type_kr: str
 
 
@@ -82,17 +72,23 @@ class UpdateRoomTypeResponse(BaseModel):
 @router.post(
     "/projects/{project_id}/analyze-room",
     response_model=AnalyzeRoomResponse,
-    summary="AI로 방 유형 자동 인식 (Claude Vision)",
+    summary="방 유형 자동 인식 (현재: 모크 / 추후: ComfyUI BLIP)",
 )
-async def analyze_room(
+def analyze_room(
     project_id:   int,
     db:           Session = Depends(get_db),
     current_user: User    = Depends(get_current_user),
 ):
     """
-    Sends the project's original image to Claude Vision (haiku) to detect the
-    room type automatically.  Saves the result to the project row and returns
-    ``{ room_type, room_type_kr, confidence }``.
+    방 유형을 자동으로 분석합니다.
+
+    **현재 동작 (테스트 모드):**
+    - 모크 응답으로 "living room" 반환
+    - 사용자가 다이얼로그에서 직접 수정 가능
+
+    **추후 ComfyUI 연동 시:**
+    - BLIP Analyze 노드로 이미지 캡셔닝 → 방 유형 분류
+    - 또는 WD14 Tagger 노드로 태그 기반 분류
     """
     project = _get_owned_project(project_id, current_user, db)
 
@@ -102,73 +98,17 @@ async def analyze_room(
             detail={"message": "프로젝트에 이미지가 없습니다.", "code": "NO_IMAGE"},
         )
 
-    if not settings.ANTHROPIC_API_KEY:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"message": "Anthropic API 키가 설정되지 않았습니다.", "code": "NO_API_KEY"},
-        )
+    # ── TODO: ComfyUI BLIP / WD14 연동 후 이 블록을 실제 분석으로 교체 ──────
+    # 현재는 모크 응답 반환
+    room_type  = "living room"
+    confidence = 0.5
+    logger.info(
+        "analyze_room MOCK: project=%d → room_type=%s (BLIP/WD14 연동 전 임시값)",
+        project_id, room_type,
+    )
+    # ─────────────────────────────────────────────────────────────────────────
 
-    # ── Call Claude Vision ────────────────────────────────────────────────────
-    try:
-        client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
-        message = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=128,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type":       "image",
-                            "source":     {
-                                "type": "url",
-                                "url":  project.original_image_url,
-                            },
-                        },
-                        {
-                            "type": "text",
-                            "text": _VISION_PROMPT,
-                        },
-                    ],
-                }
-            ],
-        )
-    except Exception as exc:
-        logger.error("Claude Vision call failed for project %d: %s", project_id, exc)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={"message": f"AI 분석 실패: {exc}", "code": "AI_ERROR"},
-        ) from exc
-
-    # ── Parse response ────────────────────────────────────────────────────────
-    raw_text = message.content[0].text.strip()
-    logger.info("Room analysis raw response for project %d: %s", project_id, raw_text)
-
-    import json, re
-    # Extract JSON even if surrounded by code fences
-    json_match = re.search(r"\{.*?\}", raw_text, re.DOTALL)
-    if not json_match:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={"message": f"AI 응답 파싱 실패: {raw_text[:100]}", "code": "PARSE_ERROR"},
-        )
-
-    try:
-        result = json.loads(json_match.group())
-        room_type  = result["room_type"].strip().lower()
-        confidence = float(result["confidence"])
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={"message": f"AI 응답 파싱 실패: {raw_text[:100]}", "code": "PARSE_ERROR"},
-        ) from exc
-
-    # Fallback if unrecognized
-    if room_type not in VALID_ROOM_TYPES:
-        room_type = "empty room"
-        confidence = 0.5
-
-    # ── Persist ───────────────────────────────────────────────────────────────
+    # DB 저장 (모크 값이라도 저장 — 사용자가 수정 후 PATCH로 덮어씀)
     try:
         db.execute(
             sa_update(Project)
@@ -185,9 +125,10 @@ async def analyze_room(
 
     return AnalyzeRoomResponse(
         room_type    = room_type,
-        room_type_kr = ROOM_TYPE_KR.get(room_type, room_type),
-        confidence   = round(confidence, 3),
+        room_type_kr = ROOM_TYPE_KR[room_type],
+        confidence   = confidence,
         project_id   = project_id,
+        is_mock      = True,
     )
 
 
@@ -204,9 +145,7 @@ def update_room_type(
     db:           Session = Depends(get_db),
     current_user: User    = Depends(get_current_user),
 ):
-    """
-    Store the user-confirmed (or manually entered) room type on the project.
-    """
+    """사용자가 확인하거나 직접 선택한 방 유형을 저장합니다."""
     _get_owned_project(project_id, current_user, db)
 
     room_type = body.room_type.strip().lower()
