@@ -223,13 +223,26 @@ function EditorPage() {
           <span className="material-symbols-outlined text-sm text-on-surface-variant">layers</span>
           <span className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">레이아웃</span>
         </div>
-        {/* Thumbnail strip — only explicitly added layers */}
+        {/* Thumbnail strip — original + explicitly added layers */}
         <div className="flex gap-2 overflow-x-auto flex-1 py-1 pr-2">
+          {/* 원본 버튼 */}
+          {imageUrl && (
+            <div
+              title="원본 이미지"
+              className={`flex-shrink-0 w-8 h-8 rounded-lg overflow-hidden border transition-all cursor-pointer relative ${
+                !selectedLayoutUrl ? 'border-primary ring-1 ring-primary' : 'border-outline-variant/20 hover:border-primary/60'
+              }`}
+              onClick={() => { setSelectedLayoutUrl(null); setSelectedLayerId(null); }}
+            >
+              <img src={imageUrl} alt="원본" className="w-full h-full object-cover" />
+              <span className="absolute bottom-0 left-0 right-0 text-[7px] text-center bg-black/70 text-white leading-tight py-0.5">원본</span>
+            </div>
+          )}
           {layers.filter(l => layoutLayerIds.has(l.id)).map(layer => (
             <div key={layer.id}
               title={layer.name || layer.layer_type}
               className={`flex-shrink-0 w-8 h-8 rounded-lg overflow-hidden border transition-all cursor-pointer ${
-                selectedLayerId === layer.id ? 'border-primary' : 'border-outline-variant/20 hover:border-primary/60'
+                selectedLayoutUrl && selectedLayerId === layer.id ? 'border-primary ring-1 ring-primary' : 'border-outline-variant/20 hover:border-primary/60'
               }`}
               onClick={() => handleLayoutLayerClick(layer)}
             >
@@ -240,7 +253,7 @@ function EditorPage() {
             </div>
           ))}
           {layoutLayerIds.size === 0 && (
-            <span className="text-[10px] text-on-surface-variant/50 self-center">
+            <span className="text-[10px] text-on-surface-variant/50 self-center pl-2">
               변환 완료 후 레이아웃에 추가하세요
             </span>
           )}
@@ -462,34 +475,47 @@ function EditorPage() {
                   </span>
                 </div>
               </div>
-              {/* Thumbnail strip — only explicitly added (pinned) layers */}
-              {layoutLayerIds.size > 0 && (
-                <div className="flex-shrink-0 flex gap-3 overflow-x-auto pb-1">
-                  {layers.filter(l => layoutLayerIds.has(l.id)).map((layer, i) => (
-                    <div key={layer.id}
-                      className="flex-shrink-0 w-24 flex flex-col gap-1 cursor-pointer"
-                      onClick={() => handleLayoutLayerClick(layer)}
-                    >
-                      <div className={`relative rounded-lg overflow-hidden h-16 border transition-all ${
-                        selectedLayerId === layer.id ? 'border-primary' : 'border-outline-variant/20 hover:border-primary/60'
-                      }`}>
-                        {layer.result_url
-                          ? <img src={layer.result_url} alt={layer.name} className="w-full h-full object-cover" />
-                          : <div className="w-full h-full bg-surface-container-high flex items-center justify-center">
-                              <span className="material-symbols-outlined text-on-surface-variant text-sm">image</span>
-                            </div>
-                        }
-                        <span className="absolute bottom-1 left-1 text-[9px] bg-black/70 px-1 py-0.5 rounded text-white">
-                          {i + 1}
-                        </span>
-                      </div>
-                      <p className="text-[10px] text-on-surface-variant truncate text-center">
-                        {layer.name || `레이어 ${i + 1}`}
-                      </p>
+              {/* Thumbnail strip — 원본 + pinned layers */}
+              <div className="flex-shrink-0 flex gap-3 overflow-x-auto pb-1">
+                {/* 원본 썸네일 */}
+                {imageUrl && (
+                  <div
+                    className="flex-shrink-0 w-24 flex flex-col gap-1 cursor-pointer"
+                    onClick={() => { setSelectedLayoutUrl(null); setSelectedLayerId(null); }}
+                  >
+                    <div className={`relative rounded-lg overflow-hidden h-16 border transition-all ${
+                      !selectedLayoutUrl ? 'border-primary ring-1 ring-primary' : 'border-outline-variant/20 hover:border-primary/60'
+                    }`}>
+                      <img src={imageUrl} alt="원본" className="w-full h-full object-cover" />
+                      <span className="absolute bottom-1 left-1 text-[9px] bg-black/70 px-1 py-0.5 rounded text-white">원본</span>
                     </div>
-                  ))}
-                </div>
-              )}
+                    <p className="text-[10px] text-on-surface-variant truncate text-center">원본</p>
+                  </div>
+                )}
+                {layers.filter(l => layoutLayerIds.has(l.id)).map((layer, i) => (
+                  <div key={layer.id}
+                    className="flex-shrink-0 w-24 flex flex-col gap-1 cursor-pointer"
+                    onClick={() => handleLayoutLayerClick(layer)}
+                  >
+                    <div className={`relative rounded-lg overflow-hidden h-16 border transition-all ${
+                      selectedLayoutUrl && selectedLayerId === layer.id ? 'border-primary ring-1 ring-primary' : 'border-outline-variant/20 hover:border-primary/60'
+                    }`}>
+                      {layer.result_url
+                        ? <img src={layer.result_url} alt={layer.name} className="w-full h-full object-cover" />
+                        : <div className="w-full h-full bg-surface-container-high flex items-center justify-center">
+                            <span className="material-symbols-outlined text-on-surface-variant text-sm">image</span>
+                          </div>
+                      }
+                      <span className="absolute bottom-1 left-1 text-[9px] bg-black/70 px-1 py-0.5 rounded text-white">
+                        {i + 1}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-on-surface-variant truncate text-center">
+                      {layer.name || `레이어 ${i + 1}`}
+                    </p>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </section>
