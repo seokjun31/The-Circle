@@ -52,6 +52,15 @@ function EditorPage() {
   /* Correction Mode */
   const [correctionIntent, setCorrectionIntent] = useState(null);
 
+  /* Image aspect ratio — used to size compare slider correctly */
+  const [imageNaturalRatio, setImageNaturalRatio] = useState(null);
+
+  /* Layout: only explicitly added layers are shown (one per tool) */
+  const [layoutLayerIds, setLayoutLayerIds] = useState(new Set());
+  const [toolLayerMap,   setToolLayerMap]   = useState({});   // { mood: layerId, lighting: layerId, ... }
+  /* Base image override: when user clicks a layout layer from another tool */
+  const [selectedLayoutUrl, setSelectedLayoutUrl] = useState(null);
+
   const { isAnalyzing, analyzeRoom } = useSemanticSegmentation();
   const imageCanvasRef = useRef(null);
 
@@ -96,14 +105,14 @@ function EditorPage() {
 
   useEffect(() => { refreshLayers(); }, [refreshLayers]);
 
-  /* ── Generic result handler ── */
+  /* ── Generic result handler — does NOT auto-add to layout ── */
   const handleResult = useCallback((result) => {
     setLastResult(result);
     if (result.remaining_balance !== undefined) setCreditBalance(result.remaining_balance);
     pushHistory?.();
-    refreshLayers();
+    // Do NOT call refreshLayers() here — layers only appear when user explicitly adds them
     getCreditBalance().then(d => setCreditBalance(d.balance)).catch(() => {});
-  }, [setLastResult, setCreditBalance, pushHistory, refreshLayers]);
+  }, [setLastResult, setCreditBalance, pushHistory]);
 
   /* ── Mood handlers ── */
   const handleMoodPhaseChange = useCallback((phase, resultUrl) => {
@@ -118,20 +127,40 @@ function EditorPage() {
     setMoodPreviewUrl(url);
   }, []);
 
-  /* ── Layout bar: add current result to layout ── */
+  /* ── Layout: add current result (one per tool, replaces existing) ── */
   const handleAddToLayout = useCallback(() => {
-    const url = lastResult?.result_url || imageUrl;
-    if (!url) { toast.error('추가할 이미지가 없습니다.'); return; }
-    refreshLayers();
+    const layerId = lastResult?.layer_id;
+    if (!layerId) { toast.error('추가할 이미지가 없습니다.'); return; }
+    setLayoutLayerIds(prev => {
+      const next = new Set(prev);
+      const oldId = toolLayerMap[activeTool];
+      if (oldId) next.delete(oldId);
+      next.add(layerId);
+      return next;
+    });
+    setToolLayerMap(prev => ({ ...prev, [activeTool]: layerId }));
+    refreshLayers(); // ensure layer data is loaded
     toast.success('레이아웃에 추가되었습니다!', { icon: '✅' });
-  }, [lastResult, imageUrl, refreshLayers]);
+  }, [lastResult, activeTool, toolLayerMap, refreshLayers]);
+
+  /* ── Layout layer click: show in viewport, and use as base for other tools ── */
+  const handleLayoutLayerClick = useCallback((layer) => {
+    setSelectedLayerId(layer.id);
+    if (layer.result_url) {
+      setSelectedLayoutUrl(layer.result_url);
+      if (activeTool !== 'layout') {
+        toast(`레이어 이미지를 기준으로 작업합니다`, { icon: '🔗' });
+      }
+    }
+  }, [activeTool]);
 
   /* ── Correction Mode ── */
   const handleCorrectionComplete = useCallback((mask) => {
     setCorrectionIntent(null);
   }, []);
 
-  const displayUrl = lastResult?.result_url || imageUrl;
+  // displayUrl: layout-selected layer > last result > original
+  const displayUrl = selectedLayoutUrl || lastResult?.result_url || imageUrl;
 
   /* ── MATERIALS: render standalone full-page MaterialsEditor ── */
   if (activeTool === 'materials') {
@@ -180,16 +209,6 @@ function EditorPage() {
         </div>
 
         <div className="flex items-center gap-4">
-          {/* Layout add button (always visible in nav) */}
-          {lastResult?.result_url && (
-            <button
-              onClick={handleAddToLayout}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-primary/30 text-primary text-xs font-bold hover:bg-primary/10 transition-all"
-            >
-              <span className="material-symbols-outlined text-sm">add_photo_alternate</span>
-              레이아웃 추가
-            </button>
-          )}
           <div className="flex items-center gap-2 bg-surface-container-high px-4 py-2 rounded-full border border-outline-variant/20">
             <span className="material-symbols-outlined text-primary text-sm"
               style={{ fontVariationSettings: "'FILL' 1" }}>generating_tokens</span>
@@ -207,14 +226,15 @@ function EditorPage() {
           <span className="material-symbols-outlined text-sm text-on-surface-variant">layers</span>
           <span className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">레이아웃</span>
         </div>
-        {/* Thumbnail strip */}
+        {/* Thumbnail strip — only explicitly added layers */}
         <div className="flex gap-2 overflow-x-auto flex-1 py-1 pr-2">
-          {[...layers].reverse().map(layer => (
+          {layers.filter(l => layoutLayerIds.has(l.id)).map(layer => (
             <div key={layer.id}
+              title={layer.name || layer.layer_type}
               className={`flex-shrink-0 w-8 h-8 rounded-lg overflow-hidden border transition-all cursor-pointer ${
-                selectedLayerId === layer.id ? 'border-primary' : 'border-outline-variant/20 hover:border-outline-variant/60'
+                selectedLayerId === layer.id ? 'border-primary' : 'border-outline-variant/20 hover:border-primary/60'
               }`}
-              onClick={() => { setSelectedLayerId(layer.id); setActiveTool('layout'); }}
+              onClick={() => handleLayoutLayerClick(layer)}
             >
               {layer.result_url
                 ? <img src={layer.result_url} alt="" className="w-full h-full object-cover" />
@@ -222,15 +242,12 @@ function EditorPage() {
               }
             </div>
           ))}
+          {layoutLayerIds.size === 0 && (
+            <span className="text-[10px] text-on-surface-variant/50 self-center">
+              변환 완료 후 레이아웃에 추가하세요
+            </span>
+          )}
         </div>
-        {/* "레이아웃 추가" button */}
-        <button
-          onClick={handleAddToLayout}
-          className="flex-shrink-0 flex items-center gap-1.5 mr-3 px-3 py-1 rounded-lg border border-outline-variant/30 text-on-surface-variant text-[10px] font-bold hover:border-primary/50 hover:text-primary transition-all"
-        >
-          <span className="material-symbols-outlined text-sm">add</span>
-          레이아웃 추가
-        </button>
       </div>
 
       {/* ══ DESKTOP LEFT NAV (w-[200px], fixed) ════════════════ */}
@@ -331,14 +348,33 @@ function EditorPage() {
           {/* MOOD center */}
           {activeTool === 'mood' && (
             <>
-              <div className="relative w-full flex-1 rounded-xl overflow-hidden shadow-2xl bg-surface-container border border-outline-variant/20">
+              {/* Hidden img to capture natural aspect ratio */}
+              {imageUrl && (
+                <img src={imageUrl} className="hidden" alt=""
+                  onLoad={e => setImageNaturalRatio(e.target.naturalWidth / e.target.naturalHeight)} />
+              )}
+              <div className="relative w-full flex-1 rounded-xl overflow-hidden shadow-2xl bg-surface-container border border-outline-variant/20 flex items-center justify-center">
                 {(moodPhase === 'result' || moodPhase === 'done') && moodResultUrl && imageUrl ? (
-                  /* Compare slider — reference image transform result */
-                  <ReactCompareSlider
-                    itemOne={<ReactCompareSliderImage src={imageUrl} alt="원본" style={{ objectFit: 'contain' }} />}
-                    itemTwo={<ReactCompareSliderImage src={moodResultUrl} alt="변환" style={{ objectFit: 'contain' }} />}
-                    style={{ width: '100%', height: '100%' }}
-                  />
+                  /* Compare slider — sized to original image aspect ratio */
+                  <div style={{
+                    width: '100%',
+                    height: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}>
+                    <div style={imageNaturalRatio ? {
+                      aspectRatio: String(imageNaturalRatio),
+                      maxWidth: '100%',
+                      maxHeight: '100%',
+                    } : { width: '100%', height: '100%' }}>
+                      <ReactCompareSlider
+                        itemOne={<ReactCompareSliderImage src={imageUrl} alt="원본" style={{ objectFit: 'cover' }} />}
+                        itemTwo={<ReactCompareSliderImage src={moodResultUrl} alt="변환" style={{ objectFit: 'cover' }} />}
+                        style={{ width: '100%', height: '100%' }}
+                      />
+                    </div>
+                  </div>
                 ) : moodPreviewUrl ? (
                   /* Preset result preview (stays in select phase) */
                   <img className="w-full h-full object-contain" src={moodPreviewUrl} alt="프리셋 변환" />
@@ -444,20 +480,20 @@ function EditorPage() {
                   <span className="material-symbols-outlined text-primary text-sm"
                     style={{ fontVariationSettings: "'FILL' 1" }}>layers</span>
                   <span className="text-xs font-headline font-bold text-white uppercase tracking-wider">
-                    {layers.length}개의 변경 레이어
+                    {layoutLayerIds.size}개의 레이아웃 레이어
                   </span>
                 </div>
               </div>
-              {/* Thumbnail strip */}
-              {layers.length > 0 && (
+              {/* Thumbnail strip — only explicitly added (pinned) layers */}
+              {layoutLayerIds.size > 0 && (
                 <div className="flex-shrink-0 flex gap-3 overflow-x-auto pb-1">
-                  {[...layers].reverse().map((layer, i) => (
+                  {layers.filter(l => layoutLayerIds.has(l.id)).map((layer, i) => (
                     <div key={layer.id}
-                      className={`flex-shrink-0 w-24 flex flex-col gap-1 cursor-pointer`}
-                      onClick={() => setSelectedLayerId(layer.id)}
+                      className="flex-shrink-0 w-24 flex flex-col gap-1 cursor-pointer"
+                      onClick={() => handleLayoutLayerClick(layer)}
                     >
                       <div className={`relative rounded-lg overflow-hidden h-16 border transition-all ${
-                        selectedLayerId === layer.id ? 'border-primary' : 'border-outline-variant/20'
+                        selectedLayerId === layer.id ? 'border-primary' : 'border-outline-variant/20 hover:border-primary/60'
                       }`}>
                         {layer.result_url
                           ? <img src={layer.result_url} alt={layer.name} className="w-full h-full object-cover" />
@@ -466,11 +502,11 @@ function EditorPage() {
                             </div>
                         }
                         <span className="absolute bottom-1 left-1 text-[9px] bg-black/70 px-1 py-0.5 rounded text-white">
-                          {layers.length - i}
+                          {i + 1}
                         </span>
                       </div>
                       <p className="text-[10px] text-on-surface-variant truncate text-center">
-                        {layer.name || `레이어 ${layers.length - i}`}
+                        {layer.name || `레이어 ${i + 1}`}
                       </p>
                     </div>
                   ))}
@@ -545,44 +581,27 @@ function EditorPage() {
           {/* LAYOUT panel */}
           {activeTool === 'layout' && (
             <div className="flex-1 overflow-y-auto">
-              {layers.length === 0 ? (
+              {layoutLayerIds.size === 0 ? (
                 <div className="flex flex-col items-center justify-center h-48 gap-3 text-on-surface-variant">
                   <span className="material-symbols-outlined text-4xl opacity-40">layers</span>
-                  <p className="text-sm text-center">아직 변경 내역이 없습니다.<br />Mood, Materials, Lighting 탭에서 편집을 시작하세요.</p>
+                  <p className="text-sm text-center">레이아웃이 비어 있습니다.<br />각 탭에서 변환 후 "레이아웃에 추가" 버튼을 눌러주세요.</p>
                 </div>
               ) : (
                 <LayerPanel
                   projectId={projectId}
-                  layers={layers}
+                  layers={layers.filter(l => layoutLayerIds.has(l.id))}
                   selected={selectedLayerId}
-                  onSelect={setSelectedLayerId}
+                  onSelect={(id) => {
+                    const layer = layers.find(l => l.id === id);
+                    if (layer) handleLayoutLayerClick(layer);
+                  }}
                   onLayersChange={refreshLayers}
                 />
               )}
             </div>
           )}
 
-          {/* Export card for mood/furniture/layout */}
-          {(activeTool === 'mood' || activeTool === 'furniture' || activeTool === 'layout') && (
-            <div className="mt-auto pt-4 flex-shrink-0">
-              <button
-                className="w-full relative group overflow-hidden rounded-2xl p-6 transition-all active:scale-[0.98]"
-                onClick={() => setActiveTool('lighting')}
-              >
-                <div className="absolute inset-0 bg-gradient-to-br from-[#7c3aed] to-[#bd9dff] group-hover:opacity-90 transition-opacity" />
-                <div className="absolute -right-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500" />
-                <div className="relative flex flex-col items-start gap-1">
-                  <div className="flex items-center justify-between w-full mb-2">
-                    <span className="material-symbols-outlined text-white"
-                      style={{ fontVariationSettings: "'FILL' 1" }}>download</span>
-                    <span className="bg-black/20 text-[10px] text-white font-bold py-1 px-2 rounded-full uppercase">Pro</span>
-                  </div>
-                  <p className="text-lg font-headline font-bold text-white tracking-tight">Export High Quality Image</p>
-                  <p className="text-xs text-white/80 font-medium">SDXL Refiner + Upscale 4K</p>
-                </div>
-              </button>
-            </div>
-          )}
+          {/* Export card: only shown from MoodPanel done phase */}
         </aside>
       </main>
 
