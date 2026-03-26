@@ -57,6 +57,8 @@ function EditorPage() {
   const [toolLayerMap,   setToolLayerMap]   = useState({});   // { mood: layerId, lighting: layerId, ... }
   /* Base image override: when user clicks a layout layer from another tool */
   const [selectedLayoutUrl, setSelectedLayoutUrl] = useState(null);
+  /* When true, center viewport always shows original regardless of lastResult */
+  const [useOriginalImage, setUseOriginalImage] = useState(false);
 
   const { isAnalyzing, analyzeRoom } = useSemanticSegmentation();
   const imageCanvasRef = useRef(null);
@@ -105,6 +107,7 @@ function EditorPage() {
   /* ── Generic result handler — does NOT auto-add to layout ── */
   const handleResult = useCallback((result) => {
     setLastResult(result);
+    setUseOriginalImage(false); // new result → show it, not the original
     if (result.remaining_balance !== undefined) setCreditBalance(result.remaining_balance);
     pushHistory?.();
     // Do NOT call refreshLayers() here — layers only appear when user explicitly adds them
@@ -145,6 +148,7 @@ function EditorPage() {
     setSelectedLayerId(layer.id);
     if (layer.result_url) {
       setSelectedLayoutUrl(layer.result_url);
+      setUseOriginalImage(false);
       if (activeTool !== 'layout') {
         toast(`레이어 이미지를 기준으로 작업합니다`, { icon: '🔗' });
       }
@@ -156,8 +160,8 @@ function EditorPage() {
     setCorrectionIntent(null);
   }, []);
 
-  // displayUrl: layout-selected layer > last result > original
-  const displayUrl = selectedLayoutUrl || lastResult?.result_url || imageUrl;
+  // displayUrl: 원본 강제 > layout-selected layer > last result > original
+  const displayUrl = useOriginalImage ? imageUrl : (selectedLayoutUrl || lastResult?.result_url || imageUrl);
 
   /* ── MATERIALS: render standalone full-page MaterialsEditor ── */
   if (activeTool === 'materials') {
@@ -232,7 +236,7 @@ function EditorPage() {
               className={`flex-shrink-0 w-8 h-8 rounded-lg overflow-hidden border transition-all cursor-pointer relative ${
                 !selectedLayoutUrl ? 'border-primary ring-1 ring-primary' : 'border-outline-variant/20 hover:border-primary/60'
               }`}
-              onClick={() => { setSelectedLayoutUrl(null); setSelectedLayerId(null); }}
+              onClick={() => { setSelectedLayoutUrl(null); setSelectedLayerId(null); setUseOriginalImage(true); }}
             >
               <img src={imageUrl} alt="원본" className="w-full h-full object-cover" />
               <span className="absolute bottom-0 left-0 right-0 text-[7px] text-center bg-black/70 text-white leading-tight py-0.5">원본</span>
@@ -481,7 +485,7 @@ function EditorPage() {
                 {imageUrl && (
                   <div
                     className="flex-shrink-0 w-24 flex flex-col gap-1 cursor-pointer"
-                    onClick={() => { setSelectedLayoutUrl(null); setSelectedLayerId(null); }}
+                    onClick={() => { setSelectedLayoutUrl(null); setSelectedLayerId(null); setUseOriginalImage(true); }}
                   >
                     <div className={`relative rounded-lg overflow-hidden h-16 border transition-all ${
                       !selectedLayoutUrl ? 'border-primary ring-1 ring-primary' : 'border-outline-variant/20 hover:border-primary/60'
