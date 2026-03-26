@@ -146,8 +146,8 @@ function EditorPage() {
   /* ── Layout layer click: show in viewport, and use as base for other tools ── */
   const handleLayoutLayerClick = useCallback((layer) => {
     setSelectedLayerId(layer.id);
-    if (layer.result_url) {
-      setSelectedLayoutUrl(layer.result_url);
+    if (layer.result_image_url) {
+      setSelectedLayoutUrl(layer.result_image_url);
       setUseOriginalImage(false);
       if (activeTool !== 'layout') {
         toast(`레이어 이미지를 기준으로 작업합니다`, { icon: '🔗' });
@@ -250,8 +250,8 @@ function EditorPage() {
               }`}
               onClick={() => handleLayoutLayerClick(layer)}
             >
-              {layer.result_url
-                ? <img src={layer.result_url} alt="" className="w-full h-full object-cover" />
+              {layer.result_image_url
+                ? <img src={layer.result_image_url} alt="" className="w-full h-full object-cover" />
                 : <div className="w-full h-full bg-surface-container-high" />
               }
             </div>
@@ -504,8 +504,8 @@ function EditorPage() {
                     <div className={`relative rounded-lg overflow-hidden h-16 border transition-all ${
                       selectedLayoutUrl && selectedLayerId === layer.id ? 'border-primary ring-1 ring-primary' : 'border-outline-variant/20 hover:border-primary/60'
                     }`}>
-                      {layer.result_url
-                        ? <img src={layer.result_url} alt={layer.name} className="w-full h-full object-cover" />
+                      {layer.result_image_url
+                        ? <img src={layer.result_image_url} alt={layer.name} className="w-full h-full object-cover" />
                         : <div className="w-full h-full bg-surface-container-high flex items-center justify-center">
                             <span className="material-symbols-outlined text-on-surface-variant text-sm">image</span>
                           </div>
