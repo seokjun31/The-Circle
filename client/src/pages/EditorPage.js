@@ -38,9 +38,10 @@ function EditorPage() {
   const [selectedLayerId, setSelectedLayerId] = useState(null);
 
   /* Mood state (lifted for center viewport) */
-  const [moodPhase,    setMoodPhase]    = useState('select');
-  const [moodResultUrl,setMoodResultUrl]= useState(null);
-  const [moodRetries,  setMoodRetries]  = useState(0);
+  const [moodPhase,      setMoodPhase]      = useState('select');
+  const [moodResultUrl,  setMoodResultUrl]  = useState(null);   // compare slider (reference transform)
+  const [moodPreviewUrl, setMoodPreviewUrl] = useState(null);   // preset result (stays in select phase)
+  const [moodRetries,    setMoodRetries]    = useState(0);
 
   /* Furniture state */
   const [selectedFurniture, setSelectedFurniture] = useState(null);
@@ -108,6 +109,13 @@ function EditorPage() {
   const handleMoodPhaseChange = useCallback((phase, resultUrl) => {
     setMoodPhase(phase);
     if (resultUrl) setMoodResultUrl(resultUrl);
+    // Going back to select for retry → clear preview so original shows
+    if (phase === 'select') setMoodPreviewUrl(null);
+  }, []);
+
+  /* Called by MoodPanel when a preset is applied (stays in select phase) */
+  const handlePresetResult = useCallback((url) => {
+    setMoodPreviewUrl(url);
   }, []);
 
   /* ── Layout bar: add current result to layout ── */
@@ -324,21 +332,26 @@ function EditorPage() {
           {activeTool === 'mood' && (
             <>
               <div className="relative w-full flex-1 rounded-xl overflow-hidden shadow-2xl bg-surface-container border border-outline-variant/20">
-                {moodPhase === 'result' && moodResultUrl && imageUrl ? (
+                {(moodPhase === 'result' || moodPhase === 'done') && moodResultUrl && imageUrl ? (
+                  /* Compare slider — reference image transform result */
                   <ReactCompareSlider
-                    itemOne={<ReactCompareSliderImage src={imageUrl} alt="원본" style={{ objectFit: 'cover' }} />}
-                    itemTwo={<ReactCompareSliderImage src={moodResultUrl} alt="변환" style={{ objectFit: 'cover' }} />}
+                    itemOne={<ReactCompareSliderImage src={imageUrl} alt="원본" style={{ objectFit: 'contain' }} />}
+                    itemTwo={<ReactCompareSliderImage src={moodResultUrl} alt="변환" style={{ objectFit: 'contain' }} />}
                     style={{ width: '100%', height: '100%' }}
                   />
-                ) : displayUrl ? (
-                  <img className="w-full h-full object-contain" src={displayUrl} alt="Interior" />
+                ) : moodPreviewUrl ? (
+                  /* Preset result preview (stays in select phase) */
+                  <img className="w-full h-full object-contain" src={moodPreviewUrl} alt="프리셋 변환" />
+                ) : imageUrl ? (
+                  /* Original image */
+                  <img className="w-full h-full object-contain" src={imageUrl} alt="Interior" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-on-surface-variant">
                     {loadingProject ? '불러오는 중...' : '이미지를 불러오는 중...'}
                   </div>
                 )}
 
-                {(moodResultUrl || lastResult?.result_url) && (
+                {moodPreviewUrl && moodPhase === 'select' && (
                   <div className="absolute top-6 left-6 flex items-center gap-2 bg-[#1a191b]/60 backdrop-blur-xl px-4 py-2 rounded-full border border-primary/30"
                     style={{ boxShadow: '0 0 20px rgba(124,58,237,0.2)' }}>
                     <span className="material-symbols-outlined text-primary text-sm"
@@ -347,7 +360,7 @@ function EditorPage() {
                   </div>
                 )}
 
-                {moodPhase === 'result' && (
+                {(moodPhase === 'result' || moodPhase === 'done') && (
                   <>
                     <span className="absolute top-4 right-4 text-[10px] font-bold bg-primary/20 backdrop-blur-sm px-2 py-1 rounded-full text-primary border border-primary/30">AI 변환</span>
                     <span className="absolute top-4 left-16 text-[10px] font-bold bg-black/50 backdrop-blur-sm px-2 py-1 rounded-full text-white">원본</span>
@@ -362,9 +375,9 @@ function EditorPage() {
                 )}
               </div>
 
-              {moodPhase === 'select' && (
+              {moodPhase === 'select' && !moodPreviewUrl && (
                 <p className="text-center text-xs text-on-surface-variant mt-3 flex-shrink-0">
-                  오른쪽 패널에서 참조 이미지를 업로드하고 변환하세요
+                  오른쪽 패널에서 스타일을 선택하거나 참조 이미지를 업로드하세요
                 </p>
               )}
             </>
@@ -503,6 +516,7 @@ function EditorPage() {
               creditBalance={creditBalance}
               onResult={handleResult}
               onPhaseChange={handleMoodPhaseChange}
+              onPresetResult={handlePresetResult}
               onAddToLayout={handleAddToLayout}
               phase={moodPhase}
               retriesLeft={moodRetries}

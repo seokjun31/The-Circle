@@ -303,6 +303,27 @@ class MoodPresetService:
         t_start = time.monotonic()
         cfg = _PRESET_CONFIGS[preset]
 
+        # ── 0. Return cached result if already computed ───────────────────────
+        existing_layers = db.query(EditLayer).filter(
+            EditLayer.project_id == project_id,
+        ).all()
+        for layer in existing_layers:
+            params = layer.parameters or {}
+            if (
+                params.get("source") == "mood_preset"
+                and params.get("preset") == preset
+                and layer.result_image_url
+            ):
+                logger.info(
+                    "mood_preset CACHE HIT: project=%d preset=%s layer=%d",
+                    project_id, preset, layer.id,
+                )
+                return MoodResult(
+                    result_url=layer.result_image_url,
+                    layer_id=layer.id,
+                    elapsed_s=0.0,
+                )
+
         # ── 1. Load project ───────────────────────────────────────────────────
         project = db.query(Project).filter(
             Project.id == project_id,
