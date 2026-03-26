@@ -52,9 +52,6 @@ function EditorPage() {
   /* Correction Mode */
   const [correctionIntent, setCorrectionIntent] = useState(null);
 
-  /* Image aspect ratio — used to size compare slider correctly */
-  const [imageNaturalRatio, setImageNaturalRatio] = useState(null);
-
   /* Layout: only explicitly added layers are shown (one per tool) */
   const [layoutLayerIds, setLayoutLayerIds] = useState(new Set());
   const [toolLayerMap,   setToolLayerMap]   = useState({});   // { mood: layerId, lighting: layerId, ... }
@@ -348,33 +345,14 @@ function EditorPage() {
           {/* MOOD center */}
           {activeTool === 'mood' && (
             <>
-              {/* Hidden img to capture natural aspect ratio */}
-              {imageUrl && (
-                <img src={imageUrl} className="hidden" alt=""
-                  onLoad={e => setImageNaturalRatio(e.target.naturalWidth / e.target.naturalHeight)} />
-              )}
               <div className="relative w-full flex-1 rounded-xl overflow-hidden shadow-2xl bg-surface-container border border-outline-variant/20 flex items-center justify-center">
                 {(moodPhase === 'result' || moodPhase === 'done') && moodResultUrl && imageUrl ? (
-                  /* Compare slider — sized to original image aspect ratio */
-                  <div style={{
-                    width: '100%',
-                    height: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}>
-                    <div style={imageNaturalRatio ? {
-                      aspectRatio: String(imageNaturalRatio),
-                      maxWidth: '100%',
-                      maxHeight: '100%',
-                    } : { width: '100%', height: '100%' }}>
-                      <ReactCompareSlider
-                        itemOne={<ReactCompareSliderImage src={imageUrl} alt="원본" style={{ objectFit: 'cover' }} />}
-                        itemTwo={<ReactCompareSliderImage src={moodResultUrl} alt="변환" style={{ objectFit: 'cover' }} />}
-                        style={{ width: '100%', height: '100%' }}
-                      />
-                    </div>
-                  </div>
+                  /* Compare slider — fills viewport exactly like the original image */
+                  <ReactCompareSlider
+                    itemOne={<ReactCompareSliderImage src={imageUrl} alt="원본" style={{ objectFit: 'contain' }} />}
+                    itemTwo={<ReactCompareSliderImage src={moodResultUrl} alt="변환" style={{ objectFit: 'contain' }} />}
+                    style={{ width: '100%', height: '100%' }}
+                  />
                 ) : moodPreviewUrl ? (
                   /* Preset result preview (stays in select phase) */
                   <img className="w-full h-full object-contain" src={moodPreviewUrl} alt="프리셋 변환" />
