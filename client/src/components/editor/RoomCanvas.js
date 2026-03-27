@@ -80,7 +80,7 @@ const LARGE_PREV_W = 280;
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, className = '', externalMode, hideSidebar = false }) {
+function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, className = '', externalMode, hideSidebar = false, lazy = false }) {
   // ── SAM hook ──────────────────────────────────────────────────────────────
   const {
     initModel,
@@ -153,11 +153,25 @@ function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, clas
     onMasksChange?.(stagedMasks);
   }, [stagedMasks, onMasksChange]);
 
+  // ── lazy: track whether encoding has been triggered yet ──────────────────
+  const encodedRef = useRef(false);
+
+  // ── Encode on demand (called on first user interaction when lazy=true) ───
+  const triggerEncodeIfNeeded = useCallback(async () => {
+    if (!lazy || encodedRef.current) return;
+    const img = imageElRef.current;
+    if (!img) return;
+    encodedRef.current = true;
+    const ok = await initModel();
+    if (ok) await encodeImage(img);
+  }, [lazy, initModel, encodeImage]);
+
   // ── Load image + run encoder ──────────────────────────────────────────────
   useEffect(() => {
     if (!imageSrc) return;
     let cancelled = false;
 
+    encodedRef.current = false;
     resetEncoding();
     setClickPoints([]);
     setCurrentMaskSet(null);
@@ -180,8 +194,10 @@ function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, clas
       const h     = Math.round(img.naturalHeight * scale);
       setCanvasSize({ w, h });
 
-      const ok = await initModel();
-      if (!cancelled && ok) await encodeImage(img);
+      if (!lazy) {
+        const ok = await initModel();
+        if (!cancelled && ok) await encodeImage(img);
+      }
     };
     img.src = imageSrc;
 
@@ -281,6 +297,7 @@ function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, clas
 
   // ── Lasso mode ────────────────────────────────────────────────────────────
   const handleLassoEnd = useCallback(async (canvasPoints) => {
+    await triggerEncodeIfNeeded();
     if (isEncoding || isModelLoading) return;
     const img = imageElRef.current;
     if (!img) return;
@@ -306,6 +323,7 @@ function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, clas
 
   // ── Box mode ──────────────────────────────────────────────────────────────
   const handleBoxEnd = useCallback(async (canvasBox) => {
+    await triggerEncodeIfNeeded();
     if (isEncoding || isModelLoading) return;
     const img = imageElRef.current;
     if (!img) return;
@@ -351,6 +369,7 @@ function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, clas
   }, [zoom, canvasSize]);
 
   const handleCanvasClick = useCallback(async (e) => {
+    await triggerEncodeIfNeeded();
     if (inputMode !== 'point' || isEncoding || isModelLoading) return;
     e.preventDefault();
 
@@ -376,6 +395,7 @@ function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, clas
 
   // ── Brush mode ────────────────────────────────────────────────────────────
   const handleStrokeEnd = useCallback(async (canvasPoints, isExclude) => {
+    await triggerEncodeIfNeeded();
     if (isEncoding || isModelLoading) return;
     const img = imageElRef.current;
     if (!img) return;

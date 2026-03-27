@@ -470,6 +470,7 @@ export default function MaterialsEditor({
                 onEncodingChange={handleEncodingChange}
                 externalMode={canvasMode}
                 hideSidebar={true}
+                lazy={true}
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center"
