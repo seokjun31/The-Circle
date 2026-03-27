@@ -16,9 +16,8 @@ import { useSemanticSegmentation } from '../hooks/useSemanticSegmentation';
 
 /* ── Nav tabs (non-materials) ────────────────────────────────────── */
 const SIDE_NAV = [
-  { id: 'mood',      icon: 'palette',         label: 'Mood',      sub: '분위기 변환' },
-  { id: 'lighting',  icon: 'wb_incandescent', label: 'Lighting',  sub: '조명 조절'   },
-  { id: 'furniture', icon: 'chair',           label: 'Furniture', sub: '가구 배치'   },
+  { id: 'mood',      icon: 'palette', label: 'Mood',      sub: '분위기 변환' },
+  { id: 'furniture', icon: 'chair',   label: 'Furniture', sub: '가구 배치'   },
 ];
 
 /* ─────────────────────────────────────────────────────────────────── */
@@ -414,25 +413,6 @@ function EditorPage() {
             </>
           )}
 
-          {/* LIGHTING center */}
-          {activeTool === 'lighting' && (
-            <div className="relative w-full flex-1 rounded-xl overflow-hidden shadow-2xl bg-surface-container border border-outline-variant/20">
-              {displayUrl ? (
-                <img className="w-full h-full object-contain" src={displayUrl} alt="Interior" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-on-surface-variant">
-                  {loadingProject ? '불러오는 중...' : '이미지를 불러오는 중...'}
-                </div>
-              )}
-              <div className="absolute top-6 left-6 flex items-center gap-2 bg-[#1a191b]/60 backdrop-blur-xl px-4 py-2 rounded-full border border-outline-variant/20">
-                <span className="material-symbols-outlined text-primary text-sm"
-                  style={{ fontVariationSettings: "'FILL' 1" }}>wb_incandescent</span>
-                <span className="text-xs font-headline font-bold text-white uppercase tracking-wider">Lighting</span>
-              </div>
-              {isProcessing && <ProcessingOverlay message={processingMessage} isColdStart={isColdStart} />}
-            </div>
-          )}
-
           {/* FURNITURE center */}
           {activeTool === 'furniture' && (
             <div className="relative w-full flex-1 rounded-xl overflow-hidden shadow-2xl bg-surface-container border border-outline-variant/20">
@@ -534,12 +514,6 @@ function EditorPage() {
               <p className="text-xs text-on-surface-variant">분위기 변환</p>
             </div>
           )}
-          {activeTool === 'lighting' && (
-            <div className="flex-shrink-0 flex flex-col gap-1">
-              <h3 className="font-headline text-base font-bold text-white">Lighting</h3>
-              <p className="text-xs text-on-surface-variant">조명 조절</p>
-            </div>
-          )}
           {activeTool === 'furniture' && (
             <div className="flex-shrink-0 flex flex-col gap-1">
               <h3 className="font-headline text-base font-bold text-white">Furniture</h3>
@@ -576,23 +550,56 @@ function EditorPage() {
             />
           )}
 
-          {/* LIGHTING panel */}
-          {activeTool === 'lighting' && (
-            <LightingPanel
-              projectId={projectId}
-              originalImageUrl={displayUrl}
-              creditBalance={creditBalance}
-              onResult={handleResult}
-            />
-          )}
-
-          {/* LAYOUT panel */}
+          {/* LAYOUT panel — Lighting + Export HQ + Layer list */}
           {activeTool === 'layout' && (
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex flex-col gap-5 flex-1 overflow-y-auto">
+
+              {/* Lighting section */}
+              <div className="border-b border-outline-variant/10 pb-5">
+                <div className="flex flex-col gap-1 mb-4">
+                  <h3 className="font-headline text-base font-bold text-white">조명 선택</h3>
+                  <p className="text-xs text-on-surface-variant">선택한 이미지에 조명을 적용합니다 (1코인)</p>
+                </div>
+                <LightingPanel
+                  projectId={projectId}
+                  creditBalance={creditBalance}
+                  onResult={handleResult}
+                />
+              </div>
+
+              {/* Export High Quality */}
+              <div className="border-b border-outline-variant/10 pb-5">
+                <button
+                  className="w-full relative group overflow-hidden rounded-2xl p-5 transition-all active:scale-[0.98]"
+                  onClick={() => {
+                    if (displayUrl) {
+                      const a = document.createElement('a');
+                      a.href = displayUrl;
+                      a.download = 'circle-ai-result.jpg';
+                      a.click();
+                    } else {
+                      toast.error('다운로드할 이미지가 없습니다.');
+                    }
+                  }}
+                >
+                  <div className="absolute inset-0 bg-gradient-to-br from-[#7c3aed] to-[#bd9dff] group-hover:opacity-90 transition-opacity rounded-2xl" />
+                  <div className="relative flex flex-col items-start gap-1">
+                    <div className="flex items-center justify-between w-full mb-1">
+                      <span className="material-symbols-outlined text-white"
+                        style={{ fontVariationSettings: "'FILL' 1" }}>download</span>
+                      <span className="bg-black/20 text-[10px] text-white font-bold py-0.5 px-2 rounded-full uppercase">Pro</span>
+                    </div>
+                    <p className="text-base font-bold text-white tracking-tight">Export High Quality Image</p>
+                    <p className="text-xs text-white/80">최종 이미지 다운로드</p>
+                  </div>
+                </button>
+              </div>
+
+              {/* Layer list */}
               {layoutLayerIds.size === 0 ? (
-                <div className="flex flex-col items-center justify-center h-48 gap-3 text-on-surface-variant">
-                  <span className="material-symbols-outlined text-4xl opacity-40">layers</span>
-                  <p className="text-sm text-center">레이아웃이 비어 있습니다.<br />각 탭에서 변환 후 "레이아웃에 추가" 버튼을 눌러주세요.</p>
+                <div className="flex flex-col items-center justify-center h-32 gap-3 text-on-surface-variant">
+                  <span className="material-symbols-outlined text-3xl opacity-40">layers</span>
+                  <p className="text-sm text-center">각 탭에서 변환 후<br />"레이아웃에 추가" 버튼을 눌러주세요.</p>
                 </div>
               ) : (
                 <LayerPanel
@@ -608,8 +615,6 @@ function EditorPage() {
               )}
             </div>
           )}
-
-          {/* Export card: only shown from MoodPanel done phase */}
         </aside>
       </main>
 
@@ -620,8 +625,8 @@ function EditorPage() {
           <span className="material-symbols-outlined">home</span>
           <span className="text-[10px] font-bold uppercase tracking-widest">Home</span>
         </a>
-        {['mood', 'materials', 'lighting', 'furniture', 'layout'].map(tool => {
-          const icons = { mood: 'palette', materials: 'texture', lighting: 'wb_incandescent', furniture: 'chair', layout: 'grid_view' };
+        {['mood', 'materials', 'furniture', 'layout'].map(tool => {
+          const icons = { mood: 'palette', materials: 'texture', furniture: 'chair', layout: 'grid_view' };
           return (
             <a key={tool} href="#"
               className={`flex flex-col items-center justify-center px-4 py-2 transition-all ${

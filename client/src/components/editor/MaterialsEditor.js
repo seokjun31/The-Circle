@@ -48,9 +48,9 @@ const STYLE_FILTERS = [
 ];
 
 const NAV_TOOLS = [
-  { id: 'mood',      icon: 'palette',         label: 'MOOD',      sub: 'Style Transfer'  },
-  { id: 'materials', icon: 'texture',         label: 'MATERIALS', sub: 'Material & SAM'  },
-  { id: 'lighting',  icon: 'wb_sunny',        label: 'LIGHTING',  sub: 'Lighting Control'},
+  { id: 'mood',      icon: 'palette', label: 'MOOD',      sub: 'Style Transfer' },
+  { id: 'materials', icon: 'texture', label: 'MATERIALS', sub: 'Material & SAM' },
+  { id: 'furniture', icon: 'chair',   label: 'FURNITURE', sub: '가구 배치'       },
 ];
 
 /* ─────────────────────────────────────────────────────────────────── */
@@ -76,7 +76,7 @@ export default function MaterialsEditor({
 }) {
   /* ── State ── */
   const [selectedArea,   setSelectedArea]   = useState('wall');
-  const [canvasMode,     setCanvasMode]     = useState('lasso');
+  const [canvasMode,     setCanvasMode]     = useState('point');
   const [canvasSegments, setCanvasSegments] = useState([]);
 
   const [matCategory,    setMatCategory]    = useState('wallpaper');
@@ -360,33 +360,6 @@ export default function MaterialsEditor({
           }}>
           <div className="space-y-8">
 
-            {/* Area Labels */}
-            <section>
-              <h4 className="text-[10px] font-bold uppercase tracking-widest mb-4"
-                style={{ color: '#adaaab' }}>Area Labels</h4>
-              <div className="flex flex-col gap-2">
-                {AREAS.slice(0, 6).map(area => {
-                  const isActive = selectedArea === area.id;
-                  return (
-                    <button key={area.id}
-                      className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg text-xs font-bold transition-all"
-                      style={isActive
-                        ? { background: 'rgba(189,157,255,0.1)', border: '1px solid #bd9dff', color: '#bd9dff' }
-                        : { border: '1px solid rgba(72,72,73,0.3)', color: '#adaaab' }
-                      }
-                      onMouseEnter={e => { if (!isActive) e.currentTarget.style.borderColor = '#767576'; }}
-                      onMouseLeave={e => { if (!isActive) e.currentTarget.style.borderColor = 'rgba(72,72,73,0.3)'; }}
-                      onClick={() => handleAreaPreset(area.id)}
-                    >
-                      {area.labelKo} ({area.label})
-                      {isActive && <span className="material-symbols-outlined text-base"
-                        style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>}
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-
             {/* Input Mode */}
             <section>
               <h4 className="text-[10px] font-bold uppercase tracking-widest mb-4"
@@ -421,6 +394,30 @@ export default function MaterialsEditor({
               </div>
             </section>
 
+            {/* Selection summary */}
+            {canvasSegments.length > 0 && (
+              <section className="p-4 rounded-xl" style={{ background: 'rgba(124,58,237,0.08)', border: '1px solid rgba(189,157,255,0.2)' }}>
+                <h4 className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: '#bd9dff' }}>선택 현황</h4>
+                <div className="flex flex-col gap-1.5">
+                  {Object.entries(
+                    canvasSegments.reduce((acc, seg) => {
+                      const lbl = seg.label || selectedArea;
+                      acc[lbl] = (acc[lbl] || 0) + 1;
+                      return acc;
+                    }, {})
+                  ).map(([label, count]) => (
+                    <div key={label} className="flex items-center justify-between text-xs">
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full" style={{ background: '#10b981' }} />
+                        <span style={{ color: '#ffffff' }}>{label} 선택됨</span>
+                      </span>
+                      <span className="font-bold" style={{ color: '#bd9dff' }}>{count}개 선택</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
             {/* Usage Guide */}
             <section className="p-4 rounded-xl"
               style={{ background: '#000000', border: '1px solid rgba(72,72,73,0.1)' }}>
@@ -430,14 +427,17 @@ export default function MaterialsEditor({
                 Usage Guide
               </h4>
               <ul className="space-y-2">
-                <li className="text-[11px] leading-relaxed" style={{ color: '#adaaab' }}>
-                  • Select area by drawing roughly around the target surface.
+                <li className="text-[11px] leading-relaxed" style={{ color: '#10b981' }}>
+                  🖱 <strong>왼쪽 클릭</strong>: 선택할 영역 추가
+                </li>
+                <li className="text-[11px] leading-relaxed" style={{ color: '#ef4444' }}>
+                  🖱 <strong>오른쪽 클릭</strong>: 선택 제외
                 </li>
                 <li className="text-[11px] leading-relaxed" style={{ color: '#adaaab' }}>
-                  • SAM auto-generates precise mask from your selection.
+                  • 여러 번 클릭해 영역을 정밀하게 조절하세요.
                 </li>
                 <li className="text-[11px] leading-relaxed" style={{ color: '#adaaab' }}>
-                  • Choose material from right panel and click Render.
+                  • 오른쪽 패널에서 자재 선택 후 Render 클릭.
                 </li>
                 {(freeRetries ?? 0) > 0 && (
                   <li className="text-[11px] leading-relaxed" style={{ color: '#10b981' }}>

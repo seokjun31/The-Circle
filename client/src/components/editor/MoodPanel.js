@@ -165,21 +165,9 @@ export default function MoodPanel({
           레이아웃에 추가
         </button>
 
-        <button
-          className="w-full relative group overflow-hidden rounded-2xl p-5 transition-all active:scale-[0.98]"
-          onClick={() => onPhaseChange('export')}
-        >
-          <div className="absolute inset-0 bg-gradient-to-br from-[#7c3aed] to-[#bd9dff] group-hover:opacity-90 transition-opacity rounded-2xl" />
-          <div className="relative flex flex-col items-start gap-1">
-            <div className="flex items-center justify-between w-full mb-1">
-              <span className="material-symbols-outlined text-white"
-                style={{ fontVariationSettings: "'FILL' 1" }}>download</span>
-              <span className="bg-black/20 text-[10px] text-white font-bold py-0.5 px-2 rounded-full uppercase">Pro</span>
-            </div>
-            <p className="text-base font-bold text-white tracking-tight">Export High Quality Image</p>
-            <p className="text-xs text-white/80">SDXL Refiner + Upscale 4K</p>
-          </div>
-        </button>
+        <p className="text-[11px] text-on-surface-variant text-center leading-relaxed">
+          레이아웃에 추가 후 Layout 탭에서<br/>조명 선택 및 고품질 출력이 가능합니다
+        </p>
 
         <button
           className="w-full py-2 text-xs text-on-surface-variant hover:text-white transition-colors"

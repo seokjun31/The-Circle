@@ -417,6 +417,18 @@ export async function deleteLayer(projectId, layerId) {
 }
 
 /**
+/**
+ * Apply a lighting preset to a project (1 credit).
+ * @param {number} projectId
+ * @param {{ lighting: string, strength?: number }} payload
+ * @returns {{ result_url, layer_id, elapsed_s, lighting, credits_used, remaining_balance }}
+ */
+export async function applyLightingPreset(projectId, payload) {
+  const { data } = await api.post(`/v1/projects/${projectId}/lighting`, payload);
+  return data;
+}
+
+/**
  * Run final render pipeline with SSE streaming progress.
  *
  * Uses the native fetch API so the caller can read the response body as a

@@ -44,7 +44,7 @@ from app.services.s3 import storage
 
 logger = logging.getLogger("the_circle.lighting")
 
-CREDITS_PER_LIGHTING = 2
+CREDITS_PER_LIGHTING = 1
 _LIGHTING_TIMEOUT_S  = 90
 
 _LIGHTING_PROMPTS: dict[str, str] = {
