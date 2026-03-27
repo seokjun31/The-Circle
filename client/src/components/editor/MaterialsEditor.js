@@ -641,8 +641,8 @@ export default function MaterialsEditor({
                         }}
                         onClick={() => setSelectedMat(mat)}
                       >
-                        {mat.thumbnail_url ? (
-                          <img src={mat.thumbnail_url} alt={mat.name}
+                        {mat.thumbnail_url || mat.tile_image_url ? (
+                          <img src={mat.thumbnail_url || mat.tile_image_url} alt={mat.name}
                             className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center"
