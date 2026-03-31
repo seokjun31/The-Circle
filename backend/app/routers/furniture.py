@@ -236,9 +236,16 @@ def upload_furniture_image(
     raw          = file.file.read()
     content_type = file.content_type or ""
 
-    # Validate
+    # Size check (10 MB)
+    if len(raw) > 10 * 1024 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail={"message": "파일 크기는 10 MB 이하여야 합니다.", "code": "FILE_TOO_LARGE"},
+        )
+
+    # Validate format
     try:
-        validate_image(raw, content_type, max_bytes=10 * 1024 * 1024)
+        validate_image(raw, content_type)
     except ImageValidationError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

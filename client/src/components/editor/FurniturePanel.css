@@ -126,6 +126,25 @@
   flex: 1;
 }
 
+.fp-upload-form input[type="text"],
+.fp-upload-form input[type="number"] {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.875rem;
+  padding: 0.6rem 0.75rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.fp-upload-form input[type="text"]:focus,
+.fp-upload-form input[type="number"]:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 .fp-dim-row span {
   color: var(--text-muted);
   font-size: 0.9rem;
