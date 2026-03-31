@@ -148,6 +148,21 @@ export async function getFurnitureList(params = {}) {
 }
 
 /**
+ * Remove background from a furniture image using rembg.
+ * @param {File} file
+ * @returns {{ url: string, width_px: number, height_px: number }}
+ */
+export async function removeFurnitureBg(file) {
+  const form = new FormData();
+  form.append('file', file);
+  const { data } = await api.post('/v1/furniture/remove-bg', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 60_000,
+  });
+  return data;
+}
+
+/**
  * Upload a custom furniture image (background-removed PNG).
  * @param {File} file
  * @returns {{ furniture_image_url, width_px, height_px, file_size_kb }}

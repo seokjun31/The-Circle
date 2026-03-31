@@ -146,6 +146,66 @@ def create_furniture(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  POST /furniture/remove-bg — rembg background removal
+# ─────────────────────────────────────────────────────────────────────────────
+
+class RemoveBgResponse(BaseModel):
+    url:       str
+    width_px:  int
+    height_px: int
+
+
+@router.post(
+    "/remove-bg",
+    response_model=RemoveBgResponse,
+    status_code=status.HTTP_200_OK,
+    summary="가구 이미지 배경 제거 (rembg)",
+)
+def remove_furniture_bg(
+    file: UploadFile = File(..., description="배경 제거할 이미지, 최대 10 MB"),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Remove the background from a furniture image using rembg (u2net model).
+    Returns a public S3 URL with transparent PNG.
+    """
+    import io
+    from PIL import Image
+
+    raw = file.file.read()
+    if len(raw) > 10 * 1024 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail={"message": "파일 크기는 10 MB 이하여야 합니다.", "code": "FILE_TOO_LARGE"},
+        )
+
+    try:
+        from rembg import remove as rembg_remove
+        output_bytes = rembg_remove(raw)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"message": f"배경 제거 실패: {exc}", "code": "REMBG_ERROR"},
+        ) from exc
+
+    try:
+        img = Image.open(io.BytesIO(output_bytes))
+        w, h = img.size
+    except Exception:
+        w = h = 0
+
+    key = f"users/{current_user.id}/furniture_rembg/{uuid.uuid4().hex}.png"
+    url = storage.upload(
+        data         = output_bytes,
+        key          = key,
+        content_type = "image/png",
+        public       = True,
+    )
+
+    return RemoveBgResponse(url=url, width_px=w, height_px=h)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  POST /furniture/upload-image — upload custom furniture PNG
 # ─────────────────────────────────────────────────────────────────────────────
 
