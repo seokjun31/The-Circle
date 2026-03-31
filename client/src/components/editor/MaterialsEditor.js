@@ -345,10 +345,10 @@ export default function MaterialsEditor({
                   {STYLE_FILTERS.map(f => (
                     <button key={f.id}
                       className="px-2 py-0.5 rounded-full text-[10px] font-bold transition-all"
-                      style={styleFilter === f.id
+                      style={matFilter === f.id
                         ? { background: '#bd9dff', color: '#000' }
                         : { background: '#201f21', color: '#adaaab', border: '1px solid rgba(72,72,73,0.2)' }}
-                      onClick={() => setStyleFilter(f.id)}>
+                      onClick={() => setMatFilter(f.id)}>
                       {f.label}
                     </button>
                   ))}
@@ -362,12 +362,12 @@ export default function MaterialsEditor({
                     className="flex-1 px-3 py-1.5 rounded-lg text-xs"
                     style={{ background: '#201f21', border: '1px solid rgba(72,72,73,0.3)', color: '#ffffff' }}
                     placeholder="Search material name..."
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
+                    value={matSearchInput}
+                    onChange={e => setMatSearchInput(e.target.value)}
                   />
                   <button className="px-3 py-1.5 rounded-lg text-xs font-bold"
                     style={{ background: 'linear-gradient(135deg, #bd9dff, #8a4cfc)', color: '#3c0089' }}
-                    onClick={handleSearch}>Search</button>
+                    onClick={() => setMatSearch(matSearchInput)}>Search</button>
                 </div>
               )}
 
@@ -404,7 +404,7 @@ export default function MaterialsEditor({
                     </div>
                   )}
                 </div>
-              ) : matsLoading ? (
+              ) : loadingMats ? (
                 <div className="flex justify-center py-8">
                   <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#bd9dff', borderTopColor: 'transparent' }} />
                 </div>
@@ -437,8 +437,8 @@ export default function MaterialsEditor({
             <div className="p-4" style={{ borderTop: '1px solid rgba(72,72,73,0.1)' }}>
               <div className="rounded-xl overflow-hidden aspect-square mb-2"
                 style={{ background: '#0a0a0b', border: '1px solid rgba(72,72,73,0.2)' }}>
-                {previewUrl ? (
-                  <img src={previewUrl} alt="미리보기" className="w-full h-full object-cover" />
+                {selectedMat?.tile_image_url || selectedMat?.thumbnail_url ? (
+                  <img src={selectedMat.tile_image_url || selectedMat.thumbnail_url} alt="미리보기" className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex flex-col items-center justify-center gap-1">
                     <span className="material-symbols-outlined text-2xl" style={{ color: '#767576' }}>preview</span>
