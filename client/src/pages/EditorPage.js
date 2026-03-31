@@ -162,30 +162,7 @@ function EditorPage() {
   // displayUrl: 원본 강제 > layout-selected layer > last result > original
   const displayUrl = useOriginalImage ? imageUrl : (selectedLayoutUrl || lastResult?.result_url || imageUrl);
 
-  /* ── MATERIALS: render standalone full-page MaterialsEditor ── */
-  if (activeTool === 'materials') {
-    return (
-      <MaterialsEditor
-        projectId={projectId}
-        projectTitle={project?.title}
-        imageUrl={imageUrl}
-        creditBalance={creditBalance}
-        layers={layers}
-        activeTool={activeTool}
-        setActiveTool={setActiveTool}
-        onResult={handleResult}
-        onNavigateBack={() => navigate('/dashboard')}
-        isProcessing={isProcessing}
-        processingMessage={processingMessage}
-        isColdStart={isColdStart}
-        setProcessing={setProcessing}
-        isAnalyzing={isAnalyzing}
-        onAddToLayout={handleAddToLayout}
-        freeRetries={matFreeRetries}
-        setFreeRetries={setMatFreeRetries}
-      />
-    );
-  }
+  /* ── MATERIALS: rendered inline within EditorPage shell ── */
 
   /* ── All other tabs: shared layout ── */
   return (
@@ -413,6 +390,32 @@ function EditorPage() {
             </>
           )}
 
+          {/* MATERIALS center — embedded, fills entire center+right area */}
+          {activeTool === 'materials' && (
+            <div className="flex-1 overflow-hidden rounded-xl">
+              <MaterialsEditor
+                embedded={true}
+                projectId={projectId}
+                projectTitle={project?.title}
+                imageUrl={imageUrl}
+                creditBalance={creditBalance}
+                layers={layers}
+                activeTool={activeTool}
+                setActiveTool={setActiveTool}
+                onResult={handleResult}
+                onNavigateBack={() => navigate('/dashboard')}
+                isProcessing={isProcessing}
+                processingMessage={processingMessage}
+                isColdStart={isColdStart}
+                setProcessing={setProcessing}
+                isAnalyzing={isAnalyzing}
+                onAddToLayout={handleAddToLayout}
+                freeRetries={matFreeRetries}
+                setFreeRetries={setMatFreeRetries}
+              />
+            </div>
+          )}
+
           {/* FURNITURE center */}
           {activeTool === 'furniture' && (
             <div className="relative w-full flex-1 rounded-xl overflow-hidden shadow-2xl bg-surface-container border border-outline-variant/20">
@@ -499,7 +502,8 @@ function EditorPage() {
           )}
         </section>
 
-        {/* ── RIGHT PANEL ── */}
+        {/* ── RIGHT PANEL — hidden when materials (it renders its own right panel) ── */}
+        {activeTool !== 'materials' && (
         <aside className="w-[400px] flex-shrink-0 bg-surface-container-low border-l border-outline-variant/10 p-6 flex flex-col gap-6 overflow-y-auto">
 
           {/* Panel title */}
@@ -611,6 +615,7 @@ function EditorPage() {
             </div>
           )}
         </aside>
+        )}
       </main>
 
       {/* ══ MOBILE BOTTOM NAV ═════════════════════════════════════ */}
