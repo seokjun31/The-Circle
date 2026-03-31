@@ -431,11 +431,6 @@ function EditorPage() {
                   {loadingProject ? '불러오는 중...' : '이미지를 불러오는 중...'}
                 </div>
               )}
-              <div className="absolute top-6 left-6 flex items-center gap-2 bg-[#1a191b]/60 backdrop-blur-xl px-4 py-2 rounded-full border border-outline-variant/20">
-                <span className="material-symbols-outlined text-primary text-sm"
-                  style={{ fontVariationSettings: "'FILL' 1" }}>chair</span>
-                <span className="text-xs font-headline font-bold text-white uppercase tracking-wider">Furniture</span>
-              </div>
               {isProcessing && <ProcessingOverlay message={processingMessage} isColdStart={isColdStart} />}
             </div>
           )}

@@ -79,7 +79,8 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   overflow: hidden;
-  min-height: 400px;
+  height: 520px;
+  max-height: 520px;
   cursor: default;
   user-select: none;
 }
