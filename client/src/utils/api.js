@@ -148,6 +148,21 @@ export async function getFurnitureList(params = {}) {
 }
 
 /**
+ * Remove background from a furniture image using rembg.
+ * @param {File} file
+ * @returns {{ url: string, width_px: number, height_px: number }}
+ */
+export async function removeFurnitureBg(file) {
+  const form = new FormData();
+  form.append('file', file);
+  const { data } = await api.post('/v1/furniture/remove-bg', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 60_000,
+  });
+  return data;
+}
+
+/**
  * Upload a custom furniture image (background-removed PNG).
  * @param {File} file
  * @returns {{ furniture_image_url, width_px, height_px, file_size_kb }}
@@ -297,6 +312,25 @@ export async function applyCircleAI(projectId, payload) {
 }
 
 /**
+ * Apply a curated style preset to the project room (no reference image needed).
+ * @param {number} projectId
+ * @param {{ preset: string, strength: number }} payload
+ *   preset — 'wood_white' | 'mid_century' | 'japandi'
+ * @returns {{ result_url, layer_id, elapsed_s, credits_used, remaining_balance }}
+ */
+export async function applyMoodPreset(projectId, payload) {
+  const { data } = await api.post(
+    `/v1/projects/${projectId}/mood-preset`,
+    {
+      preset:   payload.preset,
+      strength: payload.strength,
+    },
+    { timeout: 180_000 },
+  );
+  return data;
+}
+
+/**
  * Copy the mood / atmosphere of a reference image onto the project room.
  * @param {number} projectId
  * @param {{ referenceImage: string, strength: number }} payload
@@ -305,12 +339,42 @@ export async function applyCircleAI(projectId, payload) {
  */
 export async function copyMood(projectId, payload) {
   const { data } = await api.post(
-    `/v1/projects/${projectId}/mood-copy`,
+    `/v1/projects/${projectId}/mood`,
     {
       reference_image: payload.referenceImage,
       strength:        payload.strength,
     },
     { timeout: 180_000 },
+  );
+  return data;
+}
+
+// ── Room Analysis ─────────────────────────────────────────────────────────────
+
+/**
+ * Analyze the project's room image with Claude Vision to detect the room type.
+ * @param {number} projectId
+ * @returns {{ room_type, room_type_kr, confidence, project_id }}
+ */
+export async function analyzeRoom(projectId) {
+  const { data } = await api.post(
+    `/v1/projects/${projectId}/analyze-room`,
+    {},
+    { timeout: 30_000 },
+  );
+  return data;
+}
+
+/**
+ * Store the user-confirmed (or manually entered) room type.
+ * @param {number} projectId
+ * @param {string} roomType  — English term, e.g. "living room"
+ * @returns {{ project_id, room_type, room_type_kr }}
+ */
+export async function updateRoomType(projectId, roomType) {
+  const { data } = await api.patch(
+    `/v1/projects/${projectId}/room-type`,
+    { room_type: roomType },
   );
   return data;
 }
@@ -365,6 +429,18 @@ export async function updateLayer(projectId, layerId, payload) {
  */
 export async function deleteLayer(projectId, layerId) {
   await api.delete(`/v1/projects/${projectId}/layers/${layerId}`);
+}
+
+/**
+/**
+ * Apply a lighting preset to a project (1 credit).
+ * @param {number} projectId
+ * @param {{ lighting: string, strength?: number }} payload
+ * @returns {{ result_url, layer_id, elapsed_s, lighting, credits_used, remaining_balance }}
+ */
+export async function applyLightingPreset(projectId, payload) {
+  const { data } = await api.post(`/v1/projects/${projectId}/lighting`, payload);
+  return data;
 }
 
 /**

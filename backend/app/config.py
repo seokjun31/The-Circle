@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     # ── RunPod Serverless ─────────────────────────────────────────────────────
     RUNPOD_API_KEY: str = ""
     RUNPOD_ENDPOINT_ID: str = ""
+    USE_MOCK_AI: bool = False
     # MVP: 0 (Scale to Zero — $0 when idle, ~30-60s cold start)
     # Production: 1 (1 warm worker — instant response, ~$0.50/hr)
     RUNPOD_MIN_WORKERS: int = 0
@@ -45,10 +46,6 @@ class Settings(BaseSettings):
     KAKAO_CLIENT_SECRET: str = ""
     # Where the frontend lives — used for OAuth redirect after login
     FRONTEND_URL: str = "http://localhost:3000"
-
-    # ── Claude API ────────────────────────────────────────────────────────────
-    # Used by MaterialPromptGenerator for AI-assisted prompt auto-generation.
-    ANTHROPIC_API_KEY: str = ""
 
     # ── Redis / Celery ────────────────────────────────────────────────────────
     REDIS_URL: str = "redis://localhost:6379/0"

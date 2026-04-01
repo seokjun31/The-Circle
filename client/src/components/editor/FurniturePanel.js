@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
-import { getFurnitureList, uploadFurnitureImage } from '../../utils/api';
+import { getFurnitureList, uploadFurnitureImage, removeFurnitureBg } from '../../utils/api';
 import './FurniturePanel.css';
 
 const CATEGORIES = [
@@ -61,6 +61,7 @@ function FurniturePanel({ selectedFurniture, onSelect }) {
   // Custom furniture upload state
   const [showUploadForm, setShowUpload] = useState(false);
   const [uploading, setUploading]       = useState(false);
+  const [removingBg, setRemovingBg]     = useState(false);
   const [customFile, setCustomFile]     = useState(null);
   const [customPreview, setCustomPreview] = useState(null);
   const [customWidthCm, setCustomW]     = useState('');
@@ -130,18 +131,41 @@ function FurniturePanel({ selectedFurniture, onSelect }) {
       toast.error('이미지를 먼저 선택해주세요.');
       return;
     }
+
+    let fileToUpload = customFile;
+
+    // Step 1: Auto background removal via rembg
+    setRemovingBg(true);
+    try {
+      const bgResult = await removeFurnitureBg(customFile);
+      // Fetch the rembg result as a Blob and convert to File for upload
+      const resp = await fetch(bgResult.url);
+      const blob = await resp.blob();
+      fileToUpload = new File([blob], 'furniture_nobg.png', { type: 'image/png' });
+      // Update preview with bg-removed image
+      const reader = new FileReader();
+      reader.onload = (e) => setCustomPreview(e.target.result);
+      reader.readAsDataURL(fileToUpload);
+      toast.success('배경이 제거되었습니다.');
+    } catch (err) {
+      // rembg failed — fall back to original image
+      toast('배경 제거에 실패했습니다. 원본 이미지를 사용합니다.', { icon: '⚠️' });
+    } finally {
+      setRemovingBg(false);
+    }
+
+    // Step 2: Upload to S3
     setUploading(true);
     try {
-      const result = await uploadFurnitureImage(customFile);
-      // Create a virtual furniture object for the placer
+      const result = await uploadFurnitureImage(fileToUpload);
       const virtualFurniture = {
-        id:                 null,
-        name:               customName || '커스텀 가구',
-        image_url:          result.furniture_image_url,
-        thumbnail_url:      customPreview,
-        width_cm:           customWidthCm ? parseFloat(customWidthCm) : null,
-        height_cm:          customHeightCm ? parseFloat(customHeightCm) : null,
-        isCustom:           true,
+        id:                  null,
+        name:                customName || '커스텀 가구',
+        image_url:           result.furniture_image_url,
+        thumbnail_url:       customPreview,
+        width_cm:            customWidthCm ? parseFloat(customWidthCm) : null,
+        height_cm:           customHeightCm ? parseFloat(customHeightCm) : null,
+        isCustom:            true,
         furniture_image_url: result.furniture_image_url,
       };
       onSelect(virtualFurniture);
@@ -193,7 +217,7 @@ function FurniturePanel({ selectedFurniture, onSelect }) {
         <div className="fp-upload-form card">
           <h4>커스텀 가구 업로드</h4>
           <p className="text-muted" style={{ fontSize: '0.8rem' }}>
-            배경이 제거된 PNG 권장 (최대 10 MB)
+            이미지를 업로드하면 배경이 자동으로 제거됩니다 (최대 10 MB)
           </p>
 
           <div
@@ -244,9 +268,13 @@ function FurniturePanel({ selectedFurniture, onSelect }) {
           <button
             className="btn btn-primary w-full"
             onClick={handleCustomUpload}
-            disabled={uploading || !customFile}
+            disabled={removingBg || uploading || !customFile}
           >
-            {uploading ? <><span className="spinner" /> 업로드 중...</> : '배치 준비'}
+            {removingBg
+              ? <><span className="spinner" /> 배경 제거 중...</>
+              : uploading
+              ? <><span className="spinner" /> 업로드 중...</>
+              : '배치 준비 (배경 자동 제거)'}
           </button>
         </div>
       )}

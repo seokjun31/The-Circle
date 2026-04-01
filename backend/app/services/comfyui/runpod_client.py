@@ -68,7 +68,8 @@ class RunPodJobError(RunPodError):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def _is_mock_mode() -> bool:
-    return os.environ.get("USE_MOCK_AI", "").lower() in ("1", "true", "yes")
+    from app.config import settings
+    return settings.USE_MOCK_AI or os.environ.get("USE_MOCK_AI", "").lower() in ("1", "true", "yes")
 
 
 def _make_mock_image(width: int = 800, height: int = 600) -> str:

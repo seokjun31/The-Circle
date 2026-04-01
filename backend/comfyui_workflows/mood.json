@@ -1,135 +1,214 @@
 {
-  "_comment": "The Circle — Mood Copy Workflow (API format)",
+  "_comment": "The Circle — Mood Transfer Workflow (API format)",
   "_description": [
-    "Pipeline: SDXL Base + IP-Adapter (high weight) + img2img",
-    "Copies mood, lighting, and atmosphere from a reference image.",
+    "Pipeline: SDXL Base + IP-Adapter Advanced + ControlNet (Depth+Canny) + img2img",
+    "Copies mood, lighting, and atmosphere from a reference image using dual ControlNet.",
     "",
-    "Runtime injections (WorkflowManager.build_mood_copy_workflow):",
-    "  Node 2   image           — source room base64",
-    "  Node 3   image           — reference/mood board base64",
-    "  Node 4   ipadapter_file  — IP-Adapter model name",
-    "  Node 6   weight          — IP-Adapter weight (derived from strength)",
-    "  Node 7   text            — positive prompt",
-    "  Node 8   text            — negative prompt",
-    "  Node 10  seed/steps/cfg/denoise",
-    "  Node 100 width/height    — SDXL-optimal dimensions from calc_sdxl_size()"
+    "Runtime injections (WorkflowManager.build_mood_workflow):",
+    "  Node 1   image           — source room base64 (ETN_LoadImageBase64)",
+    "  Node 2   image           — reference/mood board base64 (ETN_LoadImageBase64)",
+    "  Node 4   text            — positive prompt",
+    "  Node 5   text            — negative prompt",
+    "  Node 10  strength        — ControlNet Depth strength",
+    "  Node 13  strength        — ControlNet Canny strength",
+    "  Node 17  seed/steps/cfg/denoise — KSampler params",
+    "  Node 24  weight/end_at   — IP-Adapter weight & end_at"
   ],
   "1": {
-    "class_type": "CheckpointLoaderSimple",
-    "_label": "Load SDXL Base",
-    "inputs": {
-      "ckpt_name": "sd_xl_base_1.0.safetensors"
-    }
-  },
-  "2": {
     "class_type": "ETN_LoadImageBase64",
     "_label": "Load Source Room Image",
     "inputs": {
       "image": ""
     }
   },
-  "100": {
-    "class_type": "ImageScale",
-    "_label": "Scale to SDXL-optimal resolution",
-    "inputs": {
-      "image":          ["2", 0],
-      "upscale_method": "lanczos",
-      "width":          1024,
-      "height":         1024,
-      "crop":           "disabled"
-    }
-  },
-  "3": {
+  "2": {
     "class_type": "ETN_LoadImageBase64",
     "_label": "Load Reference / Mood Board Image",
     "inputs": {
       "image": ""
     }
   },
-  "4": {
-    "class_type": "IPAdapterModelLoader",
-    "_label": "Load IP-Adapter SDXL Plus ViT-H",
+  "3": {
+    "class_type": "CheckpointLoaderSimple",
+    "_label": "Load SDXL Base",
     "inputs": {
-      "ipadapter_file": "IP-Adapter-Plus_SDXL.safetensors"
+      "ckpt_name": "sd_xl_base_1.0.safetensors"
+    }
+  },
+  "4": {
+    "class_type": "CLIPTextEncode",
+    "_label": "Positive Prompt",
+    "inputs": {
+      "text": "interior photography, modern kitchen, beautiful lighting, high quality, 8k, professional photo, warm ambient light, realistic textures, soft shadows",
+      "clip": ["3", 1]
     }
   },
   "5": {
+    "class_type": "CLIPTextEncode",
+    "_label": "Negative Prompt",
+    "inputs": {
+      "text": "((built-in oven, microwave, square ceiling panels, black boxes on wall:1.5)),(CGI, 3D render:1.2), (mirror floor, extreme reflection, glossy floor:1.2), blurry, watercolor, painting, distorted, deformed, low quality, worst quality, cartoon, anime, illustration, sketch, oversaturated, spots, polka dots, holes, trypophobia, heavy noise, dirt, stain, black dots, wet floor, floating objects, dark spots on ceiling, unrealistic, square lights, ceiling vents, track lights, floating panels, cracked floor, broken marble, chaotic lines, complex ceiling, watermark, text, signature, logo",
+      "clip": ["3", 1]
+    }
+  },
+  "6": {
+    "class_type": "ImageScaleToTotalPixels",
+    "_label": "Scale to ~1MP (64-aligned)",
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 1,
+      "resolution_steps": 1,
+      "image": ["1", 0]
+    }
+  },
+  "7": {
+    "class_type": "VAEEncode",
+    "_label": "VAE Encode (source → Latent)",
+    "inputs": {
+      "pixels": ["6", 0],
+      "vae": ["25", 0]
+    }
+  },
+  "8": {
+    "class_type": "ControlNetLoader",
+    "_label": "ControlNet Depth Loader",
+    "inputs": {
+      "control_net_name": "control-lora-depth-rank256.safetensors"
+    }
+  },
+  "10": {
+    "class_type": "ControlNetApplyAdvanced",
+    "_label": "ControlNet 1: Depth",
+    "inputs": {
+      "strength": 0.85,
+      "start_percent": 0,
+      "end_percent": 1,
+      "positive": ["4", 0],
+      "negative": ["5", 0],
+      "control_net": ["8", 0],
+      "image": ["21", 0]
+    }
+  },
+  "11": {
+    "class_type": "ControlNetLoader",
+    "_label": "ControlNet Canny Loader",
+    "inputs": {
+      "control_net_name": "control-lora-canny-rank256.safetensors"
+    }
+  },
+  "12": {
+    "class_type": "CannyEdgePreprocessor",
+    "_label": "Canny Edge Extraction",
+    "inputs": {
+      "low_threshold": 100,
+      "high_threshold": 200,
+      "resolution": 512,
+      "image": ["6", 0]
+    }
+  },
+  "13": {
+    "class_type": "ControlNetApplyAdvanced",
+    "_label": "ControlNet 2: Canny",
+    "inputs": {
+      "strength": 0.75,
+      "start_percent": 0,
+      "end_percent": 1,
+      "positive": ["10", 0],
+      "negative": ["10", 1],
+      "control_net": ["11", 0],
+      "image": ["12", 0]
+    }
+  },
+  "14": {
+    "class_type": "IPAdapterModelLoader",
+    "_label": "IP-Adapter Model Loader",
+    "inputs": {
+      "ipadapter_file": "ip-adapter-plus_sdxl_vit-h.safetensors"
+    }
+  },
+  "15": {
     "class_type": "CLIPVisionLoader",
-    "_label": "Load CLIP Vision Encoder (ViT-H-14)",
+    "_label": "CLIP Vision Loader",
     "inputs": {
       "clip_name": "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors"
     }
   },
-  "6": {
-    "class_type": "IPAdapterApply",
-    "_label": "Apply IP-Adapter (reference mood → style transfer)",
-    "inputs": {
-      "ipadapter":    ["4", 0],
-      "clip_vision":  ["5", 0],
-      "image":        ["3", 0],
-      "model":        ["1", 0],
-      "weight":       0.80,
-      "noise":        0.0,
-      "weight_type":  "ease in",
-      "start_at":     0.0,
-      "end_at":       1.0,
-      "unfold_batch": false
-    }
-  },
-  "7": {
-    "class_type": "CLIPTextEncode",
-    "_label": "Positive Prompt",
-    "inputs": {
-      "clip": ["1", 1],
-      "text": "photorealistic interior photography, perfect lighting, architectural visualization, 8k resolution"
-    }
-  },
-  "8": {
-    "class_type": "CLIPTextEncode",
-    "_label": "Negative Prompt",
-    "inputs": {
-      "clip": ["1", 1],
-      "text": "people, person, human, text, watermark, logo, blurry, low quality, artifacts, distorted, oversaturated, cartoon, anime, illustration, painting, unrealistic, dark, gloomy"
-    }
-  },
-  "9": {
-    "class_type": "VAEEncode",
-    "_label": "Encode for img2img",
-    "inputs": {
-      "pixels": ["100", 0],
-      "vae":    ["1",   2]
-    }
-  },
-  "10": {
+  "17": {
     "class_type": "KSampler",
     "_label": "KSampler (mood transfer)",
     "inputs": {
-      "model":        ["6", 0],
-      "positive":     ["7", 0],
-      "negative":     ["8", 0],
-      "latent_image": ["9", 0],
-      "seed":         42,
-      "steps":        25,
-      "cfg":          7.0,
-      "sampler_name": "dpmpp_2m",
-      "scheduler":    "karras",
-      "denoise":      0.60
+      "seed": 42,
+      "steps": 30,
+      "cfg": 5,
+      "sampler_name": "dpmpp_2m_sde",
+      "scheduler": "karras",
+      "denoise": 0.62,
+      "model": ["24", 0],
+      "positive": ["13", 0],
+      "negative": ["13", 1],
+      "latent_image": ["7", 0]
     }
   },
-  "11": {
+  "18": {
     "class_type": "VAEDecode",
-    "_label": "Decode Latent",
+    "_label": "VAE Decode (Latent → Image)",
     "inputs": {
-      "samples": ["10", 0],
-      "vae":     ["1",  2]
+      "samples": ["17", 0],
+      "vae": ["25", 0]
     }
   },
-  "12": {
+  "19": {
+    "class_type": "PreviewImage",
+    "_label": "Preview",
+    "inputs": {
+      "images": ["18", 0]
+    }
+  },
+  "20": {
     "class_type": "SaveImage",
     "_label": "Save Result",
     "inputs": {
-      "images":          ["11", 0],
-      "filename_prefix": "mood_copy"
+      "filename_prefix": "mood_transfer_result",
+      "images": ["18", 0]
+    }
+  },
+  "21": {
+    "class_type": "DepthAnything_V2",
+    "_label": "Depth Anything V2",
+    "inputs": {
+      "da_model": ["22", 0],
+      "images": ["6", 0]
+    }
+  },
+  "22": {
+    "class_type": "DownloadAndLoadDepthAnythingV2Model",
+    "_label": "Download Depth Anything V2 Model",
+    "inputs": {
+      "model": "depth_anything_v2_vitl_fp32.safetensors",
+      "precision": "auto"
+    }
+  },
+  "24": {
+    "class_type": "IPAdapterAdvanced",
+    "_label": "IP-Adapter Advanced (style transfer)",
+    "inputs": {
+      "weight": 0.7,
+      "weight_type": "style transfer",
+      "combine_embeds": "concat",
+      "start_at": 0,
+      "end_at": 0.77,
+      "embeds_scaling": "K+V",
+      "model": ["3", 0],
+      "ipadapter": ["14", 0],
+      "image": ["2", 0],
+      "clip_vision": ["15", 0]
+    }
+  },
+  "25": {
+    "class_type": "VAELoader",
+    "_label": "VAE Loader",
+    "inputs": {
+      "vae_name": "sdxl_vae.safetensors"
     }
   }
 }

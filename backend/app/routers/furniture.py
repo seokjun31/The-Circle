@@ -9,13 +9,13 @@ POST /api/v1/projects/{id}/place-furniture     — AI 가구 배치 + 블렌딩
 """
 from __future__ import annotations
 
-import asyncio
 import math
 import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
+from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_current_user, get_db
@@ -146,6 +146,66 @@ def create_furniture(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  POST /furniture/remove-bg — rembg background removal
+# ─────────────────────────────────────────────────────────────────────────────
+
+class RemoveBgResponse(BaseModel):
+    url:       str
+    width_px:  int
+    height_px: int
+
+
+@router.post(
+    "/remove-bg",
+    response_model=RemoveBgResponse,
+    status_code=status.HTTP_200_OK,
+    summary="가구 이미지 배경 제거 (rembg)",
+)
+def remove_furniture_bg(
+    file: UploadFile = File(..., description="배경 제거할 이미지, 최대 10 MB"),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Remove the background from a furniture image using rembg (u2net model).
+    Returns a public S3 URL with transparent PNG.
+    """
+    import io
+    from PIL import Image
+
+    raw = file.file.read()
+    if len(raw) > 10 * 1024 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail={"message": "파일 크기는 10 MB 이하여야 합니다.", "code": "FILE_TOO_LARGE"},
+        )
+
+    try:
+        from rembg import remove as rembg_remove
+        output_bytes = rembg_remove(raw)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"message": f"배경 제거 실패: {exc}", "code": "REMBG_ERROR"},
+        ) from exc
+
+    try:
+        img = Image.open(io.BytesIO(output_bytes))
+        w, h = img.size
+    except Exception:
+        w = h = 0
+
+    key = f"users/{current_user.id}/furniture_rembg/{uuid.uuid4().hex}.png"
+    url = storage.upload(
+        data         = output_bytes,
+        key          = key,
+        content_type = "image/png",
+        public       = True,
+    )
+
+    return RemoveBgResponse(url=url, width_px=w, height_px=h)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  POST /furniture/upload-image — upload custom furniture PNG
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -176,9 +236,16 @@ def upload_furniture_image(
     raw          = file.file.read()
     content_type = file.content_type or ""
 
-    # Validate
+    # Size check (10 MB)
+    if len(raw) > 10 * 1024 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail={"message": "파일 크기는 10 MB 이하여야 합니다.", "code": "FILE_TOO_LARGE"},
+        )
+
+    # Validate format
     try:
-        validate_image(raw, content_type, max_bytes=10 * 1024 * 1024)
+        validate_image(raw, content_type)
     except ImageValidationError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -258,7 +325,7 @@ class PlaceFurnitureResponse(BaseModel):
     response_model=PlaceFurnitureResponse,
     summary="AI 가구 배치 — Pillow 합성 + ComfyUI 자연 블렌딩",
 )
-def place_furniture(
+async def place_furniture(
     project_id: int,
     body:       PlaceFurnitureRequest,
     db:         Session = Depends(get_db),
@@ -308,35 +375,39 @@ def place_furniture(
     current_user.credit_balance -= CREDITS_PER_PLACEMENT
     db.commit()
 
+    user_id = current_user.id
+
     try:
-        result: FurnitureResult = asyncio.run(
-            furniture_service.place_furniture(
-                project_id          = project_id,
-                user_id             = current_user.id,
-                db                  = db,
-                furniture_id        = body.furniture_id,
-                furniture_image_url = body.furniture_image_url,
-                furniture_width_cm  = body.furniture_width_cm,
-                furniture_height_cm = body.furniture_height_cm,
-                space_width_cm      = body.space_width_cm,
-                position_x          = body.position_x,
-                position_y          = body.position_y,
-                target_width_px     = body.target_width_px,
-            )
+        result: FurnitureResult = await furniture_service.place_furniture(
+            project_id          = project_id,
+            user_id             = user_id,
+            db                  = db,
+            furniture_id        = body.furniture_id,
+            furniture_image_url = body.furniture_image_url,
+            furniture_width_cm  = body.furniture_width_cm,
+            furniture_height_cm = body.furniture_height_cm,
+            space_width_cm      = body.space_width_cm,
+            position_x          = body.position_x,
+            position_y          = body.position_y,
+            target_width_px     = body.target_width_px,
         )
     except ValueError as exc:
-        current_user.credit_balance += CREDITS_PER_PLACEMENT
-        db.commit()
+        _refund_credits(db, user_id, CREDITS_PER_PLACEMENT)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={"message": str(exc), "code": "INVALID_INPUT"},
         ) from exc
     except RunPodError as exc:
-        current_user.credit_balance += CREDITS_PER_PLACEMENT
-        db.commit()
+        _refund_credits(db, user_id, CREDITS_PER_PLACEMENT)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail={"message": f"AI 처리 실패: {exc}", "code": "RUNPOD_ERROR"},
+        ) from exc
+    except Exception as exc:
+        _refund_credits(db, user_id, CREDITS_PER_PLACEMENT)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"message": f"처리 중 오류 발생: {exc}", "code": "INTERNAL_ERROR"},
         ) from exc
 
     db.refresh(current_user)
@@ -362,7 +433,24 @@ def place_furniture(
     )
 
 
-# ── Shared helper ─────────────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _refund_credits(db: Session, user_id: int, amount: int) -> None:
+    """Refund credits using direct SQL to avoid ORM lazy-load issues."""
+    try:
+        db.rollback()
+        db.execute(
+            sa_update(User)
+            .where(User.id == user_id)
+            .values(credit_balance=User.credit_balance + amount)
+        )
+        db.commit()
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
 
 def _get_owned_project(project_id: int, user: User, db: Session) -> Project:
     project = db.get(Project, project_id)

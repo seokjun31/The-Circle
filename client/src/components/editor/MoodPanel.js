@@ -1,13 +1,26 @@
 /**
  * MoodPanel — Right sidebar panel for Mood tab
- * 참조 이미지 업로드 → 변환하기 → 3회 무료 재시도
+ *
+ * 두 가지 변환 방식:
+ * 1. 스타일 프리셋 (우드앤화이트 / 미드센추리 모던 / 재팬디)
+ *    - 클릭 시 화면 이탈 없이 중앙 이미지만 교체
+ *    - 이미 연산된 결과는 DB에 캐싱 → 재클릭 시 즉시 표시
+ * 2. 참조 이미지 업로드 → 변환하기
+ *    - 결과 화면에서 강도 조절 3회 무료 재시도
+ *    - "이대로 쓸래요" 클릭 후 레이아웃 추가 / Export 버튼 표시
  */
 import React, { useState, useRef, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { copyMood } from '../../utils/api';
+import { copyMood, applyMoodPreset } from '../../utils/api';
 
 const CREDITS_COST = 5;
 const MAX_RETRIES  = 3;
+
+const STYLE_PRESETS = [
+  { id: 'wood_white',  label: '우드 앤 화이트', emoji: '🪵' },
+  { id: 'mid_century', label: '미드센추리 모던', emoji: '🛋️' },
+  { id: 'japandi',     label: '재팬디',          emoji: '🎋' },
+];
 
 function fileToDataURL(file) {
   return new Promise((res, rej) => {
@@ -22,11 +35,12 @@ function fileToDataURL(file) {
  * Props:
  *   projectId      — current project
  *   creditBalance  — current credits
- *   onResult       — called with API result (result_url, remaining_balance)
- *   onPhaseChange  — (phase: 'select'|'result', resultUrl?) called on phase transition
- *   phase          — controlled by parent (EditorPage)
- *   resultUrl      — current result URL (from parent)
- *   retriesLeft    — retries remaining (from parent)
+ *   onResult       — called with API result
+ *   onPhaseChange  — (phase: 'select'|'result'|'done', resultUrl?) called on phase transition
+ *   onPresetResult — (url) called when preset completes (stays in select phase)
+ *   onAddToLayout  — called when user adds result to layout
+ *   phase          — controlled by parent
+ *   retriesLeft    — retries remaining
  *   setRetries     — setter from parent
  */
 export default function MoodPanel({
@@ -34,25 +48,33 @@ export default function MoodPanel({
   creditBalance,
   onResult,
   onPhaseChange,
+  onPresetResult,
   onAddToLayout,
   phase,
   retriesLeft,
   setRetries,
 }) {
-  const [refDataUrl, setRefDataUrl] = useState(null);
-  const [refPreview, setRefPreview] = useState(null);
-  const [strength,   setStrength]   = useState(0.65);
-  const [loading,    setLoading]    = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
+  const [refDataUrl,   setRefDataUrl]   = useState(null);
+  const [refPreview,   setRefPreview]   = useState(null);
+  const [strength,     setStrength]     = useState(0.65);
+  const [loading,      setLoading]      = useState(false);
+  const [isDragging,   setIsDragging]   = useState(false);
+  const [activePreset, setActivePreset] = useState(null);  // preset currently loading
   const fileRef    = useRef(null);
   const lastParams = useRef(null);
 
+  // Client-side preset cache: { presetId → resultUrl }
+  const presetCache = useRef({});
+
+  /* ── File handling ── */
   const handleFile = useCallback(async (file) => {
     if (!file?.type.startsWith('image/')) { toast.error('이미지만 가능합니다.'); return; }
     const url = await fileToDataURL(file);
     setRefPreview(url);
     setRefDataUrl(url);
-  }, []);
+    // Notify parent so center viewport reverts to original image
+    onPhaseChange('select');
+  }, [onPhaseChange]);
 
   const handleDrop = useCallback((e) => {
     e.preventDefault();
@@ -60,6 +82,34 @@ export default function MoodPanel({
     handleFile(e.dataTransfer.files[0]);
   }, [handleFile]);
 
+  /* ── Preset transform (stays in select phase) ── */
+  const handlePreset = useCallback(async (presetId) => {
+    // Return cached result immediately if available
+    if (presetCache.current[presetId]) {
+      onPresetResult?.(presetCache.current[presetId]);
+      return;
+    }
+
+    if ((creditBalance ?? 0) < CREDITS_COST) {
+      toast.error(`크레딧 부족 (잔액: ${creditBalance ?? 0})`); return;
+    }
+
+    setActivePreset(presetId);
+    setLoading(true);
+    try {
+      const result = await applyMoodPreset(projectId, { preset: presetId, strength });
+      presetCache.current[presetId] = result.result_url;
+      onPresetResult?.(result.result_url);
+      onResult?.(result);
+    } catch (err) {
+      toast.error('변환 실패: ' + err.message);
+    } finally {
+      setLoading(false);
+      setActivePreset(null);
+    }
+  }, [projectId, strength, creditBalance, onPresetResult, onResult]);
+
+  /* ── Reference image transform ── */
   const runTransform = useCallback(async (params, isFreeRetry = false) => {
     setLoading(true);
     try {
@@ -68,7 +118,7 @@ export default function MoodPanel({
         strength:       params.strength,
       });
       if (!isFreeRetry) setRetries(MAX_RETRIES);
-      else              setRetries(r => r - 1);
+      else              setRetries(r => Math.max(0, r - 1));
       onPhaseChange('result', result.result_url);
       onResult?.(result);
     } catch (err) {
@@ -89,14 +139,47 @@ export default function MoodPanel({
     await runTransform(params, false);
   }, [refDataUrl, strength, creditBalance, runTransform]);
 
-  /* Free retry: stays in select phase, user adjusts strength, then calls this */
+  /* Free retry: user already paid, adjusts strength */
   const handleFreeRetry = useCallback(async () => {
     if (retriesLeft <= 0) return;
-    const params = { ...lastParams.current, strength };
+    const params = { ...(lastParams.current || {}), refDataUrl, strength };
     await runTransform(params, true);
-  }, [retriesLeft, strength, runTransform]);
+  }, [retriesLeft, refDataUrl, strength, runTransform]);
 
-  /* ── RESULT phase (minimal — main comparison is in center viewport) ── */
+  /* ── DONE phase — after "이대로 쓸래요" ── */
+  if (phase === 'done') {
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="p-4 bg-surface-container rounded-xl border border-primary/20 text-center">
+          <span className="material-symbols-outlined text-primary text-2xl"
+            style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+          <p className="text-sm font-bold text-white mt-2">변환 완료!</p>
+          <p className="text-xs text-on-surface-variant mt-1">결과물을 저장하세요</p>
+        </div>
+
+        <button
+          className="w-full py-3 rounded-xl border border-primary/50 text-primary hover:bg-primary/10 transition-all text-sm font-medium flex items-center justify-center gap-2"
+          onClick={onAddToLayout}
+        >
+          <span className="material-symbols-outlined text-base">add_photo_alternate</span>
+          레이아웃에 추가
+        </button>
+
+        <p className="text-[11px] text-on-surface-variant text-center leading-relaxed">
+          레이아웃에 추가 후 Layout 탭에서<br/>조명 선택 및 고품질 출력이 가능합니다
+        </p>
+
+        <button
+          className="w-full py-2 text-xs text-on-surface-variant hover:text-white transition-colors"
+          onClick={() => onPhaseChange('select')}
+        >
+          ← 처음부터 다시 시작
+        </button>
+      </div>
+    );
+  }
+
+  /* ── RESULT phase — after reference transform ── */
   if (phase === 'result') {
     return (
       <div className="flex flex-col gap-5">
@@ -109,7 +192,7 @@ export default function MoodPanel({
             <p className="text-sm font-bold text-white">변환 완료!</p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-on-surface-variant uppercase tracking-widest">재시도</span>
+            <span className="text-[10px] text-on-surface-variant uppercase tracking-widest">무료 재시도</span>
             <div className="flex gap-1.5">
               {[...Array(MAX_RETRIES)].map((_, i) => (
                 <span key={i}
@@ -122,16 +205,7 @@ export default function MoodPanel({
           </div>
         </div>
 
-        {/* Add to layout */}
-        <button
-          className="w-full py-3 rounded-xl border border-primary/50 text-primary hover:bg-primary/10 transition-all text-sm font-medium flex items-center justify-center gap-2"
-          onClick={onAddToLayout}
-        >
-          <span className="material-symbols-outlined text-base">add_photo_alternate</span>
-          레이아웃 추가
-        </button>
-
-        {/* Retry: go back to select phase to adjust strength */}
+        {/* Retry — go back to select to adjust strength */}
         <button
           className="w-full py-3 rounded-xl border border-outline-variant/30 text-on-surface-variant hover:border-outline-variant/60 transition-all text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
           onClick={() => onPhaseChange('select')}
@@ -142,8 +216,8 @@ export default function MoodPanel({
 
         {/* Accept */}
         <button
-          className="w-full py-3 rounded-xl bg-gradient-to-r from-[#7c3aed] to-primary text-white font-headline font-bold text-sm shadow-lg hover:shadow-primary/20 transition-all active:scale-[0.98]"
-          onClick={() => { setRetries(0); onPhaseChange('done'); }}
+          className="w-full py-4 rounded-xl bg-gradient-to-r from-[#7c3aed] to-primary text-white font-headline font-bold text-sm shadow-lg hover:shadow-primary/20 transition-all active:scale-[0.98]"
+          onClick={() => onPhaseChange('done')}
         >
           이대로 쓸래요 →
         </button>
@@ -152,12 +226,50 @@ export default function MoodPanel({
   }
 
   /* ── SELECT phase ── */
-  const isRetryMode = retriesLeft > 0 && retriesLeft < MAX_RETRIES;
+  // isRetryMode: user has already paid (retriesLeft > 0) and is back to adjust strength
+  const isRetryMode = retriesLeft > 0;
 
   return (
     <div className="flex flex-col gap-5">
 
-      {/* Upload zone */}
+      {/* Style preset buttons */}
+      <div>
+        <h3 className="font-label text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-3">
+          스타일 프리셋
+        </h3>
+        <div className="flex flex-col gap-2">
+          {STYLE_PRESETS.map((preset) => (
+            <button
+              key={preset.id}
+              className={`w-full py-3 px-4 rounded-xl border transition-all text-sm font-medium flex items-center gap-3 disabled:opacity-50 ${
+                activePreset === preset.id
+                  ? 'border-primary bg-primary/15 text-primary'
+                  : 'border-outline-variant/30 text-white hover:border-primary/50 hover:bg-primary/5'
+              }`}
+              onClick={() => handlePreset(preset.id)}
+              disabled={loading}
+            >
+              <span className="text-base">{preset.emoji}</span>
+              <span>{preset.label}</span>
+              {presetCache.current[preset.id] && (
+                <span className="ml-auto text-[9px] text-primary/60 font-bold uppercase tracking-widest">캐시됨</span>
+              )}
+              {activePreset === preset.id && loading && (
+                <span className="ml-auto w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Divider */}
+      <div className="flex items-center gap-3">
+        <div className="flex-1 h-px bg-outline-variant/20" />
+        <span className="text-[10px] text-on-surface-variant uppercase tracking-widest">또는 직접 업로드</span>
+        <div className="flex-1 h-px bg-outline-variant/20" />
+      </div>
+
+      {/* Reference image upload zone */}
       <div>
         <h3 className="font-label text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-3">
           참조 이미지

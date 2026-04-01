@@ -80,7 +80,7 @@ const LARGE_PREV_W = 280;
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, className = '', externalMode, hideSidebar = false }) {
+function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, className = '', externalMode, hideSidebar = false, lazy = false }) {
   // ── SAM hook ──────────────────────────────────────────────────────────────
   const {
     initModel,
@@ -153,11 +153,25 @@ function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, clas
     onMasksChange?.(stagedMasks);
   }, [stagedMasks, onMasksChange]);
 
+  // ── lazy: track whether encoding has been triggered yet ──────────────────
+  const encodedRef = useRef(false);
+
+  // ── Encode on demand (called on first user interaction when lazy=true) ───
+  const triggerEncodeIfNeeded = useCallback(async () => {
+    if (!lazy || encodedRef.current) return;
+    const img = imageElRef.current;
+    if (!img) return;
+    encodedRef.current = true;
+    const ok = await initModel();
+    if (ok) await encodeImage(img);
+  }, [lazy, initModel, encodeImage]);
+
   // ── Load image + run encoder ──────────────────────────────────────────────
   useEffect(() => {
     if (!imageSrc) return;
     let cancelled = false;
 
+    encodedRef.current = false;
     resetEncoding();
     setClickPoints([]);
     setCurrentMaskSet(null);
@@ -180,8 +194,10 @@ function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, clas
       const h     = Math.round(img.naturalHeight * scale);
       setCanvasSize({ w, h });
 
-      const ok = await initModel();
-      if (!cancelled && ok) await encodeImage(img);
+      if (!lazy) {
+        const ok = await initModel();
+        if (!cancelled && ok) await encodeImage(img);
+      }
     };
     img.src = imageSrc;
 
@@ -281,6 +297,7 @@ function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, clas
 
   // ── Lasso mode ────────────────────────────────────────────────────────────
   const handleLassoEnd = useCallback(async (canvasPoints) => {
+    await triggerEncodeIfNeeded();
     if (isEncoding || isModelLoading) return;
     const img = imageElRef.current;
     if (!img) return;
@@ -306,6 +323,7 @@ function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, clas
 
   // ── Box mode ──────────────────────────────────────────────────────────────
   const handleBoxEnd = useCallback(async (canvasBox) => {
+    await triggerEncodeIfNeeded();
     if (isEncoding || isModelLoading) return;
     const img = imageElRef.current;
     if (!img) return;
@@ -351,6 +369,7 @@ function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, clas
   }, [zoom, canvasSize]);
 
   const handleCanvasClick = useCallback(async (e) => {
+    await triggerEncodeIfNeeded();
     if (inputMode !== 'point' || isEncoding || isModelLoading) return;
     e.preventDefault();
 
@@ -376,6 +395,7 @@ function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, clas
 
   // ── Brush mode ────────────────────────────────────────────────────────────
   const handleStrokeEnd = useCallback(async (canvasPoints, isExclude) => {
+    await triggerEncodeIfNeeded();
     if (isEncoding || isModelLoading) return;
     const img = imageElRef.current;
     if (!img) return;
@@ -833,8 +853,8 @@ function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, clas
             </div>
           </div>
 
-          {/* Large preview panel (right) */}
-          <div className="rcs-live-preview-panel">
+          {/* Large preview panel (right) — resizable */}
+          <div className="rcs-live-preview-panel" style={{ resize: 'both', overflow: 'hidden', minWidth: '160px', maxWidth: '600px', minHeight: '160px' }}>
             <div className="rcs-live-preview-header">
               <span className="rcs-live-preview-title">미리보기</span>
               {currentMaskSet && !isSegmenting && (
@@ -876,37 +896,6 @@ function RoomCanvas({ imageSrc, projectId, onMasksChange, onEncodingChange, clas
                 <>클릭 포인트가 추가됐습니다.</>
               ) : null}
             </div>
-
-            {/* Mask size selector */}
-            {currentMaskSet && hasMultiMasks && (
-              <div className="rcs-mask-size-row">
-                <MaskSizeSelector
-                  masks={currentMaskSet.masks}
-                  scores={currentMaskSet.scores}
-                  selectedIdx={selectedMaskIdx}
-                  bestIndex={currentMaskSet.bestIndex}
-                  onSelect={setSelectedMaskIdx}
-                />
-              </div>
-            )}
-
-            {/* Label picker + undo */}
-            {currentMaskSet && (
-              <div className="rcs-label-row">
-                <span className="rcs-label-title">라벨 선택</span>
-                <SegmentLabel value={pendingLabel} onChange={setPendingLabel} />
-                <div className="rcs-undo-row">
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    onClick={handleUndo}
-                    disabled={undoStack.length === 0}
-                    title="이전 선택 단계로 되돌리기"
-                  >
-                    ↩ 이전 단계 ({undoStack.length})
-                  </button>
-                </div>
-              </div>
-            )}
 
             <div className="rcs-action-buttons">
               <button className="btn btn-secondary" onClick={handleCancel}>

@@ -48,9 +48,9 @@ const STYLE_FILTERS = [
 ];
 
 const NAV_TOOLS = [
-  { id: 'mood',      icon: 'palette',         label: 'MOOD',      sub: 'Style Transfer'  },
-  { id: 'materials', icon: 'texture',         label: 'MATERIALS', sub: 'Material & SAM'  },
-  { id: 'lighting',  icon: 'wb_sunny',        label: 'LIGHTING',  sub: 'Lighting Control'},
+  { id: 'mood',      icon: 'palette', label: 'MOOD',      sub: 'Style Transfer' },
+  { id: 'materials', icon: 'texture', label: 'MATERIALS', sub: 'Material & SAM' },
+  { id: 'furniture', icon: 'chair',   label: 'FURNITURE', sub: '가구 배치'       },
 ];
 
 /* ─────────────────────────────────────────────────────────────────── */
@@ -63,6 +63,7 @@ export default function MaterialsEditor({
   layers = [],
   activeTool,
   setActiveTool,
+  embedded = false,   // when true: renders within EditorPage shell (no own header/nav)
   onResult,
   onNavigateBack,
   isProcessing,
@@ -76,7 +77,7 @@ export default function MaterialsEditor({
 }) {
   /* ── State ── */
   const [selectedArea,   setSelectedArea]   = useState('wall');
-  const [canvasMode,     setCanvasMode]     = useState('lasso');
+  const [canvasMode,     setCanvasMode]     = useState('point');
   const [canvasSegments, setCanvasSegments] = useState([]);
 
   const [matCategory,    setMatCategory]    = useState('wallpaper');
@@ -163,6 +164,298 @@ export default function MaterialsEditor({
   }, [freeRetries, setFreeRetries]);
 
   const displayMats = matCategory === 'upload' ? uploadedMats : materials;
+
+  /* ── Embedded render (inside EditorPage shell) ── */
+  if (embedded) {
+    return (
+      <div className="flex flex-col h-full overflow-hidden text-white">
+
+        {/* AREA bar — non-fixed, part of flow */}
+        <div className="flex-shrink-0 h-12 flex items-center justify-between px-6"
+          style={{ background: 'rgba(14,14,15,0.9)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#adaaab' }}>Area:</span>
+            <div className="flex gap-1">
+              {AREAS.map(area => (
+                <button key={area.id}
+                  className="px-3 py-1 rounded-full text-xs font-bold transition-all"
+                  style={selectedArea === area.id
+                    ? { background: '#ffffff', color: '#000000' }
+                    : { color: '#adaaab' }}
+                  onClick={() => handleAreaPreset(area.id)}
+                >
+                  {area.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <button className="text-[10px] underline transition-colors" style={{ color: '#adaaab' }}
+            onClick={() => setCanvasMode('lasso')}>
+            Or select directly on canvas below
+          </button>
+        </div>
+
+        {/* 3-column content */}
+        <div className="flex flex-1 overflow-hidden">
+
+          {/* Left inspector */}
+          <aside className="flex-shrink-0 p-4 overflow-y-auto"
+            style={{ width: '240px', background: 'rgba(24,24,27,0.6)', borderRight: '1px solid rgba(255,255,255,0.05)' }}>
+            <div className="space-y-6">
+
+              {/* Input Mode */}
+              <section>
+                <h4 className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: '#adaaab' }}>Input Mode</h4>
+                <div className="grid grid-cols-2 gap-2">
+                  {INPUT_MODES.map(mode => {
+                    const isActive = canvasMode === mode.id;
+                    return (
+                      <button key={mode.id}
+                        disabled={!mode.enabled}
+                        className="flex flex-col items-center justify-center p-2 rounded-xl transition-all"
+                        style={{
+                          background: mode.enabled ? '#201f21' : '#131314',
+                          border: isActive ? '1px solid #bd9dff' : '1px solid rgba(72,72,73,0.2)',
+                          opacity: mode.enabled ? 1 : 0.4,
+                          cursor: mode.enabled ? 'pointer' : 'not-allowed',
+                          boxShadow: isActive ? '0 0 12px rgba(189,157,255,0.3)' : 'none',
+                        }}
+                        onClick={() => mode.enabled && setCanvasMode(mode.id)}
+                      >
+                        <span className="material-symbols-outlined text-base mb-0.5"
+                          style={{ color: isActive ? '#bd9dff' : '#adaaab' }}>{mode.icon}</span>
+                        <span className="text-[10px] font-bold" style={{ color: isActive ? '#ffffff' : '#adaaab' }}>{mode.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+
+              {/* Selection summary */}
+              {canvasSegments.length > 0 && (
+                <section className="p-3 rounded-xl" style={{ background: 'rgba(124,58,237,0.08)', border: '1px solid rgba(189,157,255,0.2)' }}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="w-2 h-2 rounded-full" style={{ background: '#10b981' }} />
+                    <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#10b981' }}>선택됨</span>
+                  </div>
+                  <p className="text-xs font-semibold text-white">
+                    {canvasSegments[0]?.label || selectedArea} — {canvasSegments.length}개 선택
+                  </p>
+                  <div className="flex gap-2 mt-2">
+                    <button className="flex-1 py-1 rounded-lg text-[10px] font-bold transition-all hover:opacity-80"
+                      style={{ background: 'rgba(189,157,255,0.15)', color: '#bd9dff' }}
+                      onClick={() => setCanvasSegments([])}>
+                      취소
+                    </button>
+                  </div>
+                </section>
+              )}
+
+              {/* Usage guide */}
+              <section className="p-3 rounded-xl" style={{ background: 'rgba(14,14,15,0.8)', border: '1px solid rgba(72,72,73,0.2)' }}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="material-symbols-outlined text-sm" style={{ color: '#bd9dff' }}>info</span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: '#adaaab' }}>Usage Guide</span>
+                </div>
+                <ul className="space-y-1 text-[10px]" style={{ color: '#767576' }}>
+                  <li><span style={{ color: '#10b981' }}>왼쪽 클릭:</span> 선택할 영역 추가</li>
+                  <li><span style={{ color: '#ff5555' }}>오른쪽 클릭:</span> 선택 제외</li>
+                  <li>여러 번 클릭해 영역을 정밀하게 조절하세요.</li>
+                  <li>오른쪽 패널에서 자재 선택 후 Render 클릭.</li>
+                </ul>
+              </section>
+
+            </div>
+          </aside>
+
+          {/* Center canvas */}
+          <section className="flex-1 relative overflow-hidden flex items-center justify-center"
+            style={{ background: '#000000' }}>
+            <div className="absolute top-4 right-4 z-10 px-3 py-1 rounded-full"
+              style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.1)' }}>
+              <span className="text-[10px] font-bold tracking-widest uppercase">Preview Mode</span>
+            </div>
+            <div className="relative w-full h-full rounded-xl overflow-hidden"
+              style={{ border: '1px solid rgba(72,72,73,0.1)' }}>
+              {imageUrl ? (
+                <RoomCanvas
+                  imageSrc={imageUrl}
+                  projectId={projectId}
+                  onMasksChange={setCanvasSegments}
+                  onEncodingChange={handleEncodingChange}
+                  externalMode={canvasMode}
+                  hideSidebar={true}
+                  lazy={true}
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center" style={{ color: '#adaaab' }}>
+                  이미지를 불러오는 중...
+                </div>
+              )}
+              {(isProcessing || isAnalyzing) && (
+                <ProcessingOverlay
+                  message={processingMessage || (isAnalyzing ? '이미지 분석 중...' : '')}
+                  isColdStart={isColdStart}
+                />
+              )}
+            </div>
+          </section>
+
+          {/* Right panel */}
+          <aside className="flex-shrink-0 flex flex-col"
+            style={{ width: '300px', background: '#111111', borderLeft: '1px solid rgba(255,255,255,0.05)' }}>
+
+            <header className="p-4" style={{ borderBottom: '1px solid rgba(72,72,73,0.1)' }}>
+              <h3 className="text-base font-bold font-headline leading-none">Materials</h3>
+              <p className="text-[10px] font-bold tracking-widest mt-1 uppercase" style={{ color: '#bd9dff' }}>Material &amp; SAM</p>
+              <div className="flex gap-2 mt-3">
+                {onAddToLayout && (
+                  <button onClick={onAddToLayout}
+                    className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-full border text-[10px] font-bold transition-all hover:bg-[#2c2c2d]"
+                    style={{ borderColor: 'rgba(189,157,255,0.4)', color: '#bd9dff' }}>
+                    <span className="material-symbols-outlined text-sm">add_photo_alternate</span>레이아웃 추가
+                  </button>
+                )}
+                <button onClick={handleApply} disabled={applyLoading}
+                  className="flex-1 px-3 py-1.5 rounded-full text-[10px] font-bold active:scale-95 transition-all shadow-lg disabled:opacity-50"
+                  style={{ background: 'linear-gradient(135deg, #bd9dff, #8a4cfc)', color: '#3c0089' }}>
+                  {applyLoading ? 'Applying…' : 'Render'}
+                </button>
+              </div>
+            </header>
+
+            <div className="px-4 py-3 flex gap-3 overflow-x-auto"
+              style={{ borderBottom: '1px solid rgba(72,72,73,0.1)' }}>
+              {CATEGORIES.map(cat => (
+                <button key={cat.id}
+                  className="text-xs font-bold pb-1.5 flex-shrink-0 transition-colors"
+                  style={matCategory === cat.id
+                    ? { color: '#ffffff', borderBottom: '2px solid #bd9dff' }
+                    : { color: '#adaaab', borderBottom: '2px solid transparent' }}
+                  onClick={() => setMatCategory(cat.id)}>
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex flex-col flex-1 overflow-y-auto p-4">
+              {/* Style filters */}
+              {matCategory !== 'upload' && (
+                <div className="flex flex-wrap gap-1 mb-3">
+                  {STYLE_FILTERS.map(f => (
+                    <button key={f.id}
+                      className="px-2 py-0.5 rounded-full text-[10px] font-bold transition-all"
+                      style={matFilter === f.id
+                        ? { background: '#bd9dff', color: '#000' }
+                        : { background: '#201f21', color: '#adaaab', border: '1px solid rgba(72,72,73,0.2)' }}
+                      onClick={() => setMatFilter(f.id)}>
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Search */}
+              {matCategory !== 'upload' && (
+                <div className="flex gap-2 mb-3">
+                  <input
+                    className="flex-1 px-3 py-1.5 rounded-lg text-xs"
+                    style={{ background: '#201f21', border: '1px solid rgba(72,72,73,0.3)', color: '#ffffff' }}
+                    placeholder="Search material name..."
+                    value={matSearchInput}
+                    onChange={e => setMatSearchInput(e.target.value)}
+                  />
+                  <button className="px-3 py-1.5 rounded-lg text-xs font-bold"
+                    style={{ background: 'linear-gradient(135deg, #bd9dff, #8a4cfc)', color: '#3c0089' }}
+                    onClick={() => setMatSearch(matSearchInput)}>Search</button>
+                </div>
+              )}
+
+              {/* Upload tab */}
+              {matCategory === 'upload' ? (
+                <div className="flex flex-col gap-3">
+                  <input ref={uploadRef} type="file" accept="image/*" className="hidden"
+                    onChange={e => handleUploadFile(e.target.files[0])} />
+                  <div className="border-2 border-dashed rounded-xl p-4 flex flex-col items-center gap-2 cursor-pointer transition-all"
+                    style={{ borderColor: 'rgba(189,157,255,0.3)' }}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = '#bd9dff'}
+                    onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(189,157,255,0.3)'}
+                    onClick={() => uploadRef.current?.click()}
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => { e.preventDefault(); handleUploadFile(e.dataTransfer.files[0]); }}>
+                    <span className="material-symbols-outlined text-3xl" style={{ color: '#bd9dff' }}>upload_file</span>
+                    <span className="text-xs font-semibold" style={{ color: '#adaaab' }}>자재 이미지 업로드</span>
+                    <span className="text-[10px] text-center" style={{ color: '#767576' }}>PNG, JPG — 최대 10MB</span>
+                  </div>
+                  {uploadedMats.length > 0 && (
+                    <div className="grid grid-cols-2 gap-2">
+                      {uploadedMats.map((mat, i) => (
+                        <button key={i}
+                          className="p-2 rounded-xl transition-all text-left"
+                          style={selectedMat?.id === mat.id
+                            ? { background: 'rgba(189,157,255,0.15)', border: '1px solid #bd9dff' }
+                            : { background: '#201f21', border: '1px solid rgba(72,72,73,0.2)' }}
+                          onClick={() => setSelectedMat(mat)}>
+                          <img src={mat.thumbnail_url || mat.tile_image_url} alt={mat.name}
+                            className="w-full aspect-square object-cover rounded-lg mb-1" />
+                          <p className="text-[10px] font-semibold text-white truncate">{mat.name}</p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : loadingMats ? (
+                <div className="flex justify-center py-8">
+                  <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#bd9dff', borderTopColor: 'transparent' }} />
+                </div>
+              ) : displayMats.length === 0 ? (
+                <div className="flex flex-col items-center py-8 gap-2">
+                  <span className="material-symbols-outlined text-3xl" style={{ color: '#767576' }}>texture</span>
+                  <p className="text-sm font-semibold" style={{ color: '#adaaab' }}>No materials found.</p>
+                  <p className="text-[10px] text-center" style={{ color: '#767576' }}>Try adjusting filters or upload a custom material.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  {displayMats.map(mat => (
+                    <button key={mat.id}
+                      className="p-2 rounded-xl transition-all text-left"
+                      style={selectedMat?.id === mat.id
+                        ? { background: 'rgba(189,157,255,0.15)', border: '1px solid #bd9dff' }
+                        : { background: '#201f21', border: '1px solid rgba(72,72,73,0.2)' }}
+                      onClick={() => setSelectedMat(mat)}>
+                      <img src={mat.thumbnail_url || mat.tile_image_url} alt={mat.name}
+                        className="w-full aspect-square object-cover rounded-lg mb-1" />
+                      <p className="text-[10px] font-semibold text-white truncate">{mat.name}</p>
+                      {mat.brand && <p className="text-[9px]" style={{ color: '#adaaab' }}>{mat.brand}</p>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Preview section */}
+            <div className="p-4" style={{ borderTop: '1px solid rgba(72,72,73,0.1)' }}>
+              <div className="rounded-xl overflow-hidden aspect-square mb-2"
+                style={{ background: '#0a0a0b', border: '1px solid rgba(72,72,73,0.2)' }}>
+                {selectedMat?.tile_image_url || selectedMat?.thumbnail_url ? (
+                  <img src={selectedMat.tile_image_url || selectedMat.thumbnail_url} alt="미리보기" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center gap-1">
+                    <span className="material-symbols-outlined text-2xl" style={{ color: '#767576' }}>preview</span>
+                    <p className="text-[10px]" style={{ color: '#767576' }}>영역을 선택하면 미리보기가 표시됩니다</p>
+                  </div>
+                )}
+              </div>
+              <p className="text-[9px] text-center" style={{ color: '#767576' }}>
+                {canvasSegments.length > 0 ? `${canvasSegments.length}개 영역 선택됨` : 'SAM READY'}
+              </p>
+            </div>
+          </aside>
+
+        </div>
+      </div>
+    );
+  }
 
   /* ── Render ── */
   return (
@@ -360,33 +653,6 @@ export default function MaterialsEditor({
           }}>
           <div className="space-y-8">
 
-            {/* Area Labels */}
-            <section>
-              <h4 className="text-[10px] font-bold uppercase tracking-widest mb-4"
-                style={{ color: '#adaaab' }}>Area Labels</h4>
-              <div className="flex flex-col gap-2">
-                {AREAS.slice(0, 6).map(area => {
-                  const isActive = selectedArea === area.id;
-                  return (
-                    <button key={area.id}
-                      className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg text-xs font-bold transition-all"
-                      style={isActive
-                        ? { background: 'rgba(189,157,255,0.1)', border: '1px solid #bd9dff', color: '#bd9dff' }
-                        : { border: '1px solid rgba(72,72,73,0.3)', color: '#adaaab' }
-                      }
-                      onMouseEnter={e => { if (!isActive) e.currentTarget.style.borderColor = '#767576'; }}
-                      onMouseLeave={e => { if (!isActive) e.currentTarget.style.borderColor = 'rgba(72,72,73,0.3)'; }}
-                      onClick={() => handleAreaPreset(area.id)}
-                    >
-                      {area.labelKo} ({area.label})
-                      {isActive && <span className="material-symbols-outlined text-base"
-                        style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>}
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-
             {/* Input Mode */}
             <section>
               <h4 className="text-[10px] font-bold uppercase tracking-widest mb-4"
@@ -421,6 +687,30 @@ export default function MaterialsEditor({
               </div>
             </section>
 
+            {/* Selection summary */}
+            {canvasSegments.length > 0 && (
+              <section className="p-4 rounded-xl" style={{ background: 'rgba(124,58,237,0.08)', border: '1px solid rgba(189,157,255,0.2)' }}>
+                <h4 className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: '#bd9dff' }}>선택 현황</h4>
+                <div className="flex flex-col gap-1.5">
+                  {Object.entries(
+                    canvasSegments.reduce((acc, seg) => {
+                      const lbl = seg.label || selectedArea;
+                      acc[lbl] = (acc[lbl] || 0) + 1;
+                      return acc;
+                    }, {})
+                  ).map(([label, count]) => (
+                    <div key={label} className="flex items-center justify-between text-xs">
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full" style={{ background: '#10b981' }} />
+                        <span style={{ color: '#ffffff' }}>{label} 선택됨</span>
+                      </span>
+                      <span className="font-bold" style={{ color: '#bd9dff' }}>{count}개 선택</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
             {/* Usage Guide */}
             <section className="p-4 rounded-xl"
               style={{ background: '#000000', border: '1px solid rgba(72,72,73,0.1)' }}>
@@ -430,14 +720,17 @@ export default function MaterialsEditor({
                 Usage Guide
               </h4>
               <ul className="space-y-2">
-                <li className="text-[11px] leading-relaxed" style={{ color: '#adaaab' }}>
-                  • Select area by drawing roughly around the target surface.
+                <li className="text-[11px] leading-relaxed" style={{ color: '#10b981' }}>
+                  🖱 <strong>왼쪽 클릭</strong>: 선택할 영역 추가
+                </li>
+                <li className="text-[11px] leading-relaxed" style={{ color: '#ef4444' }}>
+                  🖱 <strong>오른쪽 클릭</strong>: 선택 제외
                 </li>
                 <li className="text-[11px] leading-relaxed" style={{ color: '#adaaab' }}>
-                  • SAM auto-generates precise mask from your selection.
+                  • 여러 번 클릭해 영역을 정밀하게 조절하세요.
                 </li>
                 <li className="text-[11px] leading-relaxed" style={{ color: '#adaaab' }}>
-                  • Choose material from right panel and click Render.
+                  • 오른쪽 패널에서 자재 선택 후 Render 클릭.
                 </li>
                 {(freeRetries ?? 0) > 0 && (
                   <li className="text-[11px] leading-relaxed" style={{ color: '#10b981' }}>
@@ -470,6 +763,7 @@ export default function MaterialsEditor({
                 onEncodingChange={handleEncodingChange}
                 externalMode={canvasMode}
                 hideSidebar={true}
+                lazy={true}
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center"
@@ -640,8 +934,8 @@ export default function MaterialsEditor({
                         }}
                         onClick={() => setSelectedMat(mat)}
                       >
-                        {mat.thumbnail_url ? (
-                          <img src={mat.thumbnail_url} alt={mat.name}
+                        {mat.thumbnail_url || mat.tile_image_url ? (
+                          <img src={mat.thumbnail_url || mat.tile_image_url} alt={mat.name}
                             className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center"

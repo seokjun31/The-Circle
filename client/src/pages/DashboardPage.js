@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
-import { listProjects, uploadImage, deleteProject, getCreditBalance } from '../utils/api';
+import { listProjects, uploadImage, deleteProject, getCreditBalance, analyzeRoom, updateRoomType } from '../utils/api';
 import useEditorStore from '../stores/editorStore';
 import './DashboardPage.css';
 
@@ -17,12 +17,103 @@ function formatDate(iso) {
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+// Room type labels (Korean)
+const ROOM_TYPE_KR = {
+  'living room':    '거실',
+  'master bedroom': '안방',
+  'kitchen':        '주방',
+  'bathroom':       '욕실',
+  'dining room':    '다이닝룸',
+  'study room':     '서재',
+  'balcony':        '발코니',
+  'empty room':     '빈 방',
+};
+const ROOM_TYPE_OPTIONS = Object.entries(ROOM_TYPE_KR);
+
+// ── Room Confirm Modal ────────────────────────────────────────────────────────
+function RoomConfirmModal({ projectId, roomType, roomTypeKr, onConfirm, onSkip }) {
+  const [selecting, setSelecting]   = useState(false);
+  const [selected,  setSelected]    = useState(roomType);
+  const [saving,    setSaving]      = useState(false);
+
+  const handleConfirm = async (type) => {
+    setSaving(true);
+    try {
+      await updateRoomType(projectId, type ?? selected);
+    } catch {
+      // non-fatal — room type is optional
+    } finally {
+      setSaving(false);
+      onConfirm(type ?? selected);
+    }
+  };
+
+  return (
+    <div className="db-modal-backdrop" onClick={onSkip}>
+      <div className="db-modal db-room-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="db-modal-header">
+          <div>
+            <h2>공간 확인</h2>
+            <p className="db-modal-sub">AI가 공간 유형을 분석했습니다</p>
+          </div>
+        </div>
+
+        {!selecting ? (
+          <>
+            <div className="db-room-detected">
+              <span className="material-symbols-outlined db-room-icon" style={{ fontVariationSettings: "'FILL' 1" }}>home</span>
+              <p className="db-room-label">
+                여기가 <strong>{roomTypeKr || roomType}</strong>이 맞나요?
+              </p>
+            </div>
+            <div className="db-modal-footer">
+              <button className="db-btn-cancel" onClick={() => setSelecting(true)} disabled={saving}>
+                아니요, 직접 선택
+              </button>
+              <button className="db-btn-upload" onClick={() => handleConfirm(roomType)} disabled={saving}>
+                {saving ? <><span className="spinner" />저장 중...</> : '맞아요 ✓'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="db-room-select">
+              <p className="db-room-select-label">공간 유형을 선택해주세요</p>
+              <div className="db-room-grid">
+                {ROOM_TYPE_OPTIONS.map(([val, kr]) => (
+                  <button
+                    key={val}
+                    className={`db-room-option ${selected === val ? 'active' : ''}`}
+                    onClick={() => setSelected(val)}
+                  >
+                    {kr}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="db-modal-footer">
+              <button className="db-btn-cancel" onClick={() => setSelecting(false)} disabled={saving}>
+                뒤로
+              </button>
+              <button className="db-btn-upload" onClick={() => handleConfirm(selected)} disabled={saving}>
+                {saving ? <><span className="spinner" />저장 중...</> : '확인'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── New Project Modal ─────────────────────────────────────────────────────────
 function NewProjectModal({ onClose, onCreated }) {
-  const [file, setFile]           = useState(null);
-  const [preview, setPreview]     = useState(null);
-  const [dragging, setDragging]   = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [file, setFile]               = useState(null);
+  const [preview, setPreview]         = useState(null);
+  const [dragging, setDragging]       = useState(false);
+  const [uploading, setUploading]     = useState(false);
+  const [analyzing, setAnalyzing]     = useState(false);
+  const [roomInfo, setRoomInfo]       = useState(null);   // { projectId, imageId, roomType, roomTypeKr }
   const inputRef = useRef();
 
   const handleFile = (f) => {
@@ -43,13 +134,51 @@ function NewProjectModal({ onClose, onCreated }) {
     try {
       const result = await uploadImage(file);
       toast.success('프로젝트가 생성됐습니다!');
-      onCreated(result);
+      // Kick off room analysis in the background
+      setUploading(false);
+      setAnalyzing(true);
+      try {
+        const analysis = await analyzeRoom(result.imageId);
+        setAnalyzing(false);
+        setRoomInfo({
+          projectId:  result.imageId,
+          imageId:    result.imageId,
+          roomType:   analysis.room_type,
+          roomTypeKr: analysis.room_type_kr,
+        });
+      } catch {
+        // Analysis failed — skip dialog and go straight to editor
+        setAnalyzing(false);
+        onCreated(result);
+      }
     } catch (err) {
       toast.error(err.message);
-    } finally {
       setUploading(false);
     }
   };
+
+  // User confirmed the room type (or selected a different one)
+  const handleRoomConfirmed = () => {
+    onCreated({ imageId: roomInfo.imageId });
+  };
+
+  // User skipped the dialog
+  const handleRoomSkip = () => {
+    onCreated({ imageId: roomInfo.imageId });
+  };
+
+  // Show room confirmation dialog
+  if (roomInfo) {
+    return (
+      <RoomConfirmModal
+        projectId={roomInfo.projectId}
+        roomType={roomInfo.roomType}
+        roomTypeKr={roomInfo.roomTypeKr}
+        onConfirm={handleRoomConfirmed}
+        onSkip={handleRoomSkip}
+      />
+    );
+  }
 
   return (
     <div className="db-modal-backdrop" onClick={onClose}>
@@ -88,10 +217,12 @@ function NewProjectModal({ onClose, onCreated }) {
         )}
 
         <div className="db-modal-footer">
-          <button className="db-btn-cancel" onClick={onClose} disabled={uploading}>취소</button>
-          <button className="db-btn-upload" onClick={handleUpload} disabled={!file || uploading}>
+          <button className="db-btn-cancel" onClick={onClose} disabled={uploading || analyzing}>취소</button>
+          <button className="db-btn-upload" onClick={handleUpload} disabled={!file || uploading || analyzing}>
             {uploading ? (
               <><span className="spinner" /> 업로드 중...</>
+            ) : analyzing ? (
+              <><span className="spinner" /> AI 분석 중...</>
             ) : (
               <>
                 <span className="material-symbols-outlined" style={{ fontSize: '1rem' }}>arrow_forward</span>

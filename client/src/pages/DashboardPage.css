@@ -534,3 +534,73 @@
     font-size: 1.8rem;
   }
 }
+
+/* ── Room Confirm Modal ───────────────────────────────────────────────────── */
+.db-room-modal {
+  max-width: 420px;
+}
+
+.db-room-detected {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 2rem 1.5rem;
+  text-align: center;
+}
+
+.db-room-icon {
+  font-size: 3rem !important;
+  color: #bd9dff;
+}
+
+.db-room-label {
+  font-size: 1.05rem;
+  color: #ffffff;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.db-room-label strong {
+  color: #bd9dff;
+}
+
+.db-room-select {
+  padding: 1.5rem;
+}
+
+.db-room-select-label {
+  font-size: 0.875rem;
+  color: #adaaab;
+  margin: 0 0 1rem;
+}
+
+.db-room-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.db-room-option {
+  padding: 0.65rem 0.5rem;
+  border-radius: 0.6rem;
+  border: 1px solid #484849;
+  background: transparent;
+  color: #adaaab;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
+  text-align: center;
+}
+
+.db-room-option:hover {
+  border-color: #bd9dff;
+  color: #ffffff;
+}
+
+.db-room-option.active {
+  border-color: #bd9dff;
+  background: rgba(189, 157, 255, 0.12);
+  color: #bd9dff;
+  font-weight: 600;
+}
