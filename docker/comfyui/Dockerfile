@@ -98,10 +98,8 @@ COPY handler.py       /handler.py
 COPY start.sh         /start.sh
 COPY download_models.sh /download_models.sh
 # Fix CRLF line endings (Windows build환경 대응)
-RUN apt-get install -y --no-install-recommends dos2unix \
-    && dos2unix /start.sh /download_models.sh \
-    && chmod +x /start.sh /download_models.sh \
-    && rm -rf /var/lib/apt/lists/*
+RUN sed -i 's/\r$//' /start.sh /download_models.sh \
+    && chmod +x /start.sh /download_models.sh
 
 # ── Create local model dir fallback (used when Network Volume is unavailable) ──
 RUN mkdir -p \
