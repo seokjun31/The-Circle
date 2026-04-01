@@ -44,9 +44,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ── PyTorch (CUDA 12.1) ────────────────────────────────────────────────────────
 RUN pip install --upgrade pip && \
     pip install \
-    torch==2.3.1 \
-    torchvision==0.18.1 \
-    torchaudio==2.3.1 \
+    torch==2.4.1 \
+    torchvision==0.19.1 \
+    torchaudio==2.4.1 \
     --index-url https://download.pytorch.org/whl/cu121
 
 # ── ComfyUI ───────────────────────────────────────────────────────────────────
@@ -54,7 +54,7 @@ RUN git clone --depth 1 https://github.com/comfyanonymous/ComfyUI ${COMFYUI_DIR}
 RUN pip install -r ${COMFYUI_DIR}/requirements.txt
 
 # ── xformers (memory-efficient attention) ─────────────────────────────────────
-RUN pip install xformers==0.0.27 --index-url https://download.pytorch.org/whl/cu121
+RUN pip install xformers==0.0.28.post3 --index-url https://download.pytorch.org/whl/cu121
 
 # ── Custom nodes ──────────────────────────────────────────────────────────────
 # 1. ComfyUI-Manager (node management, must be first)
