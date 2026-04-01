@@ -18,7 +18,7 @@ from pathlib import Path
 # backend/.env 자동 로드
 env_path = Path(__file__).parent.parent / "backend" / ".env"
 if env_path.exists():
-    for line in env_path.read_text().splitlines():
+    for line in env_path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if line and not line.startswith("#") and "=" in line:
             k, _, v = line.partition("=")
