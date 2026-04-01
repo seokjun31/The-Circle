@@ -38,7 +38,7 @@ if not API_KEY or not ENDPOINT_ID:
     print(f"   .env 경로: {env_path}")
     sys.exit(1)
 
-BASE_URL = f"https://api.runpod.io/v2/{ENDPOINT_ID}"
+BASE_URL = f"https://api.runpod.ai/v2/{ENDPOINT_ID}"
 HEADERS  = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
 
 print(f"🔌 RunPod 연결 테스트")
