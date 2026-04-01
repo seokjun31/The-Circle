@@ -90,9 +90,9 @@ print(f"   ✅ Job ID: {job_id}")
 
 # ── 3. Status 폴링 ────────────────────────────────────────────────────────────
 print()
-print("3️⃣  Job 상태 폴링 (최대 60초)...")
+print("3️⃣  Job 상태 폴링 (최대 5분)...")
 
-for i in range(20):
+for i in range(60):
     time.sleep(3)
     try:
         r = requests.get(f"{BASE_URL}/status/{job_id}", headers=HEADERS, timeout=10)
@@ -123,5 +123,5 @@ for i in range(20):
     except Exception as e:
         print(f"   폴링 오류: {e}")
 
-print("   ⏰ 60초 타임아웃")
+print("   ⏰ 5분 타임아웃")
 print("💡 워커가 시작 중일 수 있습니다. Active Workers=1 설정을 권장합니다.")
