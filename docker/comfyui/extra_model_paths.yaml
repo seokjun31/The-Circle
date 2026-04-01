@@ -7,7 +7,7 @@
 # /ComfyUI/models/ are searched. Network Volume paths take priority.
 
 the_circle:
-  base_path: /workspace/ComfyUI/models
+  base_path: /runpod-volume/ComfyUI/models
 
   checkpoints: checkpoints/
   vae: vae/
