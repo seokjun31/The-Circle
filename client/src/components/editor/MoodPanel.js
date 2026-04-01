@@ -205,15 +205,6 @@ export default function MoodPanel({
           </div>
         </div>
 
-        {/* Retry — go back to select to adjust strength */}
-        <button
-          className="w-full py-3 rounded-xl border border-outline-variant/30 text-on-surface-variant hover:border-outline-variant/60 transition-all text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
-          onClick={() => onPhaseChange('select')}
-          disabled={retriesLeft <= 0}
-        >
-          🔄 강도 조절 후 다시 해볼게요 ({retriesLeft}회 남음)
-        </button>
-
         {/* Accept */}
         <button
           className="w-full py-4 rounded-xl bg-gradient-to-r from-[#7c3aed] to-primary text-white font-headline font-bold text-sm shadow-lg hover:shadow-primary/20 transition-all active:scale-[0.98]"
@@ -307,33 +298,6 @@ export default function MoodPanel({
         )}
       </div>
 
-      {/* Strength slider */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="font-label text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
-            변환 강도
-          </h3>
-          <span className="text-xs font-bold text-primary">{Math.round(strength * 100)}%</span>
-        </div>
-        <input
-          type="range" className="w-full accent-primary"
-          min="0.3" max="0.85" step="0.05"
-          value={strength}
-          onChange={e => setStrength(parseFloat(e.target.value))}
-        />
-        <div className="flex justify-between text-[10px] text-on-surface-variant mt-1">
-          <span>원본 유지</span><span>강한 변환</span>
-        </div>
-      </div>
-
-      {/* Retry notice */}
-      {isRetryMode && (
-        <div className="p-3 bg-primary/10 rounded-xl border border-primary/20">
-          <p className="text-xs text-primary">
-            🔄 강도를 조절하고 무료로 재변환하세요 ({retriesLeft}회 남음)
-          </p>
-        </div>
-      )}
 
       {/* CTA */}
       <button
