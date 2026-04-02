@@ -63,8 +63,12 @@ payload = {
     "input": {
         "workflow": {
             "1": {
-                "inputs": {"text": "Hello from The Circle!"},
-                "class_type": "Note"
+                "class_type": "EmptyLatentImage",
+                "inputs": {
+                    "width": 64,
+                    "height": 64,
+                    "batch_size": 1
+                }
             }
         },
         "timeout": 60,
