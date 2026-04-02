@@ -92,7 +92,7 @@ async def queue_prompt(
         if not resp.ok:
             body = await resp.text()
             logger.error("ComfyUI /prompt %d: %s", resp.status, body)
-        resp.raise_for_status()
+            raise ValueError(f"ComfyUI {resp.status}: {body}")
         data: dict = await resp.json()
 
     node_errors: dict = data.get("node_errors", {})
