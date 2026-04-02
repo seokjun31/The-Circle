@@ -89,6 +89,9 @@ async def queue_prompt(
         json=payload,
         timeout=aiohttp.ClientTimeout(total=30),
     ) as resp:
+        if not resp.ok:
+            body = await resp.text()
+            logger.error("ComfyUI /prompt %d: %s", resp.status, body)
         resp.raise_for_status()
         data: dict = await resp.json()
 
