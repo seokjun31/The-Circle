@@ -12,7 +12,7 @@ set -euo pipefail
 
 COMFYUI_DIR="/ComfyUI"
 COMFYUI_PORT="${COMFYUI_PORT:-8188}"
-COMFYUI_READY_TIMEOUT="${COMFYUI_READY_TIMEOUT:-120}"
+COMFYUI_READY_TIMEOUT="${COMFYUI_READY_TIMEOUT:-300}"
 LOG_FILE="/tmp/comfyui.log"
 
 # ── 1. Always download/verify models before ComfyUI starts ────────────────────
@@ -43,10 +43,19 @@ echo "[start.sh] Waiting for ComfyUI to be ready (timeout: ${COMFYUI_READY_TIMEO
 ELAPSED=0
 INTERVAL=3
 until curl -sf "http://127.0.0.1:${COMFYUI_PORT}/system_stats" > /dev/null 2>&1; do
+    # 프로세스가 죽었으면 즉시 감지
+    if ! kill -0 "${COMFYUI_PID}" 2>/dev/null; then
+        echo ""
+        echo "[start.sh] ERROR: ComfyUI process crashed!"
+        echo "[start.sh] === Full ComfyUI log ==="
+        cat "${LOG_FILE}"
+        exit 1
+    fi
     if (( ELAPSED >= COMFYUI_READY_TIMEOUT )); then
+        echo ""
         echo "[start.sh] ERROR: ComfyUI did not start within ${COMFYUI_READY_TIMEOUT}s"
-        echo "[start.sh] Last ComfyUI logs:"
-        tail -50 "${LOG_FILE}"
+        echo "[start.sh] === Full ComfyUI log ==="
+        cat "${LOG_FILE}"
         exit 1
     fi
     # Show a dot every 3 seconds so RunPod knows we're alive
