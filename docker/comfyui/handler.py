@@ -343,9 +343,9 @@ async def process_job(job: dict[str, Any]) -> dict[str, Any]:
 #  RunPod entry point
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def handler(job: dict[str, Any]) -> dict[str, Any]:
+async def handler(job: dict[str, Any]) -> dict[str, Any]:
     """
-    RunPod Serverless handler entry point.
+    RunPod Serverless handler entry point (async).
 
     RunPod calls this function for each job.  Because ComfyUI is already
     running (started in start.sh before this process), we only need to:
@@ -359,7 +359,7 @@ def handler(job: dict[str, Any]) -> dict[str, Any]:
     Returns:
         Output dictionary (see module docstring for schema).
     """
-    return asyncio.run(process_job(job))
+    return await process_job(job)
 
 
 if __name__ == "__main__":
