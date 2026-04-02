@@ -86,6 +86,12 @@ RUN git clone --depth 1 \
     ${CUSTOM_NODES_DIR}/ComfyUI-KJNodes && \
     pip install -r ${CUSTOM_NODES_DIR}/ComfyUI-KJNodes/requirements.txt || true
 
+# 6. ControlNet Aux Preprocessors (CannyEdgePreprocessor, MidasDepthMap, etc.)
+RUN git clone --depth 1 \
+    https://github.com/Fannovel16/comfyui_controlnet_aux \
+    ${CUSTOM_NODES_DIR}/comfyui_controlnet_aux && \
+    pip install -r ${CUSTOM_NODES_DIR}/comfyui_controlnet_aux/requirements.txt || true
+
 # ── Handler dependencies ───────────────────────────────────────────────────────
 COPY requirements.txt /requirements-handler.txt
 RUN pip install -r /requirements-handler.txt
