@@ -104,6 +104,11 @@ for i in range(60):
         status = status_data.get("status", "unknown")
         print(f"   [{i*3:3d}s] status={status}")
 
+        if status == "IN_PROGRESS":
+            print()
+            print("   ✅ Job IN_PROGRESS — ComfyUI 연결 확인!")
+            print("🎉 RunPod + ComfyUI 연결 정상! (워크플로우 실행 중)")
+
         if status == "COMPLETED":
             print()
             print("   ✅ Job 완료!")
