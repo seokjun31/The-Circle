@@ -173,13 +173,19 @@
     }
   },
   "21": {
-    "class_type": "MidasDepthMapPreprocessor",
-    "_label": "MiDaS Depth Estimation",
+    "class_type": "DepthAnythingV2",
+    "_label": "Depth Anything V2",
     "inputs": {
-      "a": 6.283185307,
-      "bg_threshold": 0.1,
-      "resolution": 512,
-      "image": ["6", 0]
+      "da_model": ["22", 0],
+      "images": ["6", 0]
+    }
+  },
+  "22": {
+    "class_type": "DownloadAndLoadDepthAnythingV2Model",
+    "_label": "Download Depth Anything V2 Model",
+    "inputs": {
+      "model": "depth_anything_v2_vitl_fp32.safetensors",
+      "precision": "auto"
     }
   },
   "24": {

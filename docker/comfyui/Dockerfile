@@ -86,7 +86,11 @@ RUN git clone --depth 1 \
     ${CUSTOM_NODES_DIR}/ComfyUI-KJNodes && \
     pip install -r ${CUSTOM_NODES_DIR}/ComfyUI-KJNodes/requirements.txt || true
 
-# 6. ControlNet Aux Preprocessors (CannyEdgePreprocessor, MidasDepthMap, etc.)
+# 7. Depth Anything V2 (DepthAnythingV2 node)
+RUN git clone --depth 1 \
+    https://github.com/kijai/ComfyUI-Depth-Anything-V2 \
+    ${CUSTOM_NODES_DIR}/ComfyUI-Depth-Anything-V2 && \
+    pip install -r ${CUSTOM_NODES_DIR}/ComfyUI-Depth-Anything-V2/requirements.txt || true
 RUN git clone --depth 1 \
     https://github.com/Fannovel16/comfyui_controlnet_aux \
     ${CUSTOM_NODES_DIR}/comfyui_controlnet_aux && \
