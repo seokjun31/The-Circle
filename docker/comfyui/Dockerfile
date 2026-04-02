@@ -90,6 +90,13 @@ RUN git clone --depth 1 \
 COPY requirements.txt /requirements-handler.txt
 RUN pip install -r /requirements-handler.txt
 
+# ── Pin critical versions to prevent conflicts ────────────────────────────────
+RUN pip install --force-reinstall --no-deps \
+    yarl==1.9.4 \
+    aiohttp==3.9.5 \
+    numpy==1.26.4 \
+    scipy==1.11.4
+
 # ── ComfyUI model path config (reads from Network Volume) ─────────────────────
 COPY extra_model_paths.yaml ${COMFYUI_DIR}/extra_model_paths.yaml
 
