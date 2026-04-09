@@ -1,18 +1,20 @@
 {
   "_comment": "The Circle — Material Apply Workflow (API format)",
   "_description": [
-    "Pipeline: SDXL Base + IP-Adapter (texture) + ControlNet Depth (perspective) + Inpainting",
+    "Pipeline: SDXL Base + IP-Adapter Advanced (texture style) + ControlNet Depth (perspective) + Inpainting",
+    "SAM mask is pre-computed by the frontend (Transformers.js SAM) or backend SAM node,",
+    "then passed in as base64 via ETN_LoadMaskBase64.",
     "",
-    "Runtime injections (WorkflowManager.build_material_apply_workflow):",
-    "  Node 2   image           — room photo base64",
-    "  Node 3   mask            — SAM mask base64 (white=inpaint)",
-    "  Node 4   image           — material tile base64",
+    "Runtime injections (WorkflowManager.build_material_workflow):",
+    "  Node 2   image           — room photo base64 (ETN_LoadImageBase64)",
+    "  Node 3   mask            — SAM mask base64 (ETN_LoadMaskBase64, white=inpaint area)",
+    "  Node 4   image           — material texture base64 (ETN_LoadImageBase64)",
     "  Node 5   ipadapter_file  — IP-Adapter model name",
-    "  Node 7   weight          — IP-Adapter weight",
+    "  Node 7   weight          — IP-Adapter weight (0.4–0.7)",
     "  Node 10  text            — positive prompt",
     "  Node 11  text            — negative prompt",
-    "  Node 12  strength        — ControlNet strength",
-    "  Node 14  seed/steps/cfg/denoise",
+    "  Node 12  strength        — ControlNet Depth strength",
+    "  Node 14  seed/steps/cfg/denoise — KSampler params",
     "  Node 100 width/height    — SDXL-optimal dimensions from calc_sdxl_size()"
   ],
   "1": {
@@ -20,6 +22,13 @@
     "_label": "Load SDXL Base",
     "inputs": {
       "ckpt_name": "sd_xl_base_1.0.safetensors"
+    }
+  },
+  "25": {
+    "class_type": "VAELoader",
+    "_label": "Load SDXL VAE (improved colour fidelity)",
+    "inputs": {
+      "vae_name": "sdxl_vae.safetensors"
     }
   },
   "2": {
@@ -42,14 +51,14 @@
   },
   "3": {
     "class_type": "ETN_LoadMaskBase64",
-    "_label": "Load Inpaint Mask",
+    "_label": "Load SAM Mask (white = inpaint area)",
     "inputs": {
       "mask": ""
     }
   },
   "4": {
     "class_type": "ETN_LoadImageBase64",
-    "_label": "Load Material Tile (IP-Adapter reference)",
+    "_label": "Load Material Texture (IP-Adapter reference)",
     "inputs": {
       "image": ""
     }
@@ -69,19 +78,19 @@
     }
   },
   "7": {
-    "class_type": "IPAdapterApply",
-    "_label": "Apply IP-Adapter (material texture → style reference)",
+    "class_type": "IPAdapterAdvanced",
+    "_label": "Apply IP-Adapter Advanced (material texture → style reference)",
     "inputs": {
-      "ipadapter":    ["5", 0],
-      "clip_vision":  ["6", 0],
-      "image":        ["4", 0],
-      "model":        ["1", 0],
-      "weight":       0.55,
-      "noise":        0.0,
-      "weight_type":  "original",
-      "start_at":     0.0,
-      "end_at":       0.85,
-      "unfold_batch": false
+      "model":          ["1", 0],
+      "ipadapter":      ["5", 0],
+      "image":          ["4", 0],
+      "clip_vision":    ["6", 0],
+      "weight":         0.55,
+      "weight_type":    "linear",
+      "combine_embeds": "concat",
+      "start_at":       0.0,
+      "end_at":         0.85,
+      "embeds_scaling": "K+V"
     }
   },
   "8": {
@@ -91,14 +100,20 @@
       "control_net_name": "controlnet-depth-sdxl-1.0.safetensors"
     }
   },
+  "22": {
+    "class_type": "DownloadAndLoadDepthAnythingV2Model",
+    "_label": "Load Depth Anything V2 Model",
+    "inputs": {
+      "model":     "depth_anything_v2_vitl_fp32.safetensors",
+      "precision": "auto"
+    }
+  },
   "9": {
-    "class_type": "MiDaS-DepthMapPreprocessor",
+    "class_type": "DepthAnythingV2",
     "_label": "Generate Depth Map (room perspective)",
     "inputs": {
-      "image":        ["100", 0],
-      "a":            6.283185,
-      "bg_threshold": 0.1,
-      "resolution":   1024
+      "da_model": ["22", 0],
+      "images":   ["100", 0]
     }
   },
   "10": {
@@ -119,7 +134,7 @@
   },
   "12": {
     "class_type": "ControlNetApplyAdvanced",
-    "_label": "Apply ControlNet Depth (perspective preservation)",
+    "_label": "Apply ControlNet Depth (preserve room perspective & structure)",
     "inputs": {
       "positive":      ["10", 0],
       "negative":      ["11", 0],
@@ -135,7 +150,7 @@
     "_label": "Encode for Inpainting (mask → latent noise mask)",
     "inputs": {
       "pixels":       ["100", 0],
-      "vae":          ["1",   2],
+      "vae":          ["25",  0],
       "mask":         ["3",   0],
       "grow_mask_by": 6
     }
@@ -158,10 +173,10 @@
   },
   "15": {
     "class_type": "VAEDecode",
-    "_label": "Decode Latent",
+    "_label": "Decode Latent → Image",
     "inputs": {
       "samples": ["14", 0],
-      "vae":     ["1",  2]
+      "vae":     ["25", 0]
     }
   },
   "16": {
