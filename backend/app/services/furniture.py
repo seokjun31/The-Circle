@@ -41,7 +41,8 @@ from sqlalchemy.orm import Session
 from app.models.edit_layer import EditLayer, LayerType
 from app.models.furniture import Furniture
 from app.models.project import Project, ProjectStatus
-from app.services.comfyui.runpod_client import RunPodClient, RunPodError
+from app.services.comfyui import get_comfyui_client
+from app.services.comfyui.runpod_client import RunPodError
 from app.services.comfyui.workflow_manager import WorkflowManager
 from app.services.s3 import storage
 
@@ -134,7 +135,7 @@ class FurnitureService:
 
     def __init__(self) -> None:
         self._wm     = WorkflowManager()
-        self._runpod = RunPodClient()
+        self._runpod = get_comfyui_client()
 
     async def place_furniture(
         self,

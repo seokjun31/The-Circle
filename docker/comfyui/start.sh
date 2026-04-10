@@ -65,6 +65,9 @@ until curl -sf "http://127.0.0.1:${COMFYUI_PORT}/system_stats" > /dev/null 2>&1;
 done
 echo ""
 echo "[start.sh] ComfyUI ready after ${ELAPSED}s"
+echo "[start.sh] === ComfyUI startup log (custom node loading) ==="
+cat "${LOG_FILE}"
+echo "[start.sh] === End of startup log ==="
 
 # ── 4. Start RunPod handler ───────────────────────────────────────────────────
 echo "[start.sh] Starting RunPod Serverless handler..."
