@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     MAX_IMAGE_DIMENSION: int = 2048
     THUMBNAIL_SIZE: int = 400
 
+    # ── ComfyUI Provider ──────────────────────────────────────────────────────
+    # "runpod" (default) → RunPod Serverless
+    # "local"            → self-hosted ComfyUI (same machine or LAN/other PC)
+    COMFYUI_PROVIDER: str = "runpod"
+
     # ── RunPod Serverless ─────────────────────────────────────────────────────
     RUNPOD_API_KEY: str = ""
     RUNPOD_ENDPOINT_ID: str = ""
@@ -36,6 +41,16 @@ class Settings(BaseSettings):
     RUNPOD_MIN_WORKERS: int = 0
     RUNPOD_TIMEOUT_DEFAULT: int = 120        # seconds for standard workflows
     RUNPOD_TIMEOUT_FINAL_RENDER: int = 300   # seconds for 2-stage SDXL render
+
+    # ── Local / Self-hosted ComfyUI ───────────────────────────────────────────
+    # URL of the ComfyUI instance (any machine reachable over HTTP)
+    # Examples:
+    #   http://localhost:8188           (same machine)
+    #   http://192.168.1.100:8188       (LAN)
+    #   http://your-tunnel.trycloudflare.com  (tunnelled)
+    COMFYUI_LOCAL_URL: str = "http://localhost:8188"
+    # Optional Bearer token (leave empty for unauthenticated ComfyUI)
+    COMFYUI_LOCAL_API_KEY: str = ""
 
     # ── OAuth ─────────────────────────────────────────────────────────────────
     # Google OAuth 2.0
