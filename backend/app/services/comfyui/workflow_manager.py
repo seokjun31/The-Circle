@@ -57,6 +57,36 @@ _WORKFLOWS_DIR = (
     Path(__file__).parent.parent.parent.parent / "comfyui_workflows"
 )
 
+
+def _load_node_config(json_name: str) -> dict[str, str]:
+    """
+    Load an optional ``{json_name}.config.json`` node-ID mapping file.
+
+    Allows local ComfyUI workflows to use different node IDs than the
+    RunPod reference workflow without changing workflow_manager.py.
+
+    Example mood.config.json::
+
+        {
+            "source_image":    "21",
+            "reference_image": "23",
+            "positive_prompt": "8",
+            "negative_prompt": "9",
+            "depth_controlnet": "10",
+            "canny_controlnet": "13",
+            "ipadapter_loader": "2",
+            "ksampler":        "12",
+            "ipadapter":       "5"
+        }
+
+    Returns an empty dict when no config file exists (uses hardcoded defaults).
+    """
+    config_path = _WORKFLOWS_DIR / f"{json_name}.config.json"
+    if not config_path.exists():
+        return {}
+    with open(config_path, encoding="utf-8") as fh:
+        return json.load(fh)
+
 # ── Model names (must match files on the RunPod Network Volume) ───────────────
 _CKPT_SDXL_BASE    = "sd_xl_base_1.0.safetensors"
 _CKPT_SDXL_REFINER = "sdxl_refiner_1.0.safetensors"
@@ -354,25 +384,43 @@ class WorkflowManager:
         ref_b64 = _ensure_base64(reference_image_url)
         seed    = seed if seed is not None else _rand_seed()
 
-        return self.load_and_inject_workflow("mood", {
-            "1":   {"image": src_b64},
-            "2":   {"image": ref_b64},
-            "4":   {"text": prompt},
-            "5":   {"text": negative_prompt},
-            "10":  {"strength": depth_strength},
-            "13":  {"strength": canny_strength},
-            "14":  {"ipadapter_file": _IPADAPTER_SDXL},
-            "17":  {
+        # Load optional node-ID overrides (for local ComfyUI with different IDs)
+        cfg_map = _load_node_config("mood")
+        n = {
+            "source_image":    cfg_map.get("source_image",    "1"),
+            "reference_image": cfg_map.get("reference_image", "2"),
+            "positive_prompt": cfg_map.get("positive_prompt", "4"),
+            "negative_prompt": cfg_map.get("negative_prompt", "5"),
+            "depth_controlnet":cfg_map.get("depth_controlnet","10"),
+            "canny_controlnet":cfg_map.get("canny_controlnet","13"),
+            "ipadapter_loader":cfg_map.get("ipadapter_loader","14"),
+            "ksampler":        cfg_map.get("ksampler",        "17"),
+            "ipadapter":       cfg_map.get("ipadapter",       "24"),
+        }
+
+        injections = {
+            n["source_image"]:    {"image": src_b64},
+            n["reference_image"]: {"image": ref_b64},
+            n["positive_prompt"]: {"text": prompt},
+            n["negative_prompt"]: {"text": negative_prompt},
+            n["depth_controlnet"]:{"strength": depth_strength},
+            n["ksampler"]:        {
                 "seed":    seed,
                 "steps":   steps,
                 "cfg":     cfg,
                 "denoise": denoise,
             },
-            "24":  {
-                "weight": ipadapter_weight,
-                "end_at": ipadapter_end_at,
-            },
-        }, optional_nodes={"14", "24"})
+        }
+        # Optional nodes — only inject if node exists in workflow
+        optional = {n["ipadapter_loader"], n["ipadapter"], n["canny_controlnet"]}
+        injections[n["ipadapter_loader"]] = {"ipadapter_file": _IPADAPTER_SDXL}
+        injections[n["canny_controlnet"]] = {"strength": canny_strength}
+        injections[n["ipadapter"]]        = {
+            "weight": ipadapter_weight,
+            "end_at": ipadapter_end_at,
+        }
+
+        return self.load_and_inject_workflow("mood", injections, optional_nodes=optional)
 
     async def build_material_workflow(
         self,
