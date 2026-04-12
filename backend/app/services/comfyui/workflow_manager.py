@@ -130,7 +130,7 @@ def _url_to_base64(url: str, timeout: int = 20) -> str:
 
 
 def _ensure_base64(image: Union[str, bytes]) -> str:
-    """Accept URL, data-URL, raw base-64, or bytes; return raw base-64 string."""
+    """Accept URL, data-URL, local-upload path, raw base-64, or bytes; return raw base-64 string."""
     if isinstance(image, (bytes, bytearray)):
         return base64.b64encode(image).decode("utf-8")
     if isinstance(image, str):
@@ -138,6 +138,12 @@ def _ensure_base64(image: Union[str, bytes]) -> str:
             return _url_to_base64(image)
         if image.startswith("data:"):
             return image.split(",", 1)[-1]
+        if image.startswith("/uploads/"):
+            # Local storage URL  →  read from LOCAL_UPLOAD_DIR on disk
+            from app.config import settings  # lazy import to avoid circular deps
+            file_path = Path(settings.LOCAL_UPLOAD_DIR) / image[len("/uploads/"):]
+            with open(file_path, "rb") as fh:
+                return base64.b64encode(fh.read()).decode("utf-8")
         return image  # assume raw base-64
     raise TypeError(f"Unsupported image type: {type(image)}")
 
