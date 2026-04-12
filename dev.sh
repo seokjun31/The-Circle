@@ -28,7 +28,7 @@ PID_FILE="$SCRIPT_DIR/.dev_pids"
 BE_LOG="$LOG_DIR/backend.log"
 FE_LOG="$LOG_DIR/frontend.log"
 
-BE_PORT=8000
+BE_PORT=4000
 FE_PORT=3000
 DB_PORT=5432
 

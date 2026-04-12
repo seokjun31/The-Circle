@@ -67,7 +67,7 @@ class Settings(BaseSettings):
 
     # ── Server ────────────────────────────────────────────────────────────────
     HOST: str = "0.0.0.0"
-    PORT: int = 8000
+    PORT: int = 4000
     DEBUG: bool = True
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
 
