@@ -6,6 +6,7 @@ PATCH  /api/v1/projects/{id}/layers/{layer_id}       — 레이어 업데이트 
 DELETE /api/v1/projects/{id}/layers/{layer_id}       — 레이어 삭제
 POST   /api/v1/projects/{id}/full-render             — 최종 고품질 렌더링 (SSE streaming)
 """
+
 from __future__ import annotations
 
 import json
@@ -32,9 +33,10 @@ router = APIRouter(tags=["Full Render"])
 
 # ── GET /projects/{id}/layers ─────────────────────────────────────────────────
 
+
 class LayerListResponse(BaseModel):
     layers: List[EditLayerResponse]
-    total:  int
+    total: int
 
 
 @router.get(
@@ -44,8 +46,8 @@ class LayerListResponse(BaseModel):
 )
 def list_layers(
     project_id: int,
-    db:           Session = Depends(get_db),
-    current_user: User    = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Return all EditLayers for a project ordered by `order`."""
     _assert_owner(project_id, current_user, db)
@@ -60,10 +62,11 @@ def list_layers(
 
 # ── PATCH /projects/{id}/layers/{layer_id} ────────────────────────────────────
 
+
 class LayerUpdateRequest(BaseModel):
     is_visible: Optional[bool] = None
-    order:      Optional[int]  = Field(None, ge=0)
-    name:       Optional[str]  = Field(None, max_length=100)
+    order: Optional[int] = Field(None, ge=0)
+    name: Optional[str] = Field(None, max_length=100)
 
 
 @router.patch(
@@ -73,10 +76,10 @@ class LayerUpdateRequest(BaseModel):
 )
 def update_layer(
     project_id: int,
-    layer_id:   int,
-    body:       LayerUpdateRequest,
-    db:           Session = Depends(get_db),
-    current_user: User    = Depends(get_current_user),
+    layer_id: int,
+    body: LayerUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Toggle layer visibility or change its stacking order."""
     _assert_owner(project_id, current_user, db)
@@ -98,6 +101,7 @@ def update_layer(
 
 # ── DELETE /projects/{id}/layers/{layer_id} ───────────────────────────────────
 
+
 @router.delete(
     "/projects/{project_id}/layers/{layer_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -105,9 +109,9 @@ def update_layer(
 )
 def delete_layer(
     project_id: int,
-    layer_id:   int,
-    db:           Session = Depends(get_db),
-    current_user: User    = Depends(get_current_user),
+    layer_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Permanently remove a layer from the project."""
     _assert_owner(project_id, current_user, db)
@@ -119,6 +123,7 @@ def delete_layer(
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Full Render — SSE streaming
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class FullRenderRequest(BaseModel):
     lighting: str = Field(
@@ -141,9 +146,9 @@ class FullRenderRequest(BaseModel):
 )
 def run_full_render(
     project_id: int,
-    body:       FullRenderRequest,
-    db:           Session = Depends(get_db),
-    current_user: User    = Depends(get_current_user),
+    body: FullRenderRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Start the full-quality render pipeline and stream progress via Server-Sent Events.
@@ -171,8 +176,8 @@ def run_full_render(
                     f"크레딧이 부족합니다. "
                     f"(잔액: {current_user.credit_balance}, 필요: {CREDITS_FULL_RENDER})"
                 ),
-                "code":     "INSUFFICIENT_CREDITS",
-                "balance":  current_user.credit_balance,
+                "code": "INSUFFICIENT_CREDITS",
+                "balance": current_user.credit_balance,
                 "required": CREDITS_FULL_RENDER,
             },
         )
@@ -184,10 +189,10 @@ def run_full_render(
         got_done = False
         try:
             async for chunk in full_render_service.render_stream(
-                project_id = project_id,
-                user_id    = current_user.id,
-                db         = db,
-                lighting   = body.lighting,
+                project_id=project_id,
+                user_id=current_user.id,
+                db=db,
+                lighting=body.lighting,
             ):
                 yield chunk
                 try:
@@ -210,13 +215,14 @@ def run_full_render(
         event_stream(),
         media_type="text/event-stream",
         headers={
-            "Cache-Control":     "no-cache",
+            "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
         },
     )
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _assert_owner(project_id: int, user: User, db: Session) -> Project:
     project = db.get(Project, project_id)
@@ -234,13 +240,20 @@ def _assert_owner(project_id: int, user: User, db: Session) -> Project:
 
 
 def _get_layer(project_id: int, layer_id: int, db: Session) -> EditLayer:
-    layer = db.query(EditLayer).filter(
-        EditLayer.id == layer_id,
-        EditLayer.project_id == project_id,
-    ).first()
+    layer = (
+        db.query(EditLayer)
+        .filter(
+            EditLayer.id == layer_id,
+            EditLayer.project_id == project_id,
+        )
+        .first()
+    )
     if layer is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"message": f"레이어 {layer_id}를 찾을 수 없습니다.", "code": "NOT_FOUND"},
+            detail={
+                "message": f"레이어 {layer_id}를 찾을 수 없습니다.",
+                "code": "NOT_FOUND",
+            },
         )
     return layer

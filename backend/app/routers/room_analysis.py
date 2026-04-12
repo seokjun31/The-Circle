@@ -9,6 +9,7 @@ POST /api/v1/projects/{id}/analyze-room
 PATCH /api/v1/projects/{id}/room-type
     사용자가 직접 방 유형 확인/수정.
 """
+
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -36,38 +37,42 @@ VALID_ROOM_TYPES = [
 ]
 
 ROOM_TYPE_KR = {
-    "living room":    "거실",
+    "living room": "거실",
     "master bedroom": "안방",
-    "kitchen":        "주방",
-    "bathroom":       "욕실",
-    "dining room":    "다이닝룸",
-    "study room":     "서재",
-    "balcony":        "발코니",
-    "empty room":     "빈 방",
+    "kitchen": "주방",
+    "bathroom": "욕실",
+    "dining room": "다이닝룸",
+    "study room": "서재",
+    "balcony": "발코니",
+    "empty room": "빈 방",
 }
 
 
 # ── Response schemas ───────────────────────────────────────────────────────────
 
+
 class AnalyzeRoomResponse(BaseModel):
-    room_type:    str
+    room_type: str
     room_type_kr: str
-    confidence:   float
-    project_id:   int
-    is_mock:      bool = False
+    confidence: float
+    project_id: int
+    is_mock: bool = False
 
 
 class UpdateRoomTypeRequest(BaseModel):
-    room_type: str = Field(..., description="방 유형 (영문): living room | master bedroom | ...")
+    room_type: str = Field(
+        ..., description="방 유형 (영문): living room | master bedroom | ..."
+    )
 
 
 class UpdateRoomTypeResponse(BaseModel):
-    project_id:   int
-    room_type:    str
+    project_id: int
+    room_type: str
     room_type_kr: str
 
 
 # ── POST /projects/{id}/analyze-room ──────────────────────────────────────────
+
 
 @router.post(
     "/projects/{project_id}/analyze-room",
@@ -75,9 +80,9 @@ class UpdateRoomTypeResponse(BaseModel):
     summary="방 유형 자동 인식 (현재: 모크 / 추후: ComfyUI BLIP)",
 )
 def analyze_room(
-    project_id:   int,
-    db:           Session = Depends(get_db),
-    current_user: User    = Depends(get_current_user),
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     방 유형을 자동으로 분석합니다.
@@ -100,11 +105,12 @@ def analyze_room(
 
     # ── TODO: ComfyUI BLIP / WD14 연동 후 이 블록을 실제 분석으로 교체 ──────
     # 현재는 모크 응답 반환
-    room_type  = "living room"
+    room_type = "living room"
     confidence = 0.5
     logger.info(
         "analyze_room MOCK: project=%d → room_type=%s (BLIP/WD14 연동 전 임시값)",
-        project_id, room_type,
+        project_id,
+        room_type,
     )
     # ─────────────────────────────────────────────────────────────────────────
 
@@ -124,15 +130,16 @@ def analyze_room(
             pass
 
     return AnalyzeRoomResponse(
-        room_type    = room_type,
-        room_type_kr = ROOM_TYPE_KR[room_type],
-        confidence   = confidence,
-        project_id   = project_id,
-        is_mock      = True,
+        room_type=room_type,
+        room_type_kr=ROOM_TYPE_KR[room_type],
+        confidence=confidence,
+        project_id=project_id,
+        is_mock=True,
     )
 
 
 # ── PATCH /projects/{id}/room-type ────────────────────────────────────────────
+
 
 @router.patch(
     "/projects/{project_id}/room-type",
@@ -140,10 +147,10 @@ def analyze_room(
     summary="방 유형 수동 확인/수정",
 )
 def update_room_type(
-    project_id:   int,
-    body:         UpdateRoomTypeRequest,
-    db:           Session = Depends(get_db),
-    current_user: User    = Depends(get_current_user),
+    project_id: int,
+    body: UpdateRoomTypeRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """사용자가 확인하거나 직접 선택한 방 유형을 저장합니다."""
     _get_owned_project(project_id, current_user, db)
@@ -167,13 +174,14 @@ def update_room_type(
     db.commit()
 
     return UpdateRoomTypeResponse(
-        project_id   = project_id,
-        room_type    = room_type,
-        room_type_kr = ROOM_TYPE_KR.get(room_type, room_type),
+        project_id=project_id,
+        room_type=room_type,
+        room_type_kr=ROOM_TYPE_KR.get(room_type, room_type),
     )
 
 
 # ── Helper ────────────────────────────────────────────────────────────────────
+
 
 def _get_owned_project(project_id: int, user: User, db: Session) -> Project:
     project = db.get(Project, project_id)

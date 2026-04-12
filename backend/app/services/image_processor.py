@@ -4,6 +4,7 @@ Image processing utilities
  - Resize to max 2048 px on the longest side (aspect-ratio preserved)
  - Generate thumbnails (400 px shortest side)
 """
+
 import io
 from typing import Tuple
 

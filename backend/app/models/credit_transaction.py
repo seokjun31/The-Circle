@@ -8,10 +8,10 @@ from app.database import Base
 
 
 class CreditType(str, enum.Enum):
-    purchase = "purchase"   # User bought credits
-    usage = "usage"         # Feature consumed credits (negative amount)
-    bonus = "bonus"         # Free bonus credits
-    refund = "refund"       # Credits returned after failure
+    purchase = "purchase"  # User bought credits
+    usage = "usage"  # Feature consumed credits (negative amount)
+    bonus = "bonus"  # Free bonus credits
+    refund = "refund"  # Credits returned after failure
 
 
 class CreditTransaction(Base):

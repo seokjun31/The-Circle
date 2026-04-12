@@ -21,7 +21,10 @@ class EditLayer(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     project_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+        Integer,
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     layer_type: Mapped[LayerType] = mapped_column(
         Enum(LayerType, name="layertype", create_type=True), nullable=False

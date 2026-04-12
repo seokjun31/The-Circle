@@ -156,6 +156,7 @@ _FALLBACK_DEFAULT: dict = {
 
 # ── 응답 파싱 헬퍼 ─────────────────────────────────────────────────────────────
 
+
 def _parse_json_response(text: str) -> Optional[dict]:
     """
     Claude 응답에서 JSON 딕셔너리를 추출합니다.
@@ -225,6 +226,7 @@ def _validate_and_clamp(data: dict, category: str) -> dict:
 #  MaterialPromptGenerator
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 class MaterialPromptGenerator:
     """
     Claude Vision API를 활용하여 자재 이미지를 분석하고
@@ -236,13 +238,14 @@ class MaterialPromptGenerator:
 
     def __init__(self, api_key: Optional[str] = None) -> None:
         self._api_key = api_key
-        self._client  = None          # 지연 초기화 — import 시 키 없어도 로드 가능
+        self._client = None  # 지연 초기화 — import 시 키 없어도 로드 가능
 
     def _get_client(self):
         """AsyncAnthropic 클라이언트 지연 초기화."""
         if self._client is None:
             try:
                 import anthropic
+
                 key = self._api_key or _get_api_key()
                 self._client = anthropic.AsyncAnthropic(api_key=key)
             except ImportError as exc:
@@ -285,7 +288,8 @@ class MaterialPromptGenerator:
             logger.warning(
                 "ANTHROPIC_API_KEY가 설정되지 않았습니다. "
                 "카테고리 기본 프롬프트를 반환합니다. (material=%r, category=%r)",
-                name, category,
+                name,
+                category,
             )
             return _FALLBACK.get(category, _FALLBACK_DEFAULT).copy()
 
@@ -294,7 +298,9 @@ class MaterialPromptGenerator:
         except Exception as exc:
             logger.warning(
                 "Claude API 호출 실패 — 폴백 반환 (material=%r, category=%r): %s",
-                name, category, exc,
+                name,
+                category,
+                exc,
             )
             return _FALLBACK.get(category, _FALLBACK_DEFAULT).copy()
 
@@ -319,19 +325,19 @@ class MaterialPromptGenerator:
         # ── 2. Claude API 호출 ──────────────────────────────────────────────────
         client = self._get_client()
         response = await client.messages.create(
-            model      = _MODEL,
-            max_tokens = 1024,
-            system     = _SYSTEM_PROMPT,
-            messages   = [
+            model=_MODEL,
+            max_tokens=1024,
+            system=_SYSTEM_PROMPT,
+            messages=[
                 {
-                    "role":    "user",
+                    "role": "user",
                     "content": [
                         {
-                            "type":   "image",
+                            "type": "image",
                             "source": {
-                                "type":       "base64",
+                                "type": "base64",
                                 "media_type": media_type,
-                                "data":       img_b64,
+                                "data": img_b64,
                             },
                         },
                         {
@@ -356,14 +362,16 @@ class MaterialPromptGenerator:
         # ── 4. JSON 파싱 ─────────────────────────────────────────────────────────
         parsed = _parse_json_response(raw_text)
         if parsed is None:
-            raise ValueError(f"Claude 응답을 JSON으로 파싱할 수 없습니다: {raw_text[:200]!r}")
+            raise ValueError(
+                f"Claude 응답을 JSON으로 파싱할 수 없습니다: {raw_text[:200]!r}"
+            )
 
         # ── 5. 필드 검증 + 범위 보정 ────────────────────────────────────────────
         result = _validate_and_clamp(parsed, category)
         logger.info(
-            "프롬프트 생성 완료 (material=%r, category=%r) "
-            "ipadapter=%.2f denoise=%.2f",
-            name, category,
+            "프롬프트 생성 완료 (material=%r, category=%r) ipadapter=%.2f denoise=%.2f",
+            name,
+            category,
             result["ip_adapter_weight"],
             result["recommended_denoise"],
         )
@@ -388,7 +396,7 @@ class MaterialPromptGenerator:
         # data-URL 처리
         if image_url.startswith("data:"):
             header, b64 = image_url.split(",", 1)
-            media_type  = header.split(";")[0].split(":")[1]
+            media_type = header.split(";")[0].split(":")[1]
             return b64, media_type
 
         # HTTP/S URL 다운로드
@@ -396,8 +404,10 @@ class MaterialPromptGenerator:
             async with httpx.AsyncClient(timeout=timeout) as client:
                 resp = await client.get(image_url, follow_redirects=True)
                 resp.raise_for_status()
-                raw_bytes  = resp.content
-                media_type = resp.headers.get("content-type", "image/jpeg").split(";")[0]
+                raw_bytes = resp.content
+                media_type = resp.headers.get("content-type", "image/jpeg").split(";")[
+                    0
+                ]
         except httpx.HTTPError as exc:
             raise ValueError(f"이미지 다운로드 실패 ({image_url!r}): {exc}") from exc
 
@@ -412,17 +422,19 @@ class MaterialPromptGenerator:
             elif image_url.lower().endswith(".webp"):
                 media_type = "image/webp"
             else:
-                media_type = "image/jpeg"   # 기본값
+                media_type = "image/jpeg"  # 기본값
 
         return base64.standard_b64encode(raw_bytes).decode("utf-8"), media_type
 
 
 # ── 헬퍼 ──────────────────────────────────────────────────────────────────────
 
+
 def _get_api_key() -> str:
     """settings에서 ANTHROPIC_API_KEY를 읽습니다. 없으면 빈 문자열 반환."""
     try:
         from app.config import settings
+
         return settings.ANTHROPIC_API_KEY
     except Exception:
         return ""

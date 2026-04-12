@@ -7,6 +7,7 @@ GET    /api/v1/projects/{id}                     — 프로젝트 상세 (레이
 DELETE /api/v1/projects/{id}                     — 프로젝트 삭제
 POST   /api/v1/projects/{id}/apply-material      — 자재 적용 (IP-Adapter + ControlNet Depth)
 """
+
 import math
 from typing import Optional
 
@@ -67,8 +68,10 @@ def create_project(
     try:
         validate_image(raw, content_type)
     except ImageValidationError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                            detail={"message": str(exc), "code": "INVALID_IMAGE"})
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": str(exc), "code": "INVALID_IMAGE"},
+        )
 
     # Create project first to get an ID for the S3 path
     project = Project(
@@ -87,15 +90,15 @@ def create_project(
     thumbnail = make_thumbnail(raw)
 
     # 4. Upload
-    orig_key  = storage.project_key(current_user.id, project.id, "original.jpg")
+    orig_key = storage.project_key(current_user.id, project.id, "original.jpg")
     thumb_key = storage.project_key(current_user.id, project.id, "thumbnail.jpg")
 
-    original_url  = storage.upload(resized,   orig_key,  "image/jpeg")
+    original_url = storage.upload(resized, orig_key, "image/jpeg")
     thumbnail_url = storage.upload(thumbnail, thumb_key, "image/jpeg")
 
     # 5. Update record
     project.original_image_url = original_url
-    project.thumbnail_url      = thumbnail_url
+    project.thumbnail_url = thumbnail_url
 
     db.commit()
     db.refresh(project)
@@ -130,7 +133,7 @@ def presign_upload(
     db.add(project)
     db.flush()
 
-    key      = storage.project_key(current_user.id, project.id, "original.jpg")
+    key = storage.project_key(current_user.id, project.id, "original.jpg")
     presigned = storage.generate_presigned_put_url(key)
 
     if presigned is None:
@@ -140,7 +143,7 @@ def presign_upload(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "message": "로컬 개발 환경에서는 presigned URL을 사용할 수 없습니다. "
-                           "POST /projects 를 사용하세요.",
+                "POST /projects 를 사용하세요.",
                 "code": "PRESIGN_UNAVAILABLE",
             },
         )
@@ -189,11 +192,14 @@ def confirm_upload(
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={"message": f"이미지 다운로드 실패: {exc}", "code": "DOWNLOAD_FAILED"},
+            detail={
+                "message": f"이미지 다운로드 실패: {exc}",
+                "code": "DOWNLOAD_FAILED",
+            },
         )
 
-    thumb_key     = storage.project_key(current_user.id, project.id, "thumbnail.jpg")
-    thumbnail     = make_thumbnail(raw)
+    thumb_key = storage.project_key(current_user.id, project.id, "thumbnail.jpg")
+    thumbnail = make_thumbnail(raw)
     thumbnail_url = storage.upload(thumbnail, thumb_key, "image/jpeg")
 
     project.thumbnail_url = thumbnail_url
@@ -215,16 +221,11 @@ def list_projects(
     current_user: User = Depends(get_current_user),
 ):
     page_size = min(page_size, _PAGE_SIZE_MAX)
-    offset    = (page - 1) * page_size
+    offset = (page - 1) * page_size
 
-    q     = db.query(Project).filter(Project.user_id == current_user.id)
+    q = db.query(Project).filter(Project.user_id == current_user.id)
     total = q.count()
-    items = (
-        q.order_by(Project.created_at.desc())
-        .offset(offset)
-        .limit(page_size)
-        .all()
-    )
+    items = q.order_by(Project.created_at.desc()).offset(offset).limit(page_size).all()
 
     return ProjectListResponse(
         items=items,
@@ -267,13 +268,18 @@ def delete_project(
 
 # ── POST /projects/{id}/apply-material — AI 자재 적용 ─────────────────────────
 
+
 class ApplyMaterialRequest(BaseModel):
-    layer_id: int           = Field(..., description="마스크 레이어 ID (POST /projects/{id}/masks로 생성)")
-    material_id: int        = Field(..., description="적용할 자재 ID")
-    custom_prompt: Optional[str] = Field(None, max_length=300, description="추가 텍스트 프롬프트 (선택)")
+    layer_id: int = Field(
+        ..., description="마스크 레이어 ID (POST /projects/{id}/masks로 생성)"
+    )
+    material_id: int = Field(..., description="적용할 자재 ID")
+    custom_prompt: Optional[str] = Field(
+        None, max_length=300, description="추가 텍스트 프롬프트 (선택)"
+    )
     ipadapter_weight: float = Field(0.80, ge=0.0, le=1.0)
     controlnet_weight: float = Field(0.90, ge=0.0, le=1.0)
-    denoise: float          = Field(0.60, ge=0.3, le=0.9)
+    denoise: float = Field(0.60, ge=0.3, le=0.9)
 
 
 class ApplyMaterialResponse(BaseModel):
@@ -335,15 +341,15 @@ async def apply_material(
 
     try:
         result = await material_apply_service.apply_material(
-            project_id        = project_id,
-            layer_id          = body.layer_id,
-            material_id       = body.material_id,
-            user_id           = current_user.id,
-            db                = db,
-            custom_prompt     = body.custom_prompt,
-            ipadapter_weight  = body.ipadapter_weight,
-            controlnet_weight = body.controlnet_weight,
-            denoise           = body.denoise,
+            project_id=project_id,
+            layer_id=body.layer_id,
+            material_id=body.material_id,
+            user_id=current_user.id,
+            db=db,
+            custom_prompt=body.custom_prompt,
+            ipadapter_weight=body.ipadapter_weight,
+            controlnet_weight=body.controlnet_weight,
+            denoise=body.denoise,
         )
     except ValueError as exc:
         try:
@@ -361,7 +367,7 @@ async def apply_material(
             pass
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={"message": f"AI 처리 실패: {exc}", "code": "RUNPOD_ERROR"},
+            detail={"message": f"AI 처리 실패: {exc}", "code": "COMFYUI_ERROR"},
         ) from exc
     except Exception as exc:
         try:
@@ -374,9 +380,9 @@ async def apply_material(
         ) from exc
 
     return ApplyMaterialResponse(
-        result_url = result.result_url,
-        layer_id   = result.layer_id,
-        elapsed_s  = result.elapsed_s,
+        result_url=result.result_url,
+        layer_id=result.layer_id,
+        elapsed_s=result.elapsed_s,
     )
 
 

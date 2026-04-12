@@ -4,6 +4,7 @@ Mood — 분위기 변환 API
 POST /api/v1/projects/{id}/mood         — 참조 이미지의 분위기를 내 방에 적용
 POST /api/v1/projects/{id}/mood-preset  — 스타일 프리셋으로 분위기 변환
 """
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import update as sa_update
@@ -13,7 +14,12 @@ from app.dependencies import get_current_user, get_db
 from app.models.project import Project
 from app.models.user import User
 from app.services.comfyui.runpod_client import RunPodError
-from app.services.mood import CREDITS_PER_MOOD, mood_service, mood_preset_service, VALID_PRESETS
+from app.services.mood import (
+    CREDITS_PER_MOOD,
+    mood_service,
+    mood_preset_service,
+    VALID_PRESETS,
+)
 
 router = APIRouter(tags=["Mood"])
 
@@ -21,6 +27,7 @@ router = APIRouter(tags=["Mood"])
 # ─────────────────────────────────────────────────────────────────────────────
 #  POST /projects/{id}/mood
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class MoodRequest(BaseModel):
     reference_image: str = Field(
@@ -40,10 +47,10 @@ class MoodRequest(BaseModel):
 
 
 class MoodResponse(BaseModel):
-    result_url:        str
-    layer_id:          int
-    elapsed_s:         float
-    credits_used:      int
+    result_url: str
+    layer_id: int
+    elapsed_s: float
+    credits_used: int
     remaining_balance: int
 
 
@@ -53,10 +60,10 @@ class MoodResponse(BaseModel):
     summary="분위기 변환 — 참조 이미지의 분위기를 내 방에 적용",
 )
 async def apply_mood(
-    project_id:   int,
-    body:         MoodRequest,
-    db:           Session = Depends(get_db),
-    current_user: User    = Depends(get_current_user),
+    project_id: int,
+    body: MoodRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Copy the mood, lighting, and atmosphere of a reference image onto the room.
@@ -78,8 +85,8 @@ async def apply_mood(
                     f"크레딧이 부족합니다. "
                     f"(잔액: {current_user.credit_balance}, 필요: {CREDITS_PER_MOOD})"
                 ),
-                "code":     "INSUFFICIENT_CREDITS",
-                "balance":  current_user.credit_balance,
+                "code": "INSUFFICIENT_CREDITS",
+                "balance": current_user.credit_balance,
                 "required": CREDITS_PER_MOOD,
             },
         )
@@ -89,11 +96,11 @@ async def apply_mood(
 
     try:
         result = await mood_service.apply_mood(
-            project_id      = project_id,
-            reference_image = body.reference_image,
-            user_id         = current_user.id,
-            db              = db,
-            strength        = body.strength,
+            project_id=project_id,
+            reference_image=body.reference_image,
+            user_id=current_user.id,
+            db=db,
+            strength=body.strength,
         )
     except ValueError as exc:
         _refund_credits(db, current_user.id, CREDITS_PER_MOOD)
@@ -105,7 +112,7 @@ async def apply_mood(
         _refund_credits(db, current_user.id, CREDITS_PER_MOOD)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={"message": f"AI 처리 실패: {exc}", "code": "RUNPOD_ERROR"},
+            detail={"message": f"AI 처리 실패: {exc}", "code": "COMFYUI_ERROR"},
         ) from exc
     except Exception as exc:
         _refund_credits(db, current_user.id, CREDITS_PER_MOOD)
@@ -116,17 +123,18 @@ async def apply_mood(
 
     db.refresh(current_user)
     return MoodResponse(
-        result_url        = result.result_url,
-        layer_id          = result.layer_id,
-        elapsed_s         = result.elapsed_s,
-        credits_used      = CREDITS_PER_MOOD,
-        remaining_balance = current_user.credit_balance,
+        result_url=result.result_url,
+        layer_id=result.layer_id,
+        elapsed_s=result.elapsed_s,
+        credits_used=CREDITS_PER_MOOD,
+        remaining_balance=current_user.credit_balance,
     )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  POST /projects/{id}/mood-preset
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class MoodPresetRequest(BaseModel):
     preset: str = Field(
@@ -147,10 +155,10 @@ class MoodPresetRequest(BaseModel):
     summary="스타일 프리셋으로 분위기 변환",
 )
 async def apply_mood_preset(
-    project_id:   int,
-    body:         MoodPresetRequest,
-    db:           Session = Depends(get_db),
-    current_user: User    = Depends(get_current_user),
+    project_id: int,
+    body: MoodPresetRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Apply one of the curated style presets (wood_white / mid_century / japandi)
@@ -178,8 +186,8 @@ async def apply_mood_preset(
                     f"크레딧이 부족합니다. "
                     f"(잔액: {current_user.credit_balance}, 필요: {CREDITS_PER_MOOD})"
                 ),
-                "code":     "INSUFFICIENT_CREDITS",
-                "balance":  current_user.credit_balance,
+                "code": "INSUFFICIENT_CREDITS",
+                "balance": current_user.credit_balance,
                 "required": CREDITS_PER_MOOD,
             },
         )
@@ -191,11 +199,11 @@ async def apply_mood_preset(
 
     try:
         result = await mood_preset_service.apply_preset(
-            project_id = project_id,
-            user_id    = user_id,
-            db         = db,
-            preset     = body.preset,
-            strength   = body.strength,
+            project_id=project_id,
+            user_id=user_id,
+            db=db,
+            preset=body.preset,
+            strength=body.strength,
         )
     except ValueError as exc:
         _refund_credits(db, user_id, CREDITS_PER_MOOD)
@@ -207,7 +215,7 @@ async def apply_mood_preset(
         _refund_credits(db, user_id, CREDITS_PER_MOOD)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={"message": f"AI 처리 실패: {exc}", "code": "RUNPOD_ERROR"},
+            detail={"message": f"AI 처리 실패: {exc}", "code": "COMFYUI_ERROR"},
         ) from exc
     except Exception as exc:
         _refund_credits(db, user_id, CREDITS_PER_MOOD)
@@ -218,15 +226,16 @@ async def apply_mood_preset(
 
     db.refresh(current_user)
     return MoodResponse(
-        result_url        = result.result_url,
-        layer_id          = result.layer_id,
-        elapsed_s         = result.elapsed_s,
-        credits_used      = CREDITS_PER_MOOD,
-        remaining_balance = current_user.credit_balance,
+        result_url=result.result_url,
+        layer_id=result.layer_id,
+        elapsed_s=result.elapsed_s,
+        credits_used=CREDITS_PER_MOOD,
+        remaining_balance=current_user.credit_balance,
     )
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _refund_credits(db: Session, user_id: int, amount: int) -> None:
     """Refund credits using direct SQL to avoid ORM lazy-load issues."""

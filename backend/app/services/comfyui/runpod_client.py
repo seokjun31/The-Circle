@@ -42,14 +42,15 @@ logger = logging.getLogger("the_circle.runpod_client")
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-MAX_RETRIES: int   = 3
-POLL_INTERVAL: float = 3.0          # seconds between /status polls
+MAX_RETRIES: int = 3
+POLL_INTERVAL: float = 3.0  # seconds between /status polls
 _BASE_URL_TMPL = "https://api.runpod.io/v2/{endpoint_id}"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Exceptions
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class RunPodError(Exception):
     """Base exception for RunPod client errors."""
@@ -67,9 +68,15 @@ class RunPodJobError(RunPodError):
 #  Local mock (USE_MOCK_AI=true)
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def _is_mock_mode() -> bool:
     from app.config import settings
-    return settings.USE_MOCK_AI or os.environ.get("USE_MOCK_AI", "").lower() in ("1", "true", "yes")
+
+    return settings.USE_MOCK_AI or os.environ.get("USE_MOCK_AI", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
 
 
 def _make_mock_image(width: int = 800, height: int = 600) -> str:
@@ -81,33 +88,42 @@ def _make_mock_image(width: int = 800, height: int = 600) -> str:
     """
     try:
         from PIL import Image, ImageDraw, ImageFont
+
         img = Image.new("RGB", (width, height))
         draw = ImageDraw.Draw(img)
 
         # Gradient background: purple → dark blue
         for y in range(height):
-            r = int(80  + (y / height) * 20)
-            g = int(20  + (y / height) * 30)
+            r = int(80 + (y / height) * 20)
+            g = int(20 + (y / height) * 30)
             b = int(140 + (y / height) * 60)
             draw.line([(0, y), (width, y)], fill=(r, g, b))
 
         # Centred label
         text = "[ AI MOCK — RunPod 미연결 ]"
         try:
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 28)
+            font = ImageFont.truetype(
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 28
+            )
         except Exception:
             font = ImageFont.load_default()
 
         bbox = draw.textbbox((0, 0), text, font=font)
         tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
         draw.rectangle(
-            [width // 2 - tw // 2 - 16, height // 2 - th // 2 - 12,
-             width // 2 + tw // 2 + 16, height // 2 + th // 2 + 12],
+            [
+                width // 2 - tw // 2 - 16,
+                height // 2 - th // 2 - 12,
+                width // 2 + tw // 2 + 16,
+                height // 2 + th // 2 + 12,
+            ],
             fill=(0, 0, 0, 180),
         )
         draw.text(
             (width // 2 - tw // 2, height // 2 - th // 2),
-            text, font=font, fill=(255, 255, 255),
+            text,
+            font=font,
+            fill=(255, 255, 255),
         )
 
         buf = io.BytesIO()
@@ -134,15 +150,16 @@ async def _mock_run(workflow: dict, delay: float = 1.5) -> dict[str, Any]:
     image_b64 = _make_mock_image()
     return {
         "image_base64": image_b64,
-        "result_url":   None,   # services handle None gracefully via local save
-        "prompt_id":    "mock-00000000-0000-0000-0000-000000000000",
-        "elapsed_s":    delay,
+        "result_url": None,  # services handle None gracefully via local save
+        "prompt_id": "mock-00000000-0000-0000-0000-000000000000",
+        "elapsed_s": delay,
     }
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  RunPodClient
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class RunPodClient:
     """
@@ -164,12 +181,12 @@ class RunPodClient:
         api_key: Optional[str] = None,
         endpoint_id: Optional[str] = None,
     ) -> None:
-        self._api_key    = api_key    or settings.RUNPOD_API_KEY
+        self._api_key = api_key or settings.RUNPOD_API_KEY
         self._endpoint_id = endpoint_id or settings.RUNPOD_ENDPOINT_ID
-        self._base_url   = _BASE_URL_TMPL.format(endpoint_id=self._endpoint_id)
-        self._headers    = {
+        self._base_url = _BASE_URL_TMPL.format(endpoint_id=self._endpoint_id)
+        self._headers = {
             "Authorization": f"Bearer {self._api_key}",
-            "Content-Type":  "application/json",
+            "Content-Type": "application/json",
         }
 
     # ── Public API ────────────────────────────────────────────────────────────
@@ -203,8 +220,8 @@ class RunPodClient:
 
         payload = {
             "input": {
-                "workflow":      workflow,
-                "timeout":       timeout,
+                "workflow": workflow,
+                "timeout": timeout,
                 "upload_result": upload_result,
             }
         }
@@ -238,8 +255,8 @@ class RunPodClient:
 
         payload = {
             "input": {
-                "workflow":      workflow,
-                "timeout":       timeout,
+                "workflow": workflow,
+                "timeout": timeout,
                 "upload_result": upload_result,
             }
         }
@@ -333,7 +350,10 @@ class RunPodClient:
                 if attempt < MAX_RETRIES:
                     logger.warning(
                         "RunPod request failed (attempt %d/%d): %s — retrying in %ds",
-                        attempt, MAX_RETRIES, exc, backoff,
+                        attempt,
+                        MAX_RETRIES,
+                        exc,
+                        backoff,
                     )
                     await asyncio.sleep(backoff)
                     backoff *= 2
@@ -346,9 +366,7 @@ class RunPodClient:
             f"RunPod request failed after {MAX_RETRIES} attempts"
         ) from last_exc
 
-    async def _poll_until_done(
-        self, job_id: str, timeout: int
-    ) -> dict[str, Any]:
+    async def _poll_until_done(self, job_id: str, timeout: int) -> dict[str, Any]:
         """
         Poll /status/{job_id} until the job reaches a terminal state.
 
@@ -372,7 +390,9 @@ class RunPodClient:
                 consecutive_errors += 1
                 logger.warning(
                     "Status poll error for job %s (attempt %d): %s",
-                    job_id, consecutive_errors, exc,
+                    job_id,
+                    consecutive_errors,
+                    exc,
                 )
                 if consecutive_errors >= 5:
                     raise RunPodError(
@@ -387,9 +407,7 @@ class RunPodClient:
             if status == "COMPLETED":
                 output = data.get("output")
                 if output is None:
-                    raise RunPodJobError(
-                        f"Job {job_id} COMPLETED but output is None"
-                    )
+                    raise RunPodJobError(f"Job {job_id} COMPLETED but output is None")
                 # Check if our handler itself returned an error dict
                 if isinstance(output, dict) and "error" in output:
                     raise RunPodJobError(

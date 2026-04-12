@@ -43,52 +43,54 @@ logger = logging.getLogger("the_circle.material")
 # ── Category → English description (for prompt building) ─────────────────────
 _CATEGORY_PROMPTS = {
     "wallpaper": "seamless wallpaper texture applied to the wall surface",
-    "flooring":  "seamless flooring material covering the floor surface",
-    "ceiling":   "seamless ceiling material on the ceiling surface",
-    "tile":      "seamless tile pattern on the surface",
-    "paint":     "smooth painted wall surface, flat finish",
+    "flooring": "seamless flooring material covering the floor surface",
+    "ceiling": "seamless ceiling material on the ceiling surface",
+    "tile": "seamless tile pattern on the surface",
+    "paint": "smooth painted wall surface, flat finish",
 }
 
 # ── Default ComfyUI generation parameters ─────────────────────────────────────
-_DEFAULT_STEPS       = 25
-_DEFAULT_CFG         = 7.0
-_DEFAULT_DENOISE     = 0.60
+_DEFAULT_STEPS = 25
+_DEFAULT_CFG = 7.0
+_DEFAULT_DENOISE = 0.60
 _DEFAULT_IPADAPTER_W = 0.80
-_DEFAULT_CN_DEPTH_W  = 0.90
-_APPLY_TIMEOUT_S     = 120
+_DEFAULT_CN_DEPTH_W = 0.90
+_APPLY_TIMEOUT_S = 120
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 @dataclass
 class MaterialResult:
     result_url: str
-    layer_id:   int
-    elapsed_s:  float
+    layer_id: int
+    elapsed_s: float
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class MaterialService:
     """Orchestrates the full material-apply pipeline."""
 
     def __init__(self) -> None:
-        self._wm     = WorkflowManager()
+        self._wm = WorkflowManager()
         self._runpod = get_comfyui_client()
 
     async def apply_material(
         self,
-        project_id:        int,
-        layer_id:          int,
-        material_id:       int,
-        user_id:           int,
-        db:                Session,
-        custom_prompt:     Optional[str]   = None,
-        ipadapter_weight:  Optional[float] = None,
-        controlnet_weight: float           = _DEFAULT_CN_DEPTH_W,
-        denoise:           Optional[float] = None,
-        steps:             int             = _DEFAULT_STEPS,
-        cfg:               float           = _DEFAULT_CFG,
+        project_id: int,
+        layer_id: int,
+        material_id: int,
+        user_id: int,
+        db: Session,
+        custom_prompt: Optional[str] = None,
+        ipadapter_weight: Optional[float] = None,
+        controlnet_weight: float = _DEFAULT_CN_DEPTH_W,
+        denoise: Optional[float] = None,
+        steps: int = _DEFAULT_STEPS,
+        cfg: float = _DEFAULT_CFG,
     ) -> MaterialResult:
         """
         Apply *material_id* to the region defined by *layer_id*.
@@ -117,9 +119,11 @@ class MaterialService:
         t_start = time.monotonic()
 
         # ── 1. Load project + layer + material ───────────────────────────────
-        project = db.query(Project).filter(
-            Project.id == project_id, Project.user_id == user_id
-        ).first()
+        project = (
+            db.query(Project)
+            .filter(Project.id == project_id, Project.user_id == user_id)
+            .first()
+        )
         if not project:
             raise ValueError(f"Project {project_id} not found for user {user_id}")
         if not project.original_image_url:
@@ -141,12 +145,12 @@ class MaterialService:
 
         # ── 2. Resolve per-material AI parameters ────────────────────────────
         effective_ipadapter_weight = (
-            ipadapter_weight if ipadapter_weight is not None
+            ipadapter_weight
+            if ipadapter_weight is not None
             else material.ip_adapter_weight
         )
         effective_denoise = (
-            denoise if denoise is not None
-            else material.recommended_denoise
+            denoise if denoise is not None else material.recommended_denoise
         )
 
         # ── 3. Build text prompt ──────────────────────────────────────────────
@@ -169,21 +173,26 @@ class MaterialService:
         logger.info(
             "apply_material: project=%d layer=%d material=%d(%s) "
             "ipadapter=%.2f denoise=%.2f prompt=%r",
-            project_id, layer_id, material_id, material.name,
-            effective_ipadapter_weight, effective_denoise, base_prompt[:80],
+            project_id,
+            layer_id,
+            material_id,
+            material.name,
+            effective_ipadapter_weight,
+            effective_denoise,
+            base_prompt[:80],
         )
 
         # ── 4. Build ComfyUI workflow ─────────────────────────────────────────
         wf_kwargs: dict = dict(
-            image_url            = project.original_image_url,
-            mask_data            = mask_url,
-            material_texture_url = material.tile_image_url,
-            prompt               = base_prompt,
-            ipadapter_weight     = effective_ipadapter_weight,
-            controlnet_strength  = controlnet_weight,
-            denoise              = effective_denoise,
-            steps                = steps,
-            cfg                  = cfg,
+            image_url=project.original_image_url,
+            mask_data=mask_url,
+            material_texture_url=material.tile_image_url,
+            prompt=base_prompt,
+            ipadapter_weight=effective_ipadapter_weight,
+            controlnet_strength=controlnet_weight,
+            denoise=effective_denoise,
+            steps=steps,
+            cfg=cfg,
         )
         if negative_prompt:
             wf_kwargs["negative_prompt"] = negative_prompt
@@ -196,9 +205,9 @@ class MaterialService:
 
         try:
             output = await self._runpod.run_async(
-                workflow      = workflow,
-                timeout       = _APPLY_TIMEOUT_S,
-                upload_result = False,
+                workflow=workflow,
+                timeout=_APPLY_TIMEOUT_S,
+                upload_result=False,
             )
         except RunPodError:
             _set_project_status(db, project_id, ProjectStatus.error)
@@ -217,26 +226,27 @@ class MaterialService:
             raise ValueError(f"RunPod 결과 base64 디코딩 실패: {exc}") from exc
 
         result_key = storage.project_key(
-            user_id, project_id,
-            f"results/material_{layer_id}_{uuid.uuid4().hex[:8]}.jpg"
+            user_id,
+            project_id,
+            f"results/material_{layer_id}_{uuid.uuid4().hex[:8]}.jpg",
         )
         result_url = storage.upload(
-            data         = result_bytes,
-            key          = result_key,
-            content_type = "image/jpeg",
-            public       = True,
+            data=result_bytes,
+            key=result_key,
+            content_type="image/jpeg",
+            public=True,
         )
 
         # ── 7. Update DB ──────────────────────────────────────────────────────
         layer.result_image_url = result_url
         layer.parameters = {
             **layer.parameters,
-            "material_id":        material_id,
-            "material_name":      material.name,
-            "result_url":         result_url,
-            "prompt":             base_prompt,
-            "ipadapter_weight":   effective_ipadapter_weight,
-            "denoise":            effective_denoise,
+            "material_id": material_id,
+            "material_name": material.name,
+            "result_url": result_url,
+            "prompt": base_prompt,
+            "ipadapter_weight": effective_ipadapter_weight,
+            "denoise": effective_denoise,
         }
         project.status = ProjectStatus.completed
         db.commit()
@@ -244,30 +254,34 @@ class MaterialService:
         elapsed = round(time.monotonic() - t_start, 2)
         logger.info(
             "apply_material DONE: project=%d layer=%d result_url=%s elapsed=%.1fs",
-            project_id, layer_id, result_url, elapsed,
+            project_id,
+            layer_id,
+            result_url,
+            elapsed,
         )
 
         return MaterialResult(
-            result_url = result_url,
-            layer_id   = layer_id,
-            elapsed_s  = elapsed,
+            result_url=result_url,
+            layer_id=layer_id,
+            elapsed_s=elapsed,
         )
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _set_project_status(db: Session, project_id: int, status: ProjectStatus) -> None:
     """Update project status using direct SQL to avoid ORM lazy-load issues."""
     try:
         db.rollback()
         db.execute(
-            sa_update(Project)
-            .where(Project.id == project_id)
-            .values(status=status)
+            sa_update(Project).where(Project.id == project_id).values(status=status)
         )
         db.commit()
     except Exception as exc:
-        logger.error("Failed to set project %d status to %s: %s", project_id, status, exc)
+        logger.error(
+            "Failed to set project %d status to %s: %s", project_id, status, exc
+        )
         try:
             db.rollback()
         except Exception:

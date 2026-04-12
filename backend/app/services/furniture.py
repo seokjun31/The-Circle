@@ -49,29 +49,31 @@ from app.services.s3 import storage
 logger = logging.getLogger("the_circle.furniture")
 
 CREDITS_PER_PLACEMENT = 1
-_PLACE_TIMEOUT_S      = 90
+_PLACE_TIMEOUT_S = 90
 
 
 # ── Result types ──────────────────────────────────────────────────────────────
 
+
 @dataclass
 class FitCheck:
-    fits:               bool
+    fits: bool
     furniture_width_cm: float
-    space_width_cm:     float
-    margin_cm:          float
-    category:           str   # "comfortable" | "tight" | "too_large"
+    space_width_cm: float
+    margin_cm: float
+    category: str  # "comfortable" | "tight" | "too_large"
 
 
 @dataclass
 class FurnitureResult:
     result_url: str
-    layer_id:   int
-    elapsed_s:  float
-    fit_check:  Optional[FitCheck]
+    layer_id: int
+    elapsed_s: float
+    fit_check: Optional[FitCheck]
 
 
 # ── Image helpers ─────────────────────────────────────────────────────────────
+
 
 def _load_image_from_url(url: str) -> Image.Image:
     resp = httpx.get(url, timeout=20, follow_redirects=True)
@@ -120,36 +122,37 @@ def _compute_fit_check(
     else:
         cat = "too_large"
     return FitCheck(
-        fits               = margin >= 0,
-        furniture_width_cm = round(furniture_width_cm, 1),
-        space_width_cm     = round(space_width_cm, 1),
-        margin_cm          = round(margin, 1),
-        category           = cat,
+        fits=margin >= 0,
+        furniture_width_cm=round(furniture_width_cm, 1),
+        space_width_cm=round(space_width_cm, 1),
+        margin_cm=round(margin, 1),
+        category=cat,
     )
 
 
 # ── Service ───────────────────────────────────────────────────────────────────
 
+
 class FurnitureService:
     """Orchestrate the full furniture-placement pipeline."""
 
     def __init__(self) -> None:
-        self._wm     = WorkflowManager()
+        self._wm = WorkflowManager()
         self._runpod = get_comfyui_client()
 
     async def place_furniture(
         self,
-        project_id:           int,
-        user_id:              int,
-        db:                   Session,
-        furniture_id:         Optional[int]   = None,
-        furniture_image_url:  Optional[str]   = None,
-        furniture_width_cm:   Optional[float] = None,
-        furniture_height_cm:  Optional[float] = None,
-        space_width_cm:       Optional[float] = None,
-        position_x:           int             = 0,
-        position_y:           int             = 0,
-        target_width_px:      int             = 200,
+        project_id: int,
+        user_id: int,
+        db: Session,
+        furniture_id: Optional[int] = None,
+        furniture_image_url: Optional[str] = None,
+        furniture_width_cm: Optional[float] = None,
+        furniture_height_cm: Optional[float] = None,
+        space_width_cm: Optional[float] = None,
+        position_x: int = 0,
+        position_y: int = 0,
+        target_width_px: int = 200,
     ) -> FurnitureResult:
         """
         Composite a furniture PNG onto a room image and AI-blend it.
@@ -177,10 +180,14 @@ class FurnitureService:
         t_start = time.monotonic()
 
         # ── 1. Load project ───────────────────────────────────────────────────
-        project = db.query(Project).filter(
-            Project.id == project_id,
-            Project.user_id == user_id,
-        ).first()
+        project = (
+            db.query(Project)
+            .filter(
+                Project.id == project_id,
+                Project.user_id == user_id,
+            )
+            .first()
+        )
         if not project:
             raise ValueError(f"Project {project_id} not found for user {user_id}")
         if not project.original_image_url:
@@ -201,12 +208,16 @@ class FurnitureService:
                 "Provide either furniture_id (with image_url) or furniture_image_url"
             )
 
-        fw_cm = furniture_width_cm  or (furn_meta.width_cm  if furn_meta else None)
+        fw_cm = furniture_width_cm or (furn_meta.width_cm if furn_meta else None)
         fh_cm = furniture_height_cm or (furn_meta.height_cm if furn_meta else None)
 
         logger.info(
             "furniture START: project=%d furniture_id=%s pos=(%d,%d) w_px=%d",
-            project_id, furniture_id, position_x, position_y, target_width_px,
+            project_id,
+            furniture_id,
+            position_x,
+            position_y,
+            target_width_px,
         )
 
         # ── 3. Load images (PIL) ──────────────────────────────────────────────
@@ -215,7 +226,7 @@ class FurnitureService:
 
         # ── 4. Scale furniture to target_width_px ─────────────────────────────
         orig_w, orig_h = furn_img.size
-        scale    = target_width_px / orig_w
+        scale = target_width_px / orig_w
         scaled_w = target_width_px
         scaled_h = max(1, round(orig_h * scale))
         furn_scaled = furn_img.resize((scaled_w, scaled_h), Image.LANCZOS)
@@ -232,11 +243,11 @@ class FurnitureService:
 
         # ── 8. Build ComfyUI workflow ─────────────────────────────────────────
         composite_b64 = _image_to_b64(composite_rgb, fmt="JPEG")
-        furn_b64      = _image_to_b64(furn_scaled,   fmt="PNG")
+        furn_b64 = _image_to_b64(furn_scaled, fmt="PNG")
 
         workflow = self._wm.build_furniture_workflow(
-            image_url           = composite_b64,
-            furniture_image_url = furn_b64,
+            image_url=composite_b64,
+            furniture_image_url=furn_b64,
         )
 
         # ── 9. Submit to RunPod ───────────────────────────────────────────────
@@ -245,9 +256,9 @@ class FurnitureService:
 
         try:
             output = await self._runpod.run_async(
-                workflow      = workflow,
-                timeout       = _PLACE_TIMEOUT_S,
-                upload_result = False,
+                workflow=workflow,
+                timeout=_PLACE_TIMEOUT_S,
+                upload_result=False,
             )
         except RunPodError:
             _set_project_status(db, project_id, ProjectStatus.error)
@@ -266,14 +277,15 @@ class FurnitureService:
             raise ValueError(f"RunPod 결과 base64 디코딩 실패: {exc}") from exc
 
         result_key = storage.project_key(
-            user_id, project_id,
+            user_id,
+            project_id,
             f"results/furniture_{uuid.uuid4().hex[:8]}.jpg",
         )
         result_url = storage.upload(
-            data         = result_bytes,
-            key          = result_key,
-            content_type = "image/jpeg",
-            public       = True,
+            data=result_bytes,
+            key=result_key,
+            content_type="image/jpeg",
+            public=True,
         )
 
         # ── 11. Fit check ─────────────────────────────────────────────────────
@@ -281,12 +293,12 @@ class FurnitureService:
 
         # ── 12. Create EditLayer ──────────────────────────────────────────────
         params: dict = {
-            "position_x":       px,
-            "position_y":       py,
-            "target_width_px":  scaled_w,
+            "position_x": px,
+            "position_y": py,
+            "target_width_px": scaled_w,
             "target_height_px": scaled_h,
-            "result_url":       result_url,
-            "source":           "furniture",
+            "result_url": result_url,
+            "source": "furniture",
         }
         if furniture_id:
             params["furniture_id"] = furniture_id
@@ -296,19 +308,19 @@ class FurnitureService:
             params["furniture_height_cm"] = fh_cm
         if fit_check:
             params["fit_check"] = {
-                "fits":             fit_check.fits,
-                "margin_cm":        fit_check.margin_cm,
-                "space_width_cm":   fit_check.space_width_cm,
-                "category":         fit_check.category,
+                "fits": fit_check.fits,
+                "margin_cm": fit_check.margin_cm,
+                "space_width_cm": fit_check.space_width_cm,
+                "category": fit_check.category,
             }
 
         layer = EditLayer(
-            project_id       = project_id,
-            layer_type       = LayerType.furniture,
-            parameters       = params,
-            result_image_url = result_url,
-            is_visible       = True,
-            order            = 0,
+            project_id=project_id,
+            layer_type=LayerType.furniture,
+            parameters=params,
+            result_image_url=result_url,
+            is_visible=True,
+            order=0,
         )
         db.add(layer)
         project.status = ProjectStatus.completed
@@ -318,31 +330,35 @@ class FurnitureService:
         elapsed = round(time.monotonic() - t_start, 2)
         logger.info(
             "furniture DONE: project=%d layer=%d result_url=%s elapsed=%.1fs",
-            project_id, layer.id, result_url, elapsed,
+            project_id,
+            layer.id,
+            result_url,
+            elapsed,
         )
 
         return FurnitureResult(
-            result_url = result_url,
-            layer_id   = layer.id,
-            elapsed_s  = elapsed,
-            fit_check  = fit_check,
+            result_url=result_url,
+            layer_id=layer.id,
+            elapsed_s=elapsed,
+            fit_check=fit_check,
         )
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _set_project_status(db: Session, project_id: int, status: ProjectStatus) -> None:
     """Update project status using direct SQL to avoid ORM lazy-load issues."""
     try:
         db.rollback()
         db.execute(
-            sa_update(Project)
-            .where(Project.id == project_id)
-            .values(status=status)
+            sa_update(Project).where(Project.id == project_id).values(status=status)
         )
         db.commit()
     except Exception as exc:
-        logger.error("Failed to set project %d status to %s: %s", project_id, status, exc)
+        logger.error(
+            "Failed to set project %d status to %s: %s", project_id, status, exc
+        )
         try:
             db.rollback()
         except Exception:

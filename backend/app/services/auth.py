@@ -3,6 +3,7 @@ Authentication service
  - Password hashing / verification (bcrypt)
  - JWT creation / decoding (python-jose)
 """
+
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -23,7 +24,9 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 # ── JWT ───────────────────────────────────────────────────────────────────────
-def create_access_token(subject: int | str, extra: dict | None = None) -> tuple[str, int]:
+def create_access_token(
+    subject: int | str, extra: dict | None = None
+) -> tuple[str, int]:
     """
     Create a signed JWT.
 

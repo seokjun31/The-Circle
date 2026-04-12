@@ -52,9 +52,7 @@ class Material(Base):
     # - Patterned materials (marble, wood grain): 0.5–0.65
     # - Solid / matte materials (paint, plain tile): 0.4–0.55
     # - Complex patterns (mosaic, herringbone): 0.6–0.75
-    ip_adapter_weight: Mapped[float] = mapped_column(
-        Float, nullable=False, default=0.6
-    )
+    ip_adapter_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.6)
     # KSampler denoise strength tuned per material (range 0.5–0.75, default 0.62).
     # - Similar tone to original: 0.5–0.58
     # - Different tone: 0.60–0.68

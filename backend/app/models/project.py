@@ -14,6 +14,7 @@ class ImageType(str, enum.Enum):
     - panorama_equirectangular: Insta360 등 전방위 카메라의 equirectangular 출력
     - panorama_cubemap        : 큐브맵 6-면 분리 형식
     """
+
     single = "single"
     panorama_equirectangular = "panorama_equirectangular"
     panorama_cubemap = "panorama_cubemap"

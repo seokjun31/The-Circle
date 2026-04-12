@@ -7,6 +7,7 @@ GET  /api/v1/auth/google/callback  — Google OAuth callback → issue JWT
 GET  /api/v1/auth/kakao            — redirect to Kakao OAuth consent screen
 GET  /api/v1/auth/kakao/callback   — Kakao OAuth callback → issue JWT
 """
+
 import urllib.parse
 
 import httpx
@@ -20,22 +21,28 @@ from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.credit_transaction import CreditTransaction, CreditType
 from app.models.user import User
-from app.schemas.auth import TokenResponse, UserLoginRequest, UserRegisterRequest, UserResponse
+from app.schemas.auth import (
+    TokenResponse,
+    UserLoginRequest,
+    UserRegisterRequest,
+    UserResponse,
+)
 from app.services.auth import create_access_token, hash_password, verify_password
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 # ── OAuth provider URLs ───────────────────────────────────────────────────────
-_GOOGLE_AUTH_URL  = "https://accounts.google.com/o/oauth2/v2/auth"
+_GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 _GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
-_GOOGLE_USERINFO  = "https://www.googleapis.com/oauth2/v3/userinfo"
+_GOOGLE_USERINFO = "https://www.googleapis.com/oauth2/v3/userinfo"
 
-_KAKAO_AUTH_URL  = "https://kauth.kakao.com/oauth/authorize"
+_KAKAO_AUTH_URL = "https://kauth.kakao.com/oauth/authorize"
 _KAKAO_TOKEN_URL = "https://kauth.kakao.com/oauth/token"
-_KAKAO_USERINFO  = "https://kapi.kakao.com/v2/user/me"
+_KAKAO_USERINFO = "https://kapi.kakao.com/v2/user/me"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _backend_callback_url(request: Request, provider: str) -> str:
     """Build the OAuth redirect_uri pointing back at this server."""
@@ -107,6 +114,7 @@ def _redirect_to_frontend(token: str = "", error: str = "") -> RedirectResponse:
 
 # ── Email / Password ──────────────────────────────────────────────────────────
 
+
 @router.post(
     "/register",
     response_model=TokenResponse,
@@ -157,7 +165,10 @@ def login(body: UserLoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == body.email).first()
     invalid = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail={"message": "이메일 또는 비밀번호가 올바르지 않습니다.", "code": "INVALID_CREDENTIALS"},
+        detail={
+            "message": "이메일 또는 비밀번호가 올바르지 않습니다.",
+            "code": "INVALID_CREDENTIALS",
+        },
     )
 
     if not user or not user.hashed_password:
@@ -181,11 +192,14 @@ def me(current_user: User = Depends(get_current_user)):
 
 # ── Google OAuth ──────────────────────────────────────────────────────────────
 
+
 @router.get("/google", summary="Google 소셜 로그인 시작")
 def google_login(request: Request):
     """Redirect the browser to Google's OAuth consent screen."""
     if not settings.GOOGLE_CLIENT_ID:
-        raise HTTPException(status_code=501, detail="Google OAuth가 설정되지 않았습니다.")
+        raise HTTPException(
+            status_code=501, detail="Google OAuth가 설정되지 않았습니다."
+        )
 
     params = {
         "client_id": settings.GOOGLE_CLIENT_ID,
@@ -239,11 +253,14 @@ def google_callback(code: str, request: Request, db: Session = Depends(get_db)):
 
 # ── Kakao OAuth ───────────────────────────────────────────────────────────────
 
+
 @router.get("/kakao", summary="Kakao 소셜 로그인 시작")
 def kakao_login(request: Request):
     """Redirect the browser to Kakao's OAuth consent screen."""
     if not settings.KAKAO_CLIENT_ID:
-        raise HTTPException(status_code=501, detail="Kakao OAuth가 설정되지 않았습니다.")
+        raise HTTPException(
+            status_code=501, detail="Kakao OAuth가 설정되지 않았습니다."
+        )
 
     params = {
         "client_id": settings.KAKAO_CLIENT_ID,

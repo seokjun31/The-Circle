@@ -45,7 +45,7 @@ CREDITS_FULL_RENDER = 5
 _LIGHTING_PROMPTS: dict[str, str] = {
     "morning": "bright natural morning light, sun rays through window, warm golden tone, photorealistic",
     "evening": "warm evening ambient light, cozy atmosphere, warm color temperature, soft shadows, photorealistic",
-    "night":   "night time interior, artificial warm lighting, table lamps turned on, cozy ambient, photorealistic",
+    "night": "night time interior, artificial warm lighting, table lamps turned on, cozy ambient, photorealistic",
 }
 
 _RENDER_TIMEOUT_S = 120
@@ -53,16 +53,18 @@ _RENDER_TIMEOUT_S = 120
 
 # ── Result type ───────────────────────────────────────────────────────────────
 
+
 @dataclass
 class FullRenderResult:
-    result_url:   str
-    layer_id:     int
-    elapsed_s:    float
-    lighting:     str
+    result_url: str
+    layer_id: int
+    elapsed_s: float
+    lighting: str
     credits_used: int
 
 
 # ── Image helpers ─────────────────────────────────────────────────────────────
+
 
 def _load_pil(url: str) -> Image.Image:
     resp = httpx.get(url, timeout=20, follow_redirects=True)
@@ -84,6 +86,7 @@ def _sse_event(data: dict) -> str:
 
 # ── Layer compositing ─────────────────────────────────────────────────────────
 
+
 def _composite_layers(original_url: str, layers: list[EditLayer]) -> Image.Image:
     """Build a composite PIL image from the original + all visible layers."""
     logger.info("composite: loading original from %s", original_url)
@@ -92,7 +95,8 @@ def _composite_layers(original_url: str, layers: list[EditLayer]) -> Image.Image
 
     # Style layers → replace base
     style_layers = [
-        layer for layer in layers
+        layer
+        for layer in layers
         if layer.layer_type == LayerType.style and layer.result_image_url
     ]
     if style_layers:
@@ -113,7 +117,7 @@ def _composite_layers(original_url: str, layers: list[EditLayer]) -> Image.Image
             continue
         try:
             mat_result = _load_pil(layer.result_image_url).convert("RGBA")
-            mask_img   = _load_pil(mask_url).convert("L")
+            mask_img = _load_pil(mask_url).convert("L")
             if mat_result.size != base.size:
                 mat_result = mat_result.resize(base.size, Image.LANCZOS)
             if mask_img.size != base.size:
@@ -135,7 +139,9 @@ def _composite_layers(original_url: str, layers: list[EditLayer]) -> Image.Image
         pw = params.get("target_width_px")
         ph = params.get("target_height_px")
         if None in (px, py, pw, ph):
-            logger.info("furniture layer %d: no bbox, using full result as base", layer.id)
+            logger.info(
+                "furniture layer %d: no bbox, using full result as base", layer.id
+            )
             try:
                 furn_result = _load_pil(layer.result_image_url).convert("RGBA")
                 if furn_result.size != base.size:
@@ -157,7 +163,11 @@ def _composite_layers(original_url: str, layers: list[EditLayer]) -> Image.Image
             base.paste(region, (x0, y0))
             logger.info(
                 "composite: applied furniture layer %d at (%d,%d)+(%d×%d)",
-                layer.id, x0, y0, x1 - x0, y1 - y0,
+                layer.id,
+                x0,
+                y0,
+                x1 - x0,
+                y1 - y0,
             )
         except Exception as exc:
             logger.warning("furniture layer %d composite failed: %s", layer.id, exc)
@@ -167,19 +177,20 @@ def _composite_layers(original_url: str, layers: list[EditLayer]) -> Image.Image
 
 # ── Service ───────────────────────────────────────────────────────────────────
 
+
 class FullRenderService:
     """Run the final high-quality render pipeline, yielding SSE progress events."""
 
     def __init__(self) -> None:
-        self._wm     = WorkflowManager()
+        self._wm = WorkflowManager()
         self._runpod = get_comfyui_client()
 
     async def render_stream(
         self,
         project_id: int,
-        user_id:    int,
-        db:         Session,
-        lighting:   str = "morning",
+        user_id: int,
+        db: Session,
+        lighting: str = "morning",
     ) -> AsyncIterator[str]:
         """
         Async generator that yields SSE-formatted strings.
@@ -191,12 +202,21 @@ class FullRenderService:
         t_start = time.monotonic()
 
         # ── Validate project ──────────────────────────────────────────────────
-        project = db.query(Project).filter(
-            Project.id == project_id,
-            Project.user_id == user_id,
-        ).first()
+        project = (
+            db.query(Project)
+            .filter(
+                Project.id == project_id,
+                Project.user_id == user_id,
+            )
+            .first()
+        )
         if not project:
-            yield _sse_event({"error": f"프로젝트 {project_id}를 찾을 수 없습니다.", "code": "NOT_FOUND"})
+            yield _sse_event(
+                {
+                    "error": f"프로젝트 {project_id}를 찾을 수 없습니다.",
+                    "code": "NOT_FOUND",
+                }
+            )
             return
         if not project.original_image_url:
             yield _sse_event({"error": "원본 이미지가 없습니다.", "code": "NO_IMAGE"})
@@ -204,11 +224,13 @@ class FullRenderService:
 
         # ── Validate lighting ─────────────────────────────────────────────────
         if lighting not in _LIGHTING_PROMPTS:
-            yield _sse_event({
-                "error": f"조명 값이 올바르지 않습니다: {lighting!r}. "
-                         f"가능한 값: {list(_LIGHTING_PROMPTS)}",
-                "code": "INVALID_LIGHTING",
-            })
+            yield _sse_event(
+                {
+                    "error": f"조명 값이 올바르지 않습니다: {lighting!r}. "
+                    f"가능한 값: {list(_LIGHTING_PROMPTS)}",
+                    "code": "INVALID_LIGHTING",
+                }
+            )
             return
 
         yield _sse_event({"progress": 5, "step": "레이어 분석 중..."})
@@ -227,7 +249,9 @@ class FullRenderService:
 
         logger.info(
             "full_render START: project=%d layers=%d lighting=%s",
-            project_id, len(layers), lighting,
+            project_id,
+            len(layers),
+            lighting,
         )
 
         yield _sse_event({"progress": 15, "step": f"레이어 {len(layers)}개 합성 중..."})
@@ -243,7 +267,9 @@ class FullRenderService:
             )
         except Exception as exc:
             logger.exception("Compositing failed")
-            yield _sse_event({"error": f"레이어 합성 실패: {exc}", "code": "COMPOSITE_ERROR"})
+            yield _sse_event(
+                {"error": f"레이어 합성 실패: {exc}", "code": "COMPOSITE_ERROR"}
+            )
             return
 
         yield _sse_event({"progress": 35, "step": "AI 렌더링 준비 중..."})
@@ -256,11 +282,11 @@ class FullRenderService:
         lighting_prompt = _LIGHTING_PROMPTS[lighting]
 
         workflow = await self._wm.build_full_render_workflow(
-            image_url    = composite_b64,
-            lighting     = lighting_prompt,
-            base_denoise = 0.30,
-            base_steps   = 40,
-            refiner_steps = 10,
+            image_url=composite_b64,
+            lighting=lighting_prompt,
+            base_denoise=0.30,
+            base_steps=40,
+            refiner_steps=10,
         )
 
         yield _sse_event({"progress": 45, "step": "AI 렌더링 실행 중..."})
@@ -272,14 +298,14 @@ class FullRenderService:
 
         runpod_task = asyncio.create_task(
             self._runpod.run_async(
-                workflow      = workflow,
-                timeout       = _RENDER_TIMEOUT_S,
-                upload_result = False,
+                workflow=workflow,
+                timeout=_RENDER_TIMEOUT_S,
+                upload_result=False,
             )
         )
 
         # Synthetic progress: 45 → 90
-        expected_s    = 60
+        expected_s = 60
         progress_step = 45.0 / expected_s
         current_progress = 45
         step_labels = [
@@ -293,19 +319,29 @@ class FullRenderService:
         while not runpod_task.done():
             await asyncio.sleep(1)
             current_progress = min(90, current_progress + progress_step)
-            if label_idx < len(step_labels) - 1 and current_progress > 45 + (label_idx + 1) * 12:
+            if (
+                label_idx < len(step_labels) - 1
+                and current_progress > 45 + (label_idx + 1) * 12
+            ):
                 label_idx += 1
-            yield _sse_event({
-                "progress": int(current_progress),
-                "step": step_labels[min(label_idx, len(step_labels) - 1)],
-            })
+            yield _sse_event(
+                {
+                    "progress": int(current_progress),
+                    "step": step_labels[min(label_idx, len(step_labels) - 1)],
+                }
+            )
 
         try:
             output = await runpod_task
         except RunPodError:
             project.status = ProjectStatus.error
             db.commit()
-            yield _sse_event({"error": "AI 렌더링에 실패했습니다. 잠시 후 다시 시도해주세요.", "code": "RUNPOD_ERROR"})
+            yield _sse_event(
+                {
+                    "error": "AI 렌더링에 실패했습니다. 잠시 후 다시 시도해주세요.",
+                    "code": "RUNPOD_ERROR",
+                }
+            )
             return
 
         yield _sse_event({"progress": 92, "step": "결과 이미지 저장 중..."})
@@ -324,34 +360,37 @@ class FullRenderService:
         except Exception:
             project.status = ProjectStatus.error
             db.commit()
-            yield _sse_event({"error": "결과 이미지 디코딩에 실패했습니다.", "code": "DECODE_ERROR"})
+            yield _sse_event(
+                {"error": "결과 이미지 디코딩에 실패했습니다.", "code": "DECODE_ERROR"}
+            )
             return
 
         result_key = storage.project_key(
-            user_id, project_id,
+            user_id,
+            project_id,
             f"results/full_render_{uuid.uuid4().hex[:8]}.jpg",
         )
         result_url = storage.upload(
-            data         = result_bytes,
-            key          = result_key,
-            content_type = "image/jpeg",
-            public       = True,
+            data=result_bytes,
+            key=result_key,
+            content_type="image/jpeg",
+            public=True,
         )
 
         # ── Create EditLayer ──────────────────────────────────────────────────
         layer = EditLayer(
-            project_id       = project_id,
-            layer_type       = LayerType.style,
-            parameters       = {
-                "source":       "full_render",
-                "lighting":     lighting,
+            project_id=project_id,
+            layer_type=LayerType.style,
+            parameters={
+                "source": "full_render",
+                "lighting": lighting,
                 "credits_used": CREDITS_FULL_RENDER,
-                "layer_count":  len(layers),
-                "result_url":   result_url,
+                "layer_count": len(layers),
+                "result_url": result_url,
             },
-            result_image_url = result_url,
-            is_visible       = True,
-            order            = 9999,
+            result_image_url=result_url,
+            is_visible=True,
+            order=9999,
         )
         db.add(layer)
         project.status = ProjectStatus.completed
@@ -361,19 +400,24 @@ class FullRenderService:
         elapsed = round(time.monotonic() - t_start, 2)
         logger.info(
             "full_render DONE: project=%d layer=%d result_url=%s elapsed=%.1fs",
-            project_id, layer.id, result_url, elapsed,
+            project_id,
+            layer.id,
+            result_url,
+            elapsed,
         )
 
-        yield _sse_event({
-            "done":         True,
-            "progress":     100,
-            "step":         "완료!",
-            "result_url":   result_url,
-            "layer_id":     layer.id,
-            "elapsed_s":    elapsed,
-            "lighting":     lighting,
-            "credits_used": CREDITS_FULL_RENDER,
-        })
+        yield _sse_event(
+            {
+                "done": True,
+                "progress": 100,
+                "step": "완료!",
+                "result_url": result_url,
+                "layer_id": layer.id,
+                "elapsed_s": elapsed,
+                "lighting": lighting,
+                "credits_used": CREDITS_FULL_RENDER,
+            }
+        )
 
 
 # ── Module-level singleton ────────────────────────────────────────────────────
