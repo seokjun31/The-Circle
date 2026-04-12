@@ -30,7 +30,7 @@ from typing import Optional
 from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
-from app.models.edit_layer import EditLayer, LayerType
+from app.models.edit_layer import EditLayer
 from app.models.material import Material
 from app.models.project import Project, ProjectStatus
 from app.services.comfyui import get_comfyui_client

@@ -230,11 +230,6 @@ class FurnitureService:
         composite.alpha_composite(furn_scaled, dest=(px, py))
         composite_rgb = composite.convert("RGB")
 
-        # ── 7. Generate blend mask ────────────────────────────────────────────
-        blend_mask = _make_blend_mask(
-            canvas_w, canvas_h, px, py, scaled_w, scaled_h, dilation=40
-        )
-
         # ── 8. Build ComfyUI workflow ─────────────────────────────────────────
         composite_b64 = _image_to_b64(composite_rgb, fmt="JPEG")
         furn_b64      = _image_to_b64(furn_scaled,   fmt="PNG")

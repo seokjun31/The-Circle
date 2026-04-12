@@ -33,7 +33,7 @@ def validate_image(data: bytes, content_type: str | None = None) -> None:
 
     if content_type and content_type.split(";")[0].strip() not in ALLOWED_CONTENT_TYPES:
         raise ImageValidationError(
-            f"지원하지 않는 파일 형식입니다. (JPEG, PNG, WEBP만 허용)"
+            "지원하지 않는 파일 형식입니다. (JPEG, PNG, WEBP만 허용)"
         )
 
     try:

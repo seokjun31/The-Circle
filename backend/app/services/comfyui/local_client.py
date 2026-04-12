@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import io
 import logging
 import time
 import uuid
@@ -32,25 +31,20 @@ import aiohttp
 
 from app.config import settings
 
+# Re-export RunPod exceptions so services that already import them keep working
+from app.services.comfyui.runpod_client import (
+    RunPodError as ComfyUIError,
+    RunPodJobError as ComfyUIJobError,
+    RunPodTimeoutError as ComfyUITimeoutError,
+)
+
 logger = logging.getLogger("the_circle.local_comfyui")
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-POLL_INTERVAL: float = 2.0      # seconds between /history polls
-MAX_RETRIES: int     = 3
-_TERMINAL_STATUSES   = {"success", "error"}
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-#  Exceptions  (mirrors runpod_client.py naming so callers catch the same types)
-# ═══════════════════════════════════════════════════════════════════════════════
-
-# Re-export RunPod exceptions so services that already import them keep working
-from app.services.comfyui.runpod_client import (
-    RunPodError      as ComfyUIError,
-    RunPodTimeoutError as ComfyUITimeoutError,
-    RunPodJobError   as ComfyUIJobError,
-)
+POLL_INTERVAL: float = 2.0  # seconds between /history polls
+MAX_RETRIES: int = 3
+_TERMINAL_STATUSES = {"success", "error"}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
