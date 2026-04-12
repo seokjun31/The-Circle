@@ -35,7 +35,7 @@ $PidFile = Join-Path $ScriptDir ".dev_pids"
 $BeLog   = Join-Path $LogDir "backend.log"
 $FeLog   = Join-Path $LogDir "frontend.log"
 
-$BePort = 8000
+$BePort = 4000
 $FePort = 3000
 $DbPort = 5432
 
