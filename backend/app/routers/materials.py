@@ -34,14 +34,15 @@ _PAGE_SIZE_DEFAULT = 20
 _PAGE_SIZE_MAX = 100
 
 # ── Tiling validation thresholds ─────────────────────────────────────────────
-_TILING_WARN_THRESHOLD  = 20.0   # mean per-pixel colour diff (0-255) at seam
-_TILING_ERROR_THRESHOLD = 45.0   # above this → strongly not seamless
-_TILE_MIN_PX = 256               # reject images smaller than 256×256
+_TILING_WARN_THRESHOLD = 20.0  # mean per-pixel colour diff (0-255) at seam
+_TILING_ERROR_THRESHOLD = 45.0  # above this → strongly not seamless
+_TILE_MIN_PX = 256  # reject images smaller than 256×256
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Tiling validation helper
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _validate_seamless_tiling(img: Image.Image) -> MaterialTilingReport:
     """
@@ -58,13 +59,13 @@ def _validate_seamless_tiling(img: Image.Image) -> MaterialTilingReport:
     h, w = arr.shape[:2]
 
     # Vertical seam: compare last column of tile with first column
-    right_edge = arr[:, -1, :]   # H×3
-    left_edge  = arr[:, 0,  :]   # H×3
+    right_edge = arr[:, -1, :]  # H×3
+    left_edge = arr[:, 0, :]  # H×3
     v_diff = float(np.mean(np.abs(right_edge - left_edge)))
 
     # Horizontal seam: compare last row with first row
     bottom_edge = arr[-1, :, :]  # W×3
-    top_edge    = arr[0,  :, :]  # W×3
+    top_edge = arr[0, :, :]  # W×3
     h_diff = float(np.mean(np.abs(bottom_edge - top_edge)))
 
     mean_diff = (v_diff + h_diff) / 2.0
@@ -100,6 +101,7 @@ def _validate_seamless_tiling(img: Image.Image) -> MaterialTilingReport:
 #  Endpoints
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 @router.get(
     "",
     response_model=MaterialListResponse,
@@ -122,7 +124,7 @@ def list_materials(
       - page_size: items per page (max 100)
     """
     page_size = min(page_size, _PAGE_SIZE_MAX)
-    offset    = (page - 1) * page_size
+    offset = (page - 1) * page_size
 
     q = db.query(Material)
 
@@ -178,15 +180,15 @@ async def generate_material_prompts(
     has_api_key = bool(settings.ANTHROPIC_API_KEY)
 
     result = await material_prompt_generator.generate_prompts(
-        image_url = body.image_url,
-        category  = body.category,
-        name      = body.name,
+        image_url=body.image_url,
+        category=body.category,
+        name=body.name,
     )
 
     return MaterialGeneratePromptsResponse(
         **result,
-        generated_by_ai = has_api_key,
-        model           = "claude-sonnet-4-20250514" if has_api_key else None,
+        generated_by_ai=has_api_key,
+        model="claude-sonnet-4-20250514" if has_api_key else None,
     )
 
 
@@ -214,18 +216,18 @@ def get_material(material_id: int, db: Session = Depends(get_db)):
 )
 def create_material(
     # ── Required text fields ─────────────────────────────────────────────────
-    name: str                     = Form(..., min_length=1, max_length=200),
-    category: MaterialCategory    = Form(...),
-    tile_width_cm: float          = Form(..., gt=0, description="실제 타일 가로 크기 (cm)"),
-    tile_height_cm: float         = Form(..., gt=0, description="실제 타일 세로 크기 (cm)"),
+    name: str = Form(..., min_length=1, max_length=200),
+    category: MaterialCategory = Form(...),
+    tile_width_cm: float = Form(..., gt=0, description="실제 타일 가로 크기 (cm)"),
+    tile_height_cm: float = Form(..., gt=0, description="실제 타일 세로 크기 (cm)"),
     # ── Optional text fields ─────────────────────────────────────────────────
-    brand: Optional[str]          = Form(None, max_length=100),
-    product_code: Optional[str]   = Form(None, max_length=100),
-    price_range: Optional[str]    = Form(None, max_length=100),
-    style: Optional[str]          = Form(None, max_length=100),
-    tags: Optional[str]           = Form(None, description="쉼표로 구분된 태그 목록"),
+    brand: Optional[str] = Form(None, max_length=100),
+    product_code: Optional[str] = Form(None, max_length=100),
+    price_range: Optional[str] = Form(None, max_length=100),
+    style: Optional[str] = Form(None, max_length=100),
+    tags: Optional[str] = Form(None, description="쉼표로 구분된 태그 목록"),
     # ── AI generation parameters ─────────────────────────────────────────────
-    positive_prompt: str          = Form(
+    positive_prompt: str = Form(
         "",
         description=(
             "자재에 최적화된 긍정 프롬프트. "
@@ -233,29 +235,31 @@ def create_material(
             "subtle natural stone texture, clean grout lines, 8k uhd'"
         ),
     ),
-    negative_prompt: str          = Form(
+    negative_prompt: str = Form(
         "",
         description=(
             "자재에 최적화된 부정 프롬프트. "
             "예: 'wood grain, glossy, reflective, blurry, low quality'"
         ),
     ),
-    ip_adapter_weight: float      = Form(
+    ip_adapter_weight: float = Form(
         0.6,
         ge=0.3,
         le=0.9,
         description="IP-Adapter 가중치 (0.3–0.9, 기본 0.6)",
     ),
-    recommended_denoise: float    = Form(
+    recommended_denoise: float = Form(
         0.62,
         ge=0.5,
         le=0.75,
         description="KSampler denoise 강도 (0.5–0.75, 기본 0.62)",
     ),
     # ── File uploads ─────────────────────────────────────────────────────────
-    tile_image: UploadFile        = File(..., description="Seamless 타일 이미지 (PNG/JPEG, min 256×256)"),
+    tile_image: UploadFile = File(
+        ..., description="Seamless 타일 이미지 (PNG/JPEG, min 256×256)"
+    ),
     normal_map: Optional[UploadFile] = File(None, description="PBR Normal Map (선택)"),
-    db: Session                   = Depends(get_db),
+    db: Session = Depends(get_db),
 ):
     """
     Admin-only endpoint to register a new material.
@@ -281,7 +285,7 @@ def create_material(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"지원하지 않는 이미지 형식입니다: {tile_image.content_type}. "
-                   "PNG, JPEG, WEBP만 허용됩니다.",
+            "PNG, JPEG, WEBP만 허용됩니다.",
         )
 
     tile_bytes = tile_image.file.read()
@@ -298,7 +302,7 @@ def create_material(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"타일 이미지가 너무 작습니다 ({pil_img.width}×{pil_img.height}px). "
-                   f"최소 {_TILE_MIN_PX}×{_TILE_MIN_PX}px 이상이어야 합니다.",
+            f"최소 {_TILE_MIN_PX}×{_TILE_MIN_PX}px 이상이어야 합니다.",
         )
 
     # ── 3. Seamless tiling validation ────────────────────────────────────────
@@ -310,32 +314,32 @@ def create_material(
     tag_list = [t.strip() for t in (tags or "").split(",") if t.strip()]
 
     material = Material(
-        name                = name,
-        category            = category,
-        tile_image_url      = "",          # placeholder — updated below
-        normal_map_url      = None,
-        tile_width_cm       = tile_width_cm,
-        tile_height_cm      = tile_height_cm,
-        brand               = brand,
-        product_code        = product_code,
-        price_range         = price_range,
-        style               = style,
-        tags                = tag_list,
-        positive_prompt     = positive_prompt,
-        negative_prompt     = negative_prompt,
-        ip_adapter_weight   = ip_adapter_weight,
-        recommended_denoise = recommended_denoise,
+        name=name,
+        category=category,
+        tile_image_url="",  # placeholder — updated below
+        normal_map_url=None,
+        tile_width_cm=tile_width_cm,
+        tile_height_cm=tile_height_cm,
+        brand=brand,
+        product_code=product_code,
+        price_range=price_range,
+        style=style,
+        tags=tag_list,
+        positive_prompt=positive_prompt,
+        negative_prompt=negative_prompt,
+        ip_adapter_weight=ip_adapter_weight,
+        recommended_denoise=recommended_denoise,
     )
     db.add(material)
-    db.flush()   # get material.id without committing
+    db.flush()  # get material.id without committing
 
     ext = "png" if tile_image.content_type == "image/png" else "jpg"
     tile_key = storage.material_key(material.id, f"tile.{ext}")
     tile_url = storage.upload(
-        data         = tile_bytes,
-        key          = tile_key,
-        content_type = tile_image.content_type,
-        public       = True,
+        data=tile_bytes,
+        key=tile_key,
+        content_type=tile_image.content_type,
+        public=True,
     )
     material.tile_image_url = tile_url
 
@@ -343,13 +347,13 @@ def create_material(
     normal_url: Optional[str] = None
     if normal_map and normal_map.filename:
         nm_bytes = normal_map.file.read()
-        nm_ext   = "png" if normal_map.content_type == "image/png" else "jpg"
-        nm_key   = storage.material_key(material.id, f"normal.{nm_ext}")
+        nm_ext = "png" if normal_map.content_type == "image/png" else "jpg"
+        nm_key = storage.material_key(material.id, f"normal.{nm_ext}")
         normal_url = storage.upload(
-            data         = nm_bytes,
-            key          = nm_key,
-            content_type = normal_map.content_type or "image/png",
-            public       = True,
+            data=nm_bytes,
+            key=nm_key,
+            content_type=normal_map.content_type or "image/png",
+            public=True,
         )
         material.normal_map_url = normal_url
 
@@ -357,8 +361,8 @@ def create_material(
     db.refresh(material)
 
     return MaterialUploadResponse(
-        material       = MaterialResponse.model_validate(material),
-        tiling_report  = tiling_report,
+        material=MaterialResponse.model_validate(material),
+        tiling_report=tiling_report,
     )
 
 

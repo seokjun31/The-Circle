@@ -28,6 +28,7 @@ class ProjectResponse(BaseModel):
 
 class ProjectDetailResponse(ProjectResponse):
     """Project with all layers included."""
+
     layers: List[EditLayerResponse] = []
 
 
@@ -43,7 +44,8 @@ class ProjectListResponse(BaseModel):
 
 class PresignResponse(BaseModel):
     """Response for presigned S3 upload URL."""
+
     project_id: int
-    upload_url: str           # presigned PUT URL
-    s3_key: str               # S3 object key (for confirm step)
-    expires_in: int = 3600    # URL validity in seconds
+    upload_url: str  # presigned PUT URL
+    s3_key: str  # S3 object key (for confirm step)
+    expires_in: int = 3600  # URL validity in seconds

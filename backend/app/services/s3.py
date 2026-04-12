@@ -10,6 +10,7 @@ S3 path convention:
   users/{user_id}/projects/{project_id}/thumbnail.jpg
   materials/{material_id}/tile.png
 """
+
 import logging
 import time
 from pathlib import Path
@@ -81,7 +82,10 @@ class StorageService:
                 if attempt < _S3_UPLOAD_MAX_RETRIES:
                     logger.warning(
                         "S3 upload failed (attempt %d/%d): %s — retrying in %ds",
-                        attempt, _S3_UPLOAD_MAX_RETRIES, exc, backoff,
+                        attempt,
+                        _S3_UPLOAD_MAX_RETRIES,
+                        exc,
+                        backoff,
                     )
                     time.sleep(backoff)
                     backoff *= 2

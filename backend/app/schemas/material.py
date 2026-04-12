@@ -94,25 +94,29 @@ class MaterialListResponse(BaseModel):
 
 class MaterialTilingReport(BaseModel):
     """Result of the seamless-tiling validation check."""
+
     verdict: Literal["pass", "warn", "fail"]
-    mean_diff: float              # mean absolute colour diff at seams (0–255)
-    vertical_seam_diff: float     # diff at left↔right boundary
-    horizontal_seam_diff: float   # diff at top↔bottom boundary
-    message: str                  # human-readable verdict
+    mean_diff: float  # mean absolute colour diff at seams (0–255)
+    vertical_seam_diff: float  # diff at left↔right boundary
+    horizontal_seam_diff: float  # diff at top↔bottom boundary
+    message: str  # human-readable verdict
     width_px: int
     height_px: int
 
 
 class MaterialUploadResponse(BaseModel):
     """Returned by POST /materials (admin upload endpoint)."""
+
     material: MaterialResponse
     tiling_report: MaterialTilingReport
 
 
 # ── Claude Vision 프롬프트 자동 생성 ──────────────────────────────────────────
 
+
 class MaterialGeneratePromptsRequest(BaseModel):
     """POST /materials/generate-prompts 요청 바디."""
+
     image_url: str = Field(
         description="분석할 자재 타일 이미지 URL (S3 URL 또는 공개 HTTP URL)",
     )
@@ -128,6 +132,7 @@ class MaterialGeneratePromptsRequest(BaseModel):
 
 class MaterialGeneratePromptsResponse(BaseModel):
     """POST /materials/generate-prompts 응답 바디."""
+
     positive_prompt: str = Field(
         description="자재에 최적화된 ComfyUI 긍정 프롬프트",
     )

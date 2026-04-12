@@ -46,26 +46,28 @@ from app.services.s3 import storage
 logger = logging.getLogger("the_circle.lighting")
 
 CREDITS_PER_LIGHTING = 1
-_LIGHTING_TIMEOUT_S  = 90
+_LIGHTING_TIMEOUT_S = 90
 
 _LIGHTING_PROMPTS: dict[str, str] = {
     "morning": "bright natural morning light, sun rays through window, warm golden tone, photorealistic",
     "evening": "warm evening ambient light, cozy atmosphere, warm color temperature, soft shadows, photorealistic",
-    "night":   "night time interior, artificial warm lighting, table lamps turned on, cozy ambient, photorealistic",
+    "night": "night time interior, artificial warm lighting, table lamps turned on, cozy ambient, photorealistic",
 }
 
 
 # ── Result type ───────────────────────────────────────────────────────────────
 
+
 @dataclass
 class LightingResult:
     result_url: str
-    layer_id:   int
-    elapsed_s:  float
-    lighting:   str
+    layer_id: int
+    elapsed_s: float
+    lighting: str
 
 
 # ── Image helpers ─────────────────────────────────────────────────────────────
+
 
 def _load_pil(url: str) -> Image.Image:
     resp = httpx.get(url, timeout=20, follow_redirects=True)
@@ -88,7 +90,8 @@ def _composite_layers(original_url: str, layers: list[EditLayer]) -> Image.Image
 
     # Style layers → replace base
     style_layers = [
-        layer for layer in layers
+        layer
+        for layer in layers
         if layer.layer_type == LayerType.style and layer.result_image_url
     ]
     if style_layers:
@@ -104,7 +107,7 @@ def _composite_layers(original_url: str, layers: list[EditLayer]) -> Image.Image
             continue
         try:
             mat_result = _load_pil(layer.result_image_url).convert("RGBA")
-            mask_img   = _load_pil(mask_url).convert("L")
+            mask_img = _load_pil(mask_url).convert("L")
             if mat_result.size != base.size:
                 mat_result = mat_result.resize(base.size, Image.LANCZOS)
             if mask_img.size != base.size:
@@ -150,20 +153,21 @@ def _composite_layers(original_url: str, layers: list[EditLayer]) -> Image.Image
 
 # ── Service ───────────────────────────────────────────────────────────────────
 
+
 class LightingService:
     """Apply a lighting preset to the current room state."""
 
     def __init__(self) -> None:
-        self._wm     = WorkflowManager()
+        self._wm = WorkflowManager()
         self._runpod = get_comfyui_client()
 
     async def apply_lighting(
         self,
         project_id: int,
-        user_id:    int,
-        db:         Session,
-        lighting:   str   = "morning",
-        strength:   float = 0.35,
+        user_id: int,
+        db: Session,
+        lighting: str = "morning",
+        strength: float = 0.35,
     ) -> LightingResult:
         """
         Apply a lighting atmosphere to the composited room image.
@@ -191,10 +195,14 @@ class LightingService:
             )
 
         # ── 1. Load project ───────────────────────────────────────────────────
-        project = db.query(Project).filter(
-            Project.id == project_id,
-            Project.user_id == user_id,
-        ).first()
+        project = (
+            db.query(Project)
+            .filter(
+                Project.id == project_id,
+                Project.user_id == user_id,
+            )
+            .first()
+        )
         if not project:
             raise ValueError(f"Project {project_id} not found for user {user_id}")
         if not project.original_image_url:
@@ -202,7 +210,9 @@ class LightingService:
 
         logger.info(
             "lighting START: project=%d lighting=%s strength=%.2f",
-            project_id, lighting, strength,
+            project_id,
+            lighting,
+            strength,
         )
 
         # ── 2. Composite visible layers ───────────────────────────────────────
@@ -229,9 +239,9 @@ class LightingService:
         # ── 3. Build ComfyUI workflow ─────────────────────────────────────────
         lighting_prompt = _LIGHTING_PROMPTS[lighting]
         workflow = await self._wm.build_lighting_workflow(
-            image_url = composite_b64,
-            lighting  = lighting_prompt,
-            denoise   = strength,
+            image_url=composite_b64,
+            lighting=lighting_prompt,
+            denoise=strength,
         )
 
         # ── 4. Submit to RunPod ───────────────────────────────────────────────
@@ -240,9 +250,9 @@ class LightingService:
 
         try:
             output = await self._runpod.run_async(
-                workflow      = workflow,
-                timeout       = _LIGHTING_TIMEOUT_S,
-                upload_result = False,
+                workflow=workflow,
+                timeout=_LIGHTING_TIMEOUT_S,
+                upload_result=False,
             )
         except RunPodError:
             _set_project_status(db, project_id, ProjectStatus.error)
@@ -261,29 +271,30 @@ class LightingService:
             raise ValueError(f"RunPod 결과 base64 디코딩 실패: {exc}") from exc
 
         result_key = storage.project_key(
-            user_id, project_id,
+            user_id,
+            project_id,
             f"results/lighting_{lighting}_{uuid.uuid4().hex[:8]}.jpg",
         )
         result_url = storage.upload(
-            data         = result_bytes,
-            key          = result_key,
-            content_type = "image/jpeg",
-            public       = True,
+            data=result_bytes,
+            key=result_key,
+            content_type="image/jpeg",
+            public=True,
         )
 
         # ── 6. Create EditLayer ───────────────────────────────────────────────
         layer = EditLayer(
-            project_id       = project_id,
-            layer_type       = LayerType.style,
-            parameters       = {
-                "source":   "lighting",
+            project_id=project_id,
+            layer_type=LayerType.style,
+            parameters={
+                "source": "lighting",
                 "lighting": lighting,
                 "strength": strength,
                 "result_url": result_url,
             },
-            result_image_url = result_url,
-            is_visible       = True,
-            order            = 0,
+            result_image_url=result_url,
+            is_visible=True,
+            order=0,
         )
         db.add(layer)
         project.status = ProjectStatus.completed
@@ -293,31 +304,35 @@ class LightingService:
         elapsed = round(time.monotonic() - t_start, 2)
         logger.info(
             "lighting DONE: project=%d layer=%d lighting=%s elapsed=%.1fs",
-            project_id, layer.id, lighting, elapsed,
+            project_id,
+            layer.id,
+            lighting,
+            elapsed,
         )
 
         return LightingResult(
-            result_url = result_url,
-            layer_id   = layer.id,
-            elapsed_s  = elapsed,
-            lighting   = lighting,
+            result_url=result_url,
+            layer_id=layer.id,
+            elapsed_s=elapsed,
+            lighting=lighting,
         )
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _set_project_status(db: Session, project_id: int, status: ProjectStatus) -> None:
     """Update project status using direct SQL to avoid ORM lazy-load issues."""
     try:
         db.rollback()
         db.execute(
-            sa_update(Project)
-            .where(Project.id == project_id)
-            .values(status=status)
+            sa_update(Project).where(Project.id == project_id).values(status=status)
         )
         db.commit()
     except Exception as exc:
-        logger.error("Failed to set project %d status to %s: %s", project_id, status, exc)
+        logger.error(
+            "Failed to set project %d status to %s: %s", project_id, status, exc
+        )
         try:
             db.rollback()
         except Exception:

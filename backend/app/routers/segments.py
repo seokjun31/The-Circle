@@ -47,6 +47,7 @@ _ENCODER_MODEL_PATH = os.getenv(
 # ── Lazy-loaded ONNX session ──────────────────────────────────────────────────
 _ort_session = None
 
+
 def _get_encoder_session():
     """Load the ONNX encoder session once (lazy singleton)."""
     global _ort_session
@@ -55,6 +56,7 @@ def _get_encoder_session():
 
     try:
         import onnxruntime as ort
+
         providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
         _ort_session = ort.InferenceSession(_ENCODER_MODEL_PATH, providers=providers)
         logger.info("SAM encoder ONNX session loaded from %s", _ENCODER_MODEL_PATH)
@@ -69,9 +71,9 @@ def _get_encoder_session():
 
 # ── SAM image pre-processing (mirrors samUtils.js) ────────────────────────────
 
-_SAM_SIZE   = 1024
-_PIXEL_MEAN = np.array([123.675, 116.28,  103.53], dtype=np.float32)
-_PIXEL_STD  = np.array([ 58.395,  57.12,   57.375], dtype=np.float32)
+_SAM_SIZE = 1024
+_PIXEL_MEAN = np.array([123.675, 116.28, 103.53], dtype=np.float32)
+_PIXEL_STD = np.array([58.395, 57.12, 57.375], dtype=np.float32)
 
 
 def _preprocess_image(pil_image: Image.Image) -> np.ndarray:
@@ -80,32 +82,35 @@ def _preprocess_image(pil_image: Image.Image) -> np.ndarray:
     Returns a float32 numpy array of shape [1, 3, 1024, 1024].
     """
     orig_w, orig_h = pil_image.size
-    scale   = _SAM_SIZE / max(orig_h, orig_w)
-    new_w   = round(orig_w * scale)
-    new_h   = round(orig_h * scale)
+    scale = _SAM_SIZE / max(orig_h, orig_w)
+    new_w = round(orig_w * scale)
+    new_h = round(orig_h * scale)
 
     # Letterbox canvas filled with mean colour
-    canvas = Image.new("RGB", (_SAM_SIZE, _SAM_SIZE), tuple(_PIXEL_MEAN.astype(np.uint8)))
+    canvas = Image.new(
+        "RGB", (_SAM_SIZE, _SAM_SIZE), tuple(_PIXEL_MEAN.astype(np.uint8))
+    )
     resized = pil_image.convert("RGB").resize((new_w, new_h), Image.LANCZOS)
     canvas.paste(resized, (0, 0))
 
     arr = np.array(canvas, dtype=np.float32)  # [H, W, 3]
-    arr = (arr - _PIXEL_MEAN) / _PIXEL_STD    # normalise
-    arr = arr.transpose(2, 0, 1)              # HWC → CHW
-    return arr[np.newaxis, :, :, :]            # [1, 3, H, W]
+    arr = (arr - _PIXEL_MEAN) / _PIXEL_STD  # normalise
+    arr = arr.transpose(2, 0, 1)  # HWC → CHW
+    return arr[np.newaxis, :, :, :]  # [1, 3, H, W]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Schemas
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class EncodeRequest(BaseModel):
     image_base64: str = Field(..., description="Base64-encoded JPEG or PNG image")
 
 
 class EmbeddingPayload(BaseModel):
-    data: str          # base64-encoded float32 bytes
-    dims: list[int]    # [1, 256, 64, 64]
+    data: str  # base64-encoded float32 bytes
+    dims: list[int]  # [1, 256, 64, 64]
     type: str = "float32"
 
 
@@ -114,11 +119,11 @@ class EncodeResponse(BaseModel):
 
 
 class SaveMaskResponse(BaseModel):
-    mask_id:          str
-    layer_id:         int
-    mask_url:         str
-    label:            str
-    area_percentage:  float
+    mask_id: str
+    layer_id: int
+    mask_url: str
+    label: str
+    area_percentage: float
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -129,6 +134,7 @@ router = APIRouter(tags=["Segmentation"])
 
 
 # ── POST /segment/encode — server-side SAM encoder ────────────────────────────
+
 
 @router.post(
     "/segment/encode",
@@ -152,7 +158,7 @@ def encode_image(
     # 1. Decode base64 → PIL Image
     try:
         img_bytes = base64.b64decode(body.image_base64)
-        pil_img   = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+        pil_img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -178,8 +184,8 @@ def encode_image(
         ) from exc
 
     # 4. Serialise: float32 → bytes → base64
-    emb_bytes  = embedding.astype(np.float32).tobytes()
-    emb_b64    = base64.b64encode(emb_bytes).decode("ascii")
+    emb_bytes = embedding.astype(np.float32).tobytes()
+    emb_b64 = base64.b64encode(emb_bytes).decode("ascii")
 
     return EncodeResponse(
         embedding=EmbeddingPayload(
@@ -191,6 +197,7 @@ def encode_image(
 
 # ── POST /projects/{project_id}/masks — save confirmed mask ───────────────────
 
+
 @router.post(
     "/projects/{project_id}/masks",
     response_model=SaveMaskResponse,
@@ -199,12 +206,19 @@ def encode_image(
 )
 async def save_mask(
     project_id: int,
-    mask_image:   UploadFile        = File(..., description="Binary mask PNG (white=selected, black=background)"),
-    label:        str               = Form("wall", description="Machine label ID: wall|floor|ceiling|door|window|molding|custom"),
-    custom_label: Optional[str]     = Form(None,   description="Free-text label when label=='custom'"),
-    layer_order:  int               = Form(0),
-    db:           Session           = Depends(get_db),
-    current_user: User              = Depends(get_current_user),
+    mask_image: UploadFile = File(
+        ..., description="Binary mask PNG (white=selected, black=background)"
+    ),
+    label: str = Form(
+        "wall",
+        description="Machine label ID: wall|floor|ceiling|door|window|molding|custom",
+    ),
+    custom_label: Optional[str] = Form(
+        None, description="Free-text label when label=='custom'"
+    ),
+    layer_order: int = Form(0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Save a SAM-generated mask PNG for a project.
@@ -221,10 +235,14 @@ async def save_mask(
     The mask_url is used by material-apply (Phase 4) and final-render (Phase 7).
     """
     # ── 1. Ownership check ─────────────────────────────────────────────────
-    project: Optional[Project] = db.query(Project).filter(
-        Project.id == project_id,
-        Project.user_id == current_user.id,
-    ).first()
+    project: Optional[Project] = (
+        db.query(Project)
+        .filter(
+            Project.id == project_id,
+            Project.user_id == current_user.id,
+        )
+        .first()
+    )
 
     if not project:
         raise HTTPException(
@@ -248,7 +266,7 @@ async def save_mask(
         with Image.open(io.BytesIO(mask_bytes)) as pil_img:
             arr = np.array(pil_img.convert("L"), dtype=np.uint8)
             selected = int(np.sum(arr > 127))
-            total    = arr.size
+            total = arr.size
             area_percentage = round(selected / total * 100, 2) if total > 0 else 0.0
     except Exception as exc:
         raise HTTPException(
@@ -257,12 +275,10 @@ async def save_mask(
         ) from exc
 
     # ── 3. Upload to S3 / local ─────────────────────────────────────────────
-    mask_uuid     = uuid.uuid4().hex
-    mask_id       = f"mask_{mask_uuid}"
+    mask_uuid = uuid.uuid4().hex
+    mask_id = f"mask_{mask_uuid}"
     mask_filename = f"{mask_id}.png"
-    s3_key = storage.project_key(
-        current_user.id, project_id, f"masks/{mask_filename}"
-    )
+    s3_key = storage.project_key(current_user.id, project_id, f"masks/{mask_filename}")
     try:
         mask_url = storage.upload(
             data=mask_bytes,
@@ -281,34 +297,36 @@ async def save_mask(
     # Accepts all 7 SegmentLabel machine IDs and legacy Korean display strings.
     label_map = {
         # Machine IDs (SegmentLabel.js)
-        "wall":    LayerType.wall,
-        "floor":   LayerType.floor,
+        "wall": LayerType.wall,
+        "floor": LayerType.floor,
         "ceiling": LayerType.ceiling,
-        "door":    LayerType.style,
-        "window":  LayerType.style,
+        "door": LayerType.style,
+        "window": LayerType.style,
         "molding": LayerType.style,
-        "custom":  LayerType.style,
+        "custom": LayerType.style,
         # Korean display strings (backwards-compatibility)
-        "벽":  LayerType.wall,
+        "벽": LayerType.wall,
         "바닥": LayerType.floor,
         "천장": LayerType.ceiling,
     }
     layer_type = label_map.get(label, LayerType.style)
 
     # Display label: custom text or machine ID
-    display_label = custom_label.strip() if label == "custom" and custom_label else label
+    display_label = (
+        custom_label.strip() if label == "custom" and custom_label else label
+    )
 
     # ── 5. Persist EditLayer ────────────────────────────────────────────────
     layer = EditLayer(
         project_id=project_id,
         layer_type=layer_type,
         parameters={
-            "mask_id":          mask_id,
-            "mask_url":         mask_url,
-            "label":            label,
-            "display_label":    display_label,
-            "area_percentage":  area_percentage,
-            "source":           "sam_browser",
+            "mask_id": mask_id,
+            "mask_url": mask_url,
+            "label": label,
+            "display_label": display_label,
+            "area_percentage": area_percentage,
+            "source": "sam_browser",
         },
         result_image_url=None,
         is_visible=True,
@@ -320,7 +338,11 @@ async def save_mask(
 
     logger.info(
         "Mask saved: project_id=%d layer_id=%d label=%s area=%.1f%% url=%s",
-        project_id, layer.id, label, area_percentage, mask_url,
+        project_id,
+        layer.id,
+        label,
+        area_percentage,
+        mask_url,
     )
 
     return SaveMaskResponse(

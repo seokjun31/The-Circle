@@ -3,6 +3,7 @@ The Circle — FastAPI Backend (Phase 1)
 
 Entry point: uvicorn app.main:app --reload
 """
+
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -13,7 +14,19 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
-from app.routers import auth, credits, full_render, furniture, lighting, materials, mood, projects, room_analysis, segments
+from app.routers import (
+    auth,
+    credits,
+    full_render,
+    furniture,
+    lighting,
+    materials,
+    mood,
+    projects,
+    room_analysis,
+    segments,
+)
+
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
 @asynccontextmanager
@@ -54,17 +67,18 @@ app.mount("/uploads", StaticFiles(directory=str(_upload_path)), name="uploads")
 # ── Routers ───────────────────────────────────────────────────────────────────
 API_PREFIX = "/api/v1"
 
-app.include_router(auth.router,      prefix=API_PREFIX)
-app.include_router(projects.router,  prefix=API_PREFIX)
+app.include_router(auth.router, prefix=API_PREFIX)
+app.include_router(projects.router, prefix=API_PREFIX)
 app.include_router(materials.router, prefix=API_PREFIX)
-app.include_router(credits.router,   prefix=API_PREFIX)
-app.include_router(segments.router,      prefix=API_PREFIX)
-app.include_router(mood.router,          prefix=API_PREFIX)
-app.include_router(lighting.router,      prefix=API_PREFIX)
-app.include_router(furniture.router,     prefix=API_PREFIX)
+app.include_router(credits.router, prefix=API_PREFIX)
+app.include_router(segments.router, prefix=API_PREFIX)
+app.include_router(mood.router, prefix=API_PREFIX)
+app.include_router(lighting.router, prefix=API_PREFIX)
+app.include_router(furniture.router, prefix=API_PREFIX)
 app.include_router(furniture.place_router, prefix=API_PREFIX)
-app.include_router(full_render.router,    prefix=API_PREFIX)
+app.include_router(full_render.router, prefix=API_PREFIX)
 app.include_router(room_analysis.router, prefix=API_PREFIX)
+
 
 # ── Unified error handlers ────────────────────────────────────────────────────
 @app.exception_handler(RequestValidationError)
@@ -72,7 +86,9 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
     """Flatten Pydantic validation errors into a consistent shape."""
     errors = [
         {
-            "field": ".".join(str(loc) for loc in err["loc"][1:]) if len(err["loc"]) > 1 else "body",
+            "field": ".".join(str(loc) for loc in err["loc"][1:])
+            if len(err["loc"]) > 1
+            else "body",
             "message": err["msg"],
             "type": err["type"],
         }
@@ -94,6 +110,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     """Catch-all for unexpected errors — never leak stack traces in production."""
     if settings.DEBUG:
         import traceback
+
         detail = traceback.format_exc()
     else:
         detail = "서버 내부 오류가 발생했습니다."

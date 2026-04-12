@@ -41,7 +41,9 @@ class Furniture(Base):
     depth_cm: Mapped[float | None] = mapped_column(Float)
 
     # S3 URLs
-    image_url: Mapped[str | None] = mapped_column(String(2048))       # background-removed PNG
+    image_url: Mapped[str | None] = mapped_column(
+        String(2048)
+    )  # background-removed PNG
     thumbnail_url: Mapped[str | None] = mapped_column(String(2048))
 
     # Metadata for search / filtering

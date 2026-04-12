@@ -22,9 +22,7 @@ def render_image(self, project_id: int, payload: dict) -> dict:
             # Mock 모드: 실제 RunPod 없이 반환
             return {"status": "mock", "project_id": project_id}
 
-        endpoint_url = (
-            f"https://api.runpod.io/v2/{settings.RUNPOD_ENDPOINT_ID}/run"
-        )
+        endpoint_url = f"https://api.runpod.io/v2/{settings.RUNPOD_ENDPOINT_ID}/run"
         headers = {"Authorization": f"Bearer {settings.RUNPOD_API_KEY}"}
 
         with httpx.Client(timeout=settings.RUNPOD_TIMEOUT_FINAL_RENDER) as client:

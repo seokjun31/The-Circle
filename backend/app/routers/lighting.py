@@ -3,6 +3,7 @@ Lighting — 조명 변환 API
 
 POST /api/v1/projects/{id}/lighting  — 조명 프리셋으로 방 분위기 조정
 """
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import update as sa_update
@@ -21,6 +22,7 @@ router = APIRouter(tags=["Lighting"])
 #  POST /projects/{id}/lighting
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class LightingRequest(BaseModel):
     lighting: str = Field(
         "morning",
@@ -35,11 +37,11 @@ class LightingRequest(BaseModel):
 
 
 class LightingResponse(BaseModel):
-    result_url:        str
-    layer_id:          int
-    elapsed_s:         float
-    lighting:          str
-    credits_used:      int
+    result_url: str
+    layer_id: int
+    elapsed_s: float
+    lighting: str
+    credits_used: int
     remaining_balance: int
 
 
@@ -49,10 +51,10 @@ class LightingResponse(BaseModel):
     summary="조명 변환 — 조명 프리셋으로 방 분위기 조정",
 )
 async def apply_lighting(
-    project_id:   int,
-    body:         LightingRequest,
-    db:           Session = Depends(get_db),
-    current_user: User    = Depends(get_current_user),
+    project_id: int,
+    body: LightingRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Apply a lighting atmosphere (morning / evening / night) to the current room state.
@@ -74,8 +76,8 @@ async def apply_lighting(
                     f"크레딧이 부족합니다. "
                     f"(잔액: {current_user.credit_balance}, 필요: {CREDITS_PER_LIGHTING})"
                 ),
-                "code":     "INSUFFICIENT_CREDITS",
-                "balance":  current_user.credit_balance,
+                "code": "INSUFFICIENT_CREDITS",
+                "balance": current_user.credit_balance,
                 "required": CREDITS_PER_LIGHTING,
             },
         )
@@ -87,11 +89,11 @@ async def apply_lighting(
 
     try:
         result = await lighting_service.apply_lighting(
-            project_id = project_id,
-            user_id    = user_id,
-            db         = db,
-            lighting   = body.lighting,
-            strength   = body.strength,
+            project_id=project_id,
+            user_id=user_id,
+            db=db,
+            lighting=body.lighting,
+            strength=body.strength,
         )
     except ValueError as exc:
         _refund_credits(db, user_id, CREDITS_PER_LIGHTING)
@@ -103,7 +105,7 @@ async def apply_lighting(
         _refund_credits(db, user_id, CREDITS_PER_LIGHTING)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={"message": f"AI 처리 실패: {exc}", "code": "RUNPOD_ERROR"},
+            detail={"message": f"AI 처리 실패: {exc}", "code": "COMFYUI_ERROR"},
         ) from exc
     except Exception as exc:
         _refund_credits(db, user_id, CREDITS_PER_LIGHTING)
@@ -114,16 +116,17 @@ async def apply_lighting(
 
     db.refresh(current_user)
     return LightingResponse(
-        result_url        = result.result_url,
-        layer_id          = result.layer_id,
-        elapsed_s         = result.elapsed_s,
-        lighting          = result.lighting,
-        credits_used      = CREDITS_PER_LIGHTING,
-        remaining_balance = current_user.credit_balance,
+        result_url=result.result_url,
+        layer_id=result.layer_id,
+        elapsed_s=result.elapsed_s,
+        lighting=result.lighting,
+        credits_used=CREDITS_PER_LIGHTING,
+        remaining_balance=current_user.credit_balance,
     )
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _refund_credits(db: Session, user_id: int, amount: int) -> None:
     """Refund credits using direct SQL to avoid ORM lazy-load issues."""

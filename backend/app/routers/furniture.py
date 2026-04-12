@@ -7,6 +7,7 @@ POST /api/v1/furniture                         — 가구 등록 (관리자)
 POST /api/v1/furniture/upload-image            — 커스텀 가구 이미지 업로드 (일반 사용자)
 POST /api/v1/projects/{id}/place-furniture     — AI 가구 배치 + 블렌딩
 """
+
 from __future__ import annotations
 
 import math
@@ -35,18 +36,19 @@ from app.services.s3 import storage
 router = APIRouter(prefix="/furniture", tags=["Furniture"])
 
 _PAGE_SIZE_DEFAULT = 20
-_PAGE_SIZE_MAX     = 100
+_PAGE_SIZE_MAX = 100
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  GET /furniture — list with filters
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class FurnitureListResponse(BaseModel):
-    items:       list[FurnitureResponse]
-    total:       int
-    page:        int
-    page_size:   int
+    items: list[FurnitureResponse]
+    total: int
+    page: int
+    page_size: int
     total_pages: int
 
 
@@ -56,15 +58,15 @@ class FurnitureListResponse(BaseModel):
     summary="가구 목록 조회 (카테고리/검색 필터)",
 )
 def list_furniture(
-    category:  Optional[str] = None,
-    style:     Optional[str] = None,
-    search:    Optional[str] = None,
-    page:      int           = 1,
-    page_size: int           = _PAGE_SIZE_DEFAULT,
-    db:        Session       = Depends(get_db),
+    category: Optional[str] = None,
+    style: Optional[str] = None,
+    search: Optional[str] = None,
+    page: int = 1,
+    page_size: int = _PAGE_SIZE_DEFAULT,
+    db: Session = Depends(get_db),
 ):
     page_size = min(page_size, _PAGE_SIZE_MAX)
-    offset    = (page - 1) * page_size
+    offset = (page - 1) * page_size
 
     q = db.query(Furniture)
     if category:
@@ -81,24 +83,29 @@ def list_furniture(
     if search:
         term = f"%{search}%"
         q = q.filter(
-            Furniture.name.ilike(term) | Furniture.brand.ilike(term) | Furniture.product_name.ilike(term)
+            Furniture.name.ilike(term)
+            | Furniture.brand.ilike(term)
+            | Furniture.product_name.ilike(term)
         )
 
     total = q.count()
-    items = q.order_by(Furniture.created_at.desc()).offset(offset).limit(page_size).all()
+    items = (
+        q.order_by(Furniture.created_at.desc()).offset(offset).limit(page_size).all()
+    )
 
     return FurnitureListResponse(
-        items       = items,
-        total       = total,
-        page        = page,
-        page_size   = page_size,
-        total_pages = math.ceil(total / page_size) if total else 1,
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=math.ceil(total / page_size) if total else 1,
     )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  GET /furniture/{id}
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 @router.get(
     "/{furniture_id}",
@@ -122,6 +129,7 @@ def get_furniture(
 #  POST /furniture — admin create
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 @router.post(
     "",
     response_model=FurnitureResponse,
@@ -130,13 +138,16 @@ def get_furniture(
 )
 def create_furniture(
     body: FurnitureCreateRequest,
-    db:   Session = Depends(get_db),
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     if not current_user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail={"message": "관리자만 가구를 등록할 수 있습니다.", "code": "FORBIDDEN"},
+            detail={
+                "message": "관리자만 가구를 등록할 수 있습니다.",
+                "code": "FORBIDDEN",
+            },
         )
     furn = Furniture(**body.model_dump())
     db.add(furn)
@@ -149,9 +160,10 @@ def create_furniture(
 #  POST /furniture/remove-bg — rembg background removal
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class RemoveBgResponse(BaseModel):
-    url:       str
-    width_px:  int
+    url: str
+    width_px: int
     height_px: int
 
 
@@ -176,11 +188,15 @@ def remove_furniture_bg(
     if len(raw) > 10 * 1024 * 1024:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail={"message": "파일 크기는 10 MB 이하여야 합니다.", "code": "FILE_TOO_LARGE"},
+            detail={
+                "message": "파일 크기는 10 MB 이하여야 합니다.",
+                "code": "FILE_TOO_LARGE",
+            },
         )
 
     try:
         from rembg import remove as rembg_remove
+
         output_bytes = rembg_remove(raw)
     except Exception as exc:
         raise HTTPException(
@@ -196,10 +212,10 @@ def remove_furniture_bg(
 
     key = f"users/{current_user.id}/furniture_rembg/{uuid.uuid4().hex}.png"
     url = storage.upload(
-        data         = output_bytes,
-        key          = key,
-        content_type = "image/png",
-        public       = True,
+        data=output_bytes,
+        key=key,
+        content_type="image/png",
+        public=True,
     )
 
     return RemoveBgResponse(url=url, width_px=w, height_px=h)
@@ -209,11 +225,12 @@ def remove_furniture_bg(
 #  POST /furniture/upload-image — upload custom furniture PNG
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class FurnitureUploadResponse(BaseModel):
     furniture_image_url: str
-    width_px:            int
-    height_px:           int
-    file_size_kb:        float
+    width_px: int
+    height_px: int
+    file_size_kb: float
 
 
 @router.post(
@@ -224,7 +241,7 @@ class FurnitureUploadResponse(BaseModel):
 )
 def upload_furniture_image(
     file: UploadFile = File(..., description="배경 제거된 PNG 이미지, 최대 10 MB"),
-    db:   Session    = Depends(get_db),
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -233,14 +250,17 @@ def upload_furniture_image(
 
     The image is NOT saved to the furniture catalog — it is ephemeral.
     """
-    raw          = file.file.read()
+    raw = file.file.read()
     content_type = file.content_type or ""
 
     # Size check (10 MB)
     if len(raw) > 10 * 1024 * 1024:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail={"message": "파일 크기는 10 MB 이하여야 합니다.", "code": "FILE_TOO_LARGE"},
+            detail={
+                "message": "파일 크기는 10 MB 이하여야 합니다.",
+                "code": "FILE_TOO_LARGE",
+            },
         )
 
     # Validate format
@@ -255,6 +275,7 @@ def upload_furniture_image(
     # Quick dimension check via Pillow
     from PIL import Image
     import io
+
     try:
         img = Image.open(io.BytesIO(raw))
         w, h = img.size
@@ -263,17 +284,17 @@ def upload_furniture_image(
 
     key = f"users/{current_user.id}/furniture_uploads/{uuid.uuid4().hex}.png"
     url = storage.upload(
-        data         = raw,
-        key          = key,
-        content_type = "image/png",
-        public       = True,
+        data=raw,
+        key=key,
+        content_type="image/png",
+        public=True,
     )
 
     return FurnitureUploadResponse(
-        furniture_image_url = url,
-        width_px            = w,
-        height_px           = h,
-        file_size_kb        = round(len(raw) / 1024, 1),
+        furniture_image_url=url,
+        width_px=w,
+        height_px=h,
+        file_size_kb=round(len(raw) / 1024, 1),
     )
 
 
@@ -289,34 +310,48 @@ place_router = APIRouter(tags=["Furniture"])
 
 class PlaceFurnitureRequest(BaseModel):
     # Furniture source — provide one
-    furniture_id:         Optional[int]   = Field(None, description="DB 가구 ID")
-    furniture_image_url:  Optional[str]   = Field(None, description="업로드된 가구 이미지 URL (upload-image 반환값)")
+    furniture_id: Optional[int] = Field(None, description="DB 가구 ID")
+    furniture_image_url: Optional[str] = Field(
+        None, description="업로드된 가구 이미지 URL (upload-image 반환값)"
+    )
 
     # Physical dimensions (cm)
-    furniture_width_cm:   Optional[float] = Field(None, gt=0, description="가구 실제 너비(cm)")
-    furniture_height_cm:  Optional[float] = Field(None, gt=0, description="가구 실제 높이(cm)")
-    space_width_cm:       Optional[float] = Field(None, gt=0, description="배치할 공간 너비(cm) — 적합성 판단용")
+    furniture_width_cm: Optional[float] = Field(
+        None, gt=0, description="가구 실제 너비(cm)"
+    )
+    furniture_height_cm: Optional[float] = Field(
+        None, gt=0, description="가구 실제 높이(cm)"
+    )
+    space_width_cm: Optional[float] = Field(
+        None, gt=0, description="배치할 공간 너비(cm) — 적합성 판단용"
+    )
 
     # Placement in original-image pixels
-    position_x:           int   = Field(0, ge=0, description="가구 좌상단 X 좌표 (원본 이미지 픽셀)")
-    position_y:           int   = Field(0, ge=0, description="가구 좌상단 Y 좌표 (원본 이미지 픽셀)")
-    target_width_px:      int   = Field(200, ge=10, le=4096, description="합성 이미지 내 가구 너비(px)")
+    position_x: int = Field(
+        0, ge=0, description="가구 좌상단 X 좌표 (원본 이미지 픽셀)"
+    )
+    position_y: int = Field(
+        0, ge=0, description="가구 좌상단 Y 좌표 (원본 이미지 픽셀)"
+    )
+    target_width_px: int = Field(
+        200, ge=10, le=4096, description="합성 이미지 내 가구 너비(px)"
+    )
 
 
 class FitCheckResponse(BaseModel):
-    fits:               bool
+    fits: bool
     furniture_width_cm: float
-    space_width_cm:     float
-    margin_cm:          float
-    category:           str
+    space_width_cm: float
+    margin_cm: float
+    category: str
 
 
 class PlaceFurnitureResponse(BaseModel):
-    result_url:        str
-    layer_id:          int
-    elapsed_s:         float
-    fit_check:         Optional[FitCheckResponse]
-    credits_used:      int
+    result_url: str
+    layer_id: int
+    elapsed_s: float
+    fit_check: Optional[FitCheckResponse]
+    credits_used: int
     remaining_balance: int
 
 
@@ -327,9 +362,9 @@ class PlaceFurnitureResponse(BaseModel):
 )
 async def place_furniture(
     project_id: int,
-    body:       PlaceFurnitureRequest,
-    db:         Session = Depends(get_db),
-    current_user: User  = Depends(get_current_user),
+    body: PlaceFurnitureRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Composite a furniture PNG onto the room image and AI-blend it naturally.
@@ -352,7 +387,10 @@ async def place_furniture(
     if body.furniture_id is None and body.furniture_image_url is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={"message": "furniture_id 또는 furniture_image_url 중 하나를 제공해야 합니다.", "code": "MISSING_FURNITURE"},
+            detail={
+                "message": "furniture_id 또는 furniture_image_url 중 하나를 제공해야 합니다.",
+                "code": "MISSING_FURNITURE",
+            },
         )
 
     _get_owned_project(project_id, current_user, db)
@@ -366,8 +404,8 @@ async def place_furniture(
                     f"크레딧이 부족합니다. "
                     f"(잔액: {current_user.credit_balance}, 필요: {CREDITS_PER_PLACEMENT})"
                 ),
-                "code":     "INSUFFICIENT_CREDITS",
-                "balance":  current_user.credit_balance,
+                "code": "INSUFFICIENT_CREDITS",
+                "balance": current_user.credit_balance,
                 "required": CREDITS_PER_PLACEMENT,
             },
         )
@@ -379,17 +417,17 @@ async def place_furniture(
 
     try:
         result: FurnitureResult = await furniture_service.place_furniture(
-            project_id          = project_id,
-            user_id             = user_id,
-            db                  = db,
-            furniture_id        = body.furniture_id,
-            furniture_image_url = body.furniture_image_url,
-            furniture_width_cm  = body.furniture_width_cm,
-            furniture_height_cm = body.furniture_height_cm,
-            space_width_cm      = body.space_width_cm,
-            position_x          = body.position_x,
-            position_y          = body.position_y,
-            target_width_px     = body.target_width_px,
+            project_id=project_id,
+            user_id=user_id,
+            db=db,
+            furniture_id=body.furniture_id,
+            furniture_image_url=body.furniture_image_url,
+            furniture_width_cm=body.furniture_width_cm,
+            furniture_height_cm=body.furniture_height_cm,
+            space_width_cm=body.space_width_cm,
+            position_x=body.position_x,
+            position_y=body.position_y,
+            target_width_px=body.target_width_px,
         )
     except ValueError as exc:
         _refund_credits(db, user_id, CREDITS_PER_PLACEMENT)
@@ -401,7 +439,7 @@ async def place_furniture(
         _refund_credits(db, user_id, CREDITS_PER_PLACEMENT)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={"message": f"AI 처리 실패: {exc}", "code": "RUNPOD_ERROR"},
+            detail={"message": f"AI 처리 실패: {exc}", "code": "COMFYUI_ERROR"},
         ) from exc
     except Exception as exc:
         _refund_credits(db, user_id, CREDITS_PER_PLACEMENT)
@@ -416,24 +454,25 @@ async def place_furniture(
     if result.fit_check:
         fc = result.fit_check
         fit_resp = FitCheckResponse(
-            fits               = fc.fits,
-            furniture_width_cm = fc.furniture_width_cm,
-            space_width_cm     = fc.space_width_cm,
-            margin_cm          = fc.margin_cm,
-            category           = fc.category,
+            fits=fc.fits,
+            furniture_width_cm=fc.furniture_width_cm,
+            space_width_cm=fc.space_width_cm,
+            margin_cm=fc.margin_cm,
+            category=fc.category,
         )
 
     return PlaceFurnitureResponse(
-        result_url        = result.result_url,
-        layer_id          = result.layer_id,
-        elapsed_s         = result.elapsed_s,
-        fit_check         = fit_resp,
-        credits_used      = CREDITS_PER_PLACEMENT,
-        remaining_balance = current_user.credit_balance,
+        result_url=result.result_url,
+        layer_id=result.layer_id,
+        elapsed_s=result.elapsed_s,
+        fit_check=fit_resp,
+        credits_used=CREDITS_PER_PLACEMENT,
+        remaining_balance=current_user.credit_balance,
     )
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _refund_credits(db: Session, user_id: int, amount: int) -> None:
     """Refund credits using direct SQL to avoid ORM lazy-load issues."""

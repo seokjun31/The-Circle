@@ -4,6 +4,7 @@ POST /api/v1/credits/use       — 기능 실행 전 크레딧 원자적 차감
 GET  /api/v1/credits/history   — 크레딧 거래 내역
 POST /api/v1/credits/purchase  — 크레딧 충전 (PG 연동 전 stub)
 """
+
 import math
 from datetime import datetime, timezone
 
@@ -26,8 +27,8 @@ router = APIRouter(prefix="/credits", tags=["Credits"])
 
 # ── Pricing plans ─────────────────────────────────────────────────────────────
 PLANS = {
-    "basic": {"name": "Basic", "price_krw": 9900,  "credits": 50},
-    "pro":   {"name": "Pro",   "price_krw": 29900, "credits": 200},
+    "basic": {"name": "Basic", "price_krw": 9900, "credits": 50},
+    "pro": {"name": "Pro", "price_krw": 29900, "credits": 200},
 }
 
 
@@ -44,6 +45,7 @@ class CreditPurchaseResponse(BaseModel):
 
 
 # ── GET /balance ──────────────────────────────────────────────────────────────
+
 
 @router.get(
     "/balance",
@@ -77,6 +79,7 @@ def get_balance(
 
 
 # ── POST /use ─────────────────────────────────────────────────────────────────
+
 
 @router.post(
     "/use",
@@ -130,6 +133,7 @@ def use_credits(
 
 # ── GET /history ──────────────────────────────────────────────────────────────
 
+
 @router.get("/history", summary="크레딧 거래 내역")
 def credit_history(
     page: int = 1,
@@ -160,6 +164,7 @@ def credit_history(
 
 
 # ── POST /purchase ────────────────────────────────────────────────────────────
+
 
 @router.post(
     "/purchase",

@@ -53,9 +53,7 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 
 # ── Workflow JSON directory ────────────────────────────────────────────────────
-_WORKFLOWS_DIR = (
-    Path(__file__).parent.parent.parent.parent / "comfyui_workflows"
-)
+_WORKFLOWS_DIR = Path(__file__).parent.parent.parent.parent / "comfyui_workflows"
 
 
 def _load_node_config(json_name: str) -> dict[str, str]:
@@ -87,15 +85,16 @@ def _load_node_config(json_name: str) -> dict[str, str]:
     with open(config_path, encoding="utf-8") as fh:
         return json.load(fh)
 
+
 # ── Model names (must match files on the RunPod Network Volume) ───────────────
-_CKPT_SDXL_BASE    = "sd_xl_base_1.0.safetensors"
+_CKPT_SDXL_BASE = "sd_xl_base_1.0.safetensors"
 _CKPT_SDXL_REFINER = "sdxl_refiner_1.0.safetensors"
-_VAE_SDXL          = "sdxl_vae.safetensors"
-_CLIP_VISION_H     = "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors"
-_IPADAPTER_SDXL    = "IP-Adapter-Plus_SDXL.safetensors"
-_CN_DEPTH_SDXL     = "controlnet-depth-sdxl-1.0.safetensors"
-_CN_CANNY_SDXL     = "controlnet-canny-sdxl-1.0.safetensors"
-_UPSCALER          = "RealESRGAN_x2plus.pth"
+_VAE_SDXL = "sdxl_vae.safetensors"
+_CLIP_VISION_H = "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors"
+_IPADAPTER_SDXL = "IP-Adapter-Plus_SDXL.safetensors"
+_CN_DEPTH_SDXL = "controlnet-depth-sdxl-1.0.safetensors"
+_CN_CANNY_SDXL = "controlnet-canny-sdxl-1.0.safetensors"
+_UPSCALER = "RealESRGAN_x2plus.pth"
 
 # ── Standard negative prompt ──────────────────────────────────────────────────
 _NEGATIVE_BASE = (
@@ -105,15 +104,16 @@ _NEGATIVE_BASE = (
 )
 
 # ── SDXL sizing constants ─────────────────────────────────────────────────────
-_SDXL_TARGET_MP = 1024 * 1024   # 1 megapixel
-_SDXL_BUCKET    = 64            # snap to multiples of this
-_SDXL_MIN       = 512
-_SDXL_MAX       = 1536
+_SDXL_TARGET_MP = 1024 * 1024  # 1 megapixel
+_SDXL_BUCKET = 64  # snap to multiples of this
+_SDXL_MIN = 512
+_SDXL_MAX = 1536
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Utilities
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 def _rand_seed() -> int:
     return random.randint(0, 2**32 - 1)
@@ -141,7 +141,8 @@ def _ensure_base64(image: Union[str, bytes]) -> str:
         if image.startswith("/uploads/"):
             # Local storage URL  →  read from LOCAL_UPLOAD_DIR on disk
             from app.config import settings  # lazy import to avoid circular deps
-            file_path = Path(settings.LOCAL_UPLOAD_DIR) / image[len("/uploads/"):]
+
+            file_path = Path(settings.LOCAL_UPLOAD_DIR) / image[len("/uploads/") :]
             with open(file_path, "rb") as fh:
                 return base64.b64encode(fh.read()).decode("utf-8")
         return image  # assume raw base-64
@@ -158,6 +159,7 @@ def _image_size_from_b64(image_b64: str) -> tuple[int, int]:
 # ═══════════════════════════════════════════════════════════════════════════════
 #  WorkflowManager
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class WorkflowManager:
     """
@@ -224,12 +226,11 @@ class WorkflowManager:
                 if node_id in optional_nodes:
                     logger.debug(
                         "Optional node '%s' not found in workflow '%s' — skipping",
-                        node_id, json_name,
+                        node_id,
+                        json_name,
                     )
                     continue
-                raise KeyError(
-                    f"Node '{node_id}' not found in workflow '{json_name}'"
-                )
+                raise KeyError(f"Node '{node_id}' not found in workflow '{json_name}'")
             workflow[node_id]["inputs"].update(fields)
 
         return workflow
@@ -257,12 +258,12 @@ class WorkflowManager:
             ``(new_w, new_h)`` aligned to 64 px, clamped to [512, 1536].
         """
         aspect = w / h
-        new_h  = math.sqrt(_SDXL_TARGET_MP / aspect)
-        new_w  = _SDXL_TARGET_MP / new_h
-        new_w  = round(new_w / _SDXL_BUCKET) * _SDXL_BUCKET
-        new_h  = round(new_h / _SDXL_BUCKET) * _SDXL_BUCKET
-        new_w  = int(max(_SDXL_MIN, min(_SDXL_MAX, new_w)))
-        new_h  = int(max(_SDXL_MIN, min(_SDXL_MAX, new_h)))
+        new_h = math.sqrt(_SDXL_TARGET_MP / aspect)
+        new_w = _SDXL_TARGET_MP / new_h
+        new_w = round(new_w / _SDXL_BUCKET) * _SDXL_BUCKET
+        new_h = round(new_h / _SDXL_BUCKET) * _SDXL_BUCKET
+        new_w = int(max(_SDXL_MIN, min(_SDXL_MAX, new_w)))
+        new_h = int(max(_SDXL_MIN, min(_SDXL_MAX, new_h)))
         return new_w, new_h
 
     # ──────────────────────────────────────────────────────────────────────────
@@ -271,8 +272,8 @@ class WorkflowManager:
 
     @staticmethod
     async def generate_room_prompt(
-        image_b64:  str,
-        api_key:    str,
+        image_b64: str,
+        api_key: str,
         media_type: str = "image/jpeg",
     ) -> tuple[str, str]:
         """
@@ -294,20 +295,20 @@ class WorkflowManager:
         """
         import anthropic
 
-        client   = anthropic.AsyncAnthropic(api_key=api_key)
+        client = anthropic.AsyncAnthropic(api_key=api_key)
         response = await client.messages.create(
-            model      = "claude-opus-4-6",
-            max_tokens = 512,
-            messages   = [
+            model="claude-opus-4-6",
+            max_tokens=512,
+            messages=[
                 {
                     "role": "user",
                     "content": [
                         {
                             "type": "image",
                             "source": {
-                                "type":       "base64",
+                                "type": "base64",
                                 "media_type": media_type,
-                                "data":       image_b64,
+                                "data": image_b64,
                             },
                         },
                         {
@@ -327,7 +328,7 @@ class WorkflowManager:
             ],
         )
 
-        raw  = response.content[0].text.strip()
+        raw = response.content[0].text.strip()
         data = json.loads(raw)
         return str(data["positive"]), str(data["negative"])
 
@@ -337,14 +338,14 @@ class WorkflowManager:
 
     async def build_mood_workflow(
         self,
-        source_image_url:    Union[str, bytes],
+        source_image_url: Union[str, bytes],
         reference_image_url: Union[str, bytes],
-        strength:            float = 0.70,
-        prompt:              str   = (
+        strength: float = 0.70,
+        prompt: str = (
             "interior photography, beautiful lighting, high quality, 8k, "
             "professional photo, warm ambient light, realistic textures, soft shadows"
         ),
-        negative_prompt:     str   = (
+        negative_prompt: str = (
             "((built-in oven, microwave, square ceiling panels, black boxes on wall:1.5)),"
             "(CGI, 3D render:1.2), (mirror floor, extreme reflection, glossy floor:1.2), "
             "blurry, watercolor, painting, distorted, deformed, low quality, worst quality, "
@@ -354,14 +355,14 @@ class WorkflowManager:
             "floating panels, cracked floor, broken marble, chaotic lines, complex ceiling, "
             "watermark, text, signature, logo"
         ),
-        steps:               int   = 30,
-        cfg:                 float = 5.0,
-        denoise:             float = 0.62,
-        depth_strength:      float = 0.85,
-        canny_strength:      float = 0.75,
-        ipadapter_weight:    float = 0.70,
-        ipadapter_end_at:    float = 0.77,
-        seed:                Optional[int] = None,
+        steps: int = 30,
+        cfg: float = 5.0,
+        denoise: float = 0.62,
+        depth_strength: float = 0.85,
+        canny_strength: float = 0.75,
+        ipadapter_weight: float = 0.70,
+        ipadapter_end_at: float = 0.77,
+        seed: Optional[int] = None,
     ) -> dict[str, Any]:
         """
         Copy the mood, lighting, and atmosphere of a reference image onto
@@ -388,32 +389,32 @@ class WorkflowManager:
         """
         src_b64 = _ensure_base64(source_image_url)
         ref_b64 = _ensure_base64(reference_image_url)
-        seed    = seed if seed is not None else _rand_seed()
+        seed = seed if seed is not None else _rand_seed()
 
         # Load optional node-ID overrides (for local ComfyUI with different IDs)
         cfg_map = _load_node_config("mood")
         n = {
-            "source_image":    cfg_map.get("source_image",    "1"),
+            "source_image": cfg_map.get("source_image", "1"),
             "reference_image": cfg_map.get("reference_image", "2"),
             "positive_prompt": cfg_map.get("positive_prompt", "4"),
             "negative_prompt": cfg_map.get("negative_prompt", "5"),
-            "depth_controlnet":cfg_map.get("depth_controlnet","10"),
-            "canny_controlnet":cfg_map.get("canny_controlnet","13"),
-            "ipadapter_loader":cfg_map.get("ipadapter_loader","14"),
-            "ksampler":        cfg_map.get("ksampler",        "17"),
-            "ipadapter":       cfg_map.get("ipadapter",       "24"),
+            "depth_controlnet": cfg_map.get("depth_controlnet", "10"),
+            "canny_controlnet": cfg_map.get("canny_controlnet", "13"),
+            "ipadapter_loader": cfg_map.get("ipadapter_loader", "14"),
+            "ksampler": cfg_map.get("ksampler", "17"),
+            "ipadapter": cfg_map.get("ipadapter", "24"),
         }
 
         injections = {
-            n["source_image"]:    {"image": src_b64},
+            n["source_image"]: {"image": src_b64},
             n["reference_image"]: {"image": ref_b64},
             n["positive_prompt"]: {"text": prompt},
             n["negative_prompt"]: {"text": negative_prompt},
-            n["depth_controlnet"]:{"strength": depth_strength},
-            n["ksampler"]:        {
-                "seed":    seed,
-                "steps":   steps,
-                "cfg":     cfg,
+            n["depth_controlnet"]: {"strength": depth_strength},
+            n["ksampler"]: {
+                "seed": seed,
+                "steps": steps,
+                "cfg": cfg,
                 "denoise": denoise,
             },
         }
@@ -421,29 +422,31 @@ class WorkflowManager:
         optional = {n["ipadapter_loader"], n["ipadapter"], n["canny_controlnet"]}
         injections[n["ipadapter_loader"]] = {"ipadapter_file": _IPADAPTER_SDXL}
         injections[n["canny_controlnet"]] = {"strength": canny_strength}
-        injections[n["ipadapter"]]        = {
+        injections[n["ipadapter"]] = {
             "weight": ipadapter_weight,
             "end_at": ipadapter_end_at,
         }
 
-        return self.load_and_inject_workflow("mood", injections, optional_nodes=optional)
+        return self.load_and_inject_workflow(
+            "mood", injections, optional_nodes=optional
+        )
 
     async def build_material_workflow(
         self,
-        image_url:            Union[str, bytes],
-        mask_data:            Union[str, bytes],
+        image_url: Union[str, bytes],
+        mask_data: Union[str, bytes],
         material_texture_url: Union[str, bytes],
-        prompt:               str   = (
+        prompt: str = (
             "photorealistic interior, architectural photography, high-end material finish, "
             "seamless texture, perfect lighting, 8k resolution"
         ),
-        negative_prompt:      str   = _NEGATIVE_BASE,
-        ipadapter_weight:     float = 0.55,
-        controlnet_strength:  float = 0.65,
-        denoise:              float = 0.88,
-        steps:                int   = 28,
-        cfg:                  float = 7.5,
-        seed:                 Optional[int] = None,
+        negative_prompt: str = _NEGATIVE_BASE,
+        ipadapter_weight: float = 0.55,
+        controlnet_strength: float = 0.65,
+        denoise: float = 0.88,
+        steps: int = 28,
+        cfg: float = 7.5,
+        seed: Optional[int] = None,
     ) -> dict[str, Any]:
         """
         Apply a material texture to the masked surface area.
@@ -467,46 +470,49 @@ class WorkflowManager:
         Returns:
             ComfyUI API-format workflow dict.
         """
-        img_b64  = _ensure_base64(image_url)
+        img_b64 = _ensure_base64(image_url)
         mask_b64 = _ensure_base64(mask_data)
-        mat_b64  = _ensure_base64(material_texture_url)
-        seed     = seed if seed is not None else _rand_seed()
-        w, h     = _image_size_from_b64(img_b64)
-        nw, nh   = self.calc_sdxl_size(w, h)
+        mat_b64 = _ensure_base64(material_texture_url)
+        seed = seed if seed is not None else _rand_seed()
+        w, h = _image_size_from_b64(img_b64)
+        nw, nh = self.calc_sdxl_size(w, h)
 
-        return self.load_and_inject_workflow("material", {
-            "2":   {"image": img_b64},
-            "3":   {"mask":  mask_b64},
-            "4":   {"image": mat_b64},
-            "5":   {"ipadapter_file": _IPADAPTER_SDXL},
-            "7":   {"weight": ipadapter_weight},
-            "10":  {"text": prompt},
-            "11":  {"text": negative_prompt},
-            "12":  {"strength": controlnet_strength},
-            "14":  {
-                "seed":    seed,
-                "steps":   steps,
-                "cfg":     cfg,
-                "denoise": denoise,
+        return self.load_and_inject_workflow(
+            "material",
+            {
+                "2": {"image": img_b64},
+                "3": {"mask": mask_b64},
+                "4": {"image": mat_b64},
+                "5": {"ipadapter_file": _IPADAPTER_SDXL},
+                "7": {"weight": ipadapter_weight},
+                "10": {"text": prompt},
+                "11": {"text": negative_prompt},
+                "12": {"strength": controlnet_strength},
+                "14": {
+                    "seed": seed,
+                    "steps": steps,
+                    "cfg": cfg,
+                    "denoise": denoise,
+                },
+                "100": {"width": nw, "height": nh},
             },
-            "100": {"width": nw, "height": nh},
-        })
+        )
 
     async def build_furniture_workflow(
         self,
-        image_url:           Union[str, bytes],
+        image_url: Union[str, bytes],
         furniture_image_url: Union[str, bytes],
-        position:            Optional[dict[str, float]] = None,
-        scale:               float = 1.0,
-        prompt:              str   = (
+        position: Optional[dict[str, float]] = None,
+        scale: float = 1.0,
+        prompt: str = (
             "photorealistic interior, furniture naturally placed in room, "
             "consistent lighting, soft shadow, architectural photography"
         ),
-        negative_prompt:     str   = _NEGATIVE_BASE,
-        blend_denoise:       float = 0.55,
-        steps:               int   = 20,
-        cfg:                 float = 7.0,
-        seed:                Optional[int] = None,
+        negative_prompt: str = _NEGATIVE_BASE,
+        blend_denoise: float = 0.55,
+        steps: int = 20,
+        cfg: float = 7.0,
+        seed: Optional[int] = None,
     ) -> dict[str, Any]:
         """
         Blend a pre-composited furniture image into a room scene.
@@ -529,35 +535,38 @@ class WorkflowManager:
         Returns:
             ComfyUI API-format workflow dict.
         """
-        img_b64  = _ensure_base64(image_url)
+        img_b64 = _ensure_base64(image_url)
         furn_b64 = _ensure_base64(furniture_image_url)
-        seed     = seed if seed is not None else _rand_seed()
-        w, h     = _image_size_from_b64(img_b64)
-        nw, nh   = self.calc_sdxl_size(w, h)
+        seed = seed if seed is not None else _rand_seed()
+        w, h = _image_size_from_b64(img_b64)
+        nw, nh = self.calc_sdxl_size(w, h)
 
-        return self.load_and_inject_workflow("furniture", {
-            "2":   {"image": img_b64},
-            "3":   {"image": furn_b64},
-            "6":   {"text": prompt},
-            "7":   {"text": negative_prompt},
-            "9":   {
-                "seed":    seed,
-                "steps":   steps,
-                "cfg":     cfg,
-                "denoise": blend_denoise,
+        return self.load_and_inject_workflow(
+            "furniture",
+            {
+                "2": {"image": img_b64},
+                "3": {"image": furn_b64},
+                "6": {"text": prompt},
+                "7": {"text": negative_prompt},
+                "9": {
+                    "seed": seed,
+                    "steps": steps,
+                    "cfg": cfg,
+                    "denoise": blend_denoise,
+                },
+                "100": {"width": nw, "height": nh},
             },
-            "100": {"width": nw, "height": nh},
-        })
+        )
 
     async def build_lighting_workflow(
         self,
-        image_url:       Union[str, bytes],
-        lighting:        str   = "soft natural daylight, warm interior lighting",
-        negative_prompt: str   = _NEGATIVE_BASE,
-        denoise:         float = 0.35,
-        steps:           int   = 20,
-        cfg:             float = 7.0,
-        seed:            Optional[int] = None,
+        image_url: Union[str, bytes],
+        lighting: str = "soft natural daylight, warm interior lighting",
+        negative_prompt: str = _NEGATIVE_BASE,
+        denoise: float = 0.35,
+        steps: int = 20,
+        cfg: float = 7.0,
+        seed: Optional[int] = None,
     ) -> dict[str, Any]:
         """
         Apply a lighting atmosphere to the room (SDXL Base img2img, low denoise).
@@ -578,39 +587,42 @@ class WorkflowManager:
             ComfyUI API-format workflow dict.
         """
         img_b64 = _ensure_base64(image_url)
-        seed    = seed if seed is not None else _rand_seed()
-        w, h    = _image_size_from_b64(img_b64)
-        nw, nh  = self.calc_sdxl_size(w, h)
+        seed = seed if seed is not None else _rand_seed()
+        w, h = _image_size_from_b64(img_b64)
+        nw, nh = self.calc_sdxl_size(w, h)
 
         positive_text = (
             f"photorealistic interior architectural photography, {lighting}, "
             "professional interior design, natural atmosphere, 8k resolution"
         )
 
-        return self.load_and_inject_workflow("lighting", {
-            "2":   {"image": img_b64},
-            "3":   {"text": positive_text},
-            "4":   {"text": negative_prompt},
-            "6":   {
-                "seed":    seed,
-                "steps":   steps,
-                "cfg":     cfg,
-                "denoise": denoise,
+        return self.load_and_inject_workflow(
+            "lighting",
+            {
+                "2": {"image": img_b64},
+                "3": {"text": positive_text},
+                "4": {"text": negative_prompt},
+                "6": {
+                    "seed": seed,
+                    "steps": steps,
+                    "cfg": cfg,
+                    "denoise": denoise,
+                },
+                "100": {"width": nw, "height": nh},
             },
-            "100": {"width": nw, "height": nh},
-        })
+        )
 
     async def build_full_render_workflow(
         self,
-        image_url:       Union[str, bytes],
-        lighting:        str   = "soft natural daylight, warm interior lighting",
-        prompt_prefix:   str   = "",
-        negative_prompt: str   = _NEGATIVE_BASE,
-        base_denoise:    float = 0.30,
-        base_steps:      int   = 40,
-        refiner_steps:   int   = 10,
-        cfg:             float = 7.5,
-        seed:            Optional[int] = None,
+        image_url: Union[str, bytes],
+        lighting: str = "soft natural daylight, warm interior lighting",
+        prompt_prefix: str = "",
+        negative_prompt: str = _NEGATIVE_BASE,
+        base_denoise: float = 0.30,
+        base_steps: int = 40,
+        refiner_steps: int = 10,
+        cfg: float = 7.5,
+        seed: Optional[int] = None,
     ) -> dict[str, Any]:
         """
         High-quality render pipeline: SDXL Base → Refiner → Real-ESRGAN 2×.
@@ -630,9 +642,9 @@ class WorkflowManager:
             ComfyUI API-format workflow dict.
         """
         img_b64 = _ensure_base64(image_url)
-        seed    = seed if seed is not None else _rand_seed()
-        w, h    = _image_size_from_b64(img_b64)
-        nw, nh  = self.calc_sdxl_size(w, h)
+        seed = seed if seed is not None else _rand_seed()
+        w, h = _image_size_from_b64(img_b64)
+        nw, nh = self.calc_sdxl_size(w, h)
 
         positive_text = (
             f"{prompt_prefix + ', ' if prompt_prefix else ''}"
@@ -642,24 +654,27 @@ class WorkflowManager:
         )
 
         total_steps = base_steps + refiner_steps
-        return self.load_and_inject_workflow("full_render", {
-            "2":   {"image": img_b64},
-            "3":   {"text": positive_text},
-            "4":   {"text": negative_prompt},
-            "6":   {
-                "noise_seed":  seed,
-                "steps":       total_steps,
-                "cfg":         cfg,
-                "end_at_step": base_steps,
+        return self.load_and_inject_workflow(
+            "full_render",
+            {
+                "2": {"image": img_b64},
+                "3": {"text": positive_text},
+                "4": {"text": negative_prompt},
+                "6": {
+                    "noise_seed": seed,
+                    "steps": total_steps,
+                    "cfg": cfg,
+                    "end_at_step": base_steps,
+                },
+                "8": {"text": positive_text},
+                "9": {"text": negative_prompt},
+                "10": {
+                    "noise_seed": seed,
+                    "steps": total_steps,
+                    "cfg": cfg,
+                    "start_at_step": base_steps,
+                    "end_at_step": total_steps,
+                },
+                "100": {"width": nw, "height": nh},
             },
-            "8":   {"text": positive_text},
-            "9":   {"text": negative_prompt},
-            "10":  {
-                "noise_seed":    seed,
-                "steps":         total_steps,
-                "cfg":           cfg,
-                "start_at_step": base_steps,
-                "end_at_step":   total_steps,
-            },
-            "100": {"width": nw, "height": nh},
-        })
+        )

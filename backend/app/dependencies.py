@@ -4,6 +4,7 @@ Common FastAPI dependencies:
   - get_current_user : JWT-authenticated user
   - require_admin    : admin-only gate
 """
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
@@ -33,7 +34,10 @@ def get_current_user(
     if user_id is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"message": "유효하지 않거나 만료된 토큰입니다.", "code": "INVALID_TOKEN"},
+            detail={
+                "message": "유효하지 않거나 만료된 토큰입니다.",
+                "code": "INVALID_TOKEN",
+            },
         )
 
     user = db.get(User, int(user_id))
