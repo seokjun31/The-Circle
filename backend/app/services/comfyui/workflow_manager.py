@@ -137,6 +137,7 @@ class WorkflowManager:
         self,
         json_name: str,
         injections: dict[str, dict[str, Any]],
+        optional_nodes: set[str] = frozenset(),
     ) -> dict[str, Any]:
         """
         Load ``{json_name}.json`` from the comfyui_workflows directory,
@@ -148,16 +149,19 @@ class WorkflowManager:
         ``_label`` and ``_comment`` keys are also removed.
 
         Args:
-            json_name:   Filename without extension, e.g. ``"material"``.
-            injections:  ``{ node_id: { input_field: value, … }, … }``
-                         where node IDs are strings (ComfyUI API format).
+            json_name:       Filename without extension, e.g. ``"material"``.
+            injections:      ``{ node_id: { input_field: value, … }, … }``
+                             where node IDs are strings (ComfyUI API format).
+            optional_nodes:  Node IDs that are silently skipped when absent from
+                             the workflow (useful for local ComfyUI setups that
+                             omit optional nodes like IPAdapterAdvanced).
 
         Returns:
             Deep-copied, patched workflow dict ready for submission.
 
         Raises:
             FileNotFoundError: Workflow JSON does not exist.
-            KeyError:          A node_id in *injections* is not in the workflow.
+            KeyError:          A required node_id in *injections* is not in the workflow.
         """
         path = _WORKFLOWS_DIR / f"{json_name}.json"
         if not path.exists():
@@ -181,6 +185,12 @@ class WorkflowManager:
         # Apply injections
         for node_id, fields in injections.items():
             if node_id not in workflow:
+                if node_id in optional_nodes:
+                    logger.debug(
+                        "Optional node '%s' not found in workflow '%s' — skipping",
+                        node_id, json_name,
+                    )
+                    continue
                 raise KeyError(
                     f"Node '{node_id}' not found in workflow '{json_name}'"
                 )
@@ -362,7 +372,7 @@ class WorkflowManager:
                 "weight": ipadapter_weight,
                 "end_at": ipadapter_end_at,
             },
-        })
+        }, optional_nodes={"14", "24"})
 
     async def build_material_workflow(
         self,
