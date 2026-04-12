@@ -287,13 +287,22 @@ class LocalComfyUIClient:
         outputs: dict = history.get("outputs", {})
         for node_id, node_output in outputs.items():
             images = node_output.get("images", [])
-            if images:
-                img = images[0]
-                return img["filename"], img.get("subfolder", ""), img.get("type", "output")
+            for img in images:
+                filename = img.get("filename")
+                if filename:
+                    # Valid file-based output (SaveImage / PreviewImage with saved temp file)
+                    return filename, img.get("subfolder", ""), img.get("type", "output")
+                # No filename → WebSocket-only output (PreviewImage / ETN_SendImageWebSocket)
+                # Skip and keep looking for a SaveImage node that wrote a real file.
+                logger.debug(
+                    "Skipping node '%s' output with no filename (source=%r, keys=%s)",
+                    node_id, img.get("source"), list(img.keys()),
+                )
 
         raise ComfyUIJobError(
-            f"ComfyUI job {prompt_id} produced no output images. "
-            f"Outputs: {list(outputs.keys())}"
+            f"ComfyUI job {prompt_id} produced no saved output images. "
+            f"Output nodes: {list(outputs.keys())}. "
+            "워크플로우에 SaveImage 노드가 있는지 확인하세요."
         )
 
     async def _download_image(
