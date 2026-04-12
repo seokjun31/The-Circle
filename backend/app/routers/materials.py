@@ -8,7 +8,6 @@ POST /api/v1/materials/{id}/validate-tiling — 타일링 검증 단독 실행
 
 import io
 import math
-import uuid
 from typing import Optional
 
 import numpy as np
@@ -19,7 +18,6 @@ from sqlalchemy.orm import Session
 from app.dependencies import get_db, require_admin
 from app.models.material import Material, MaterialCategory
 from app.schemas.material import (
-    MaterialCreateRequest,
     MaterialGeneratePromptsRequest,
     MaterialGeneratePromptsResponse,
     MaterialListResponse,

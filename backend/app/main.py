@@ -3,7 +3,6 @@ The Circle — FastAPI Backend (Phase 1)
 
 Entry point: uvicorn app.main:app --reload
 """
-import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 

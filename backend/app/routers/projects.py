@@ -10,9 +10,8 @@ POST   /api/v1/projects/{id}/apply-material      — 자재 적용 (IP-Adapter +
 import math
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
-from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_current_user, get_db

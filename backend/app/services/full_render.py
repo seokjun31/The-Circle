@@ -92,8 +92,8 @@ def _composite_layers(original_url: str, layers: list[EditLayer]) -> Image.Image
 
     # Style layers → replace base
     style_layers = [
-        l for l in layers
-        if l.layer_type == LayerType.style and l.result_image_url
+        layer for layer in layers
+        if layer.layer_type == LayerType.style and layer.result_image_url
     ]
     if style_layers:
         latest = style_layers[-1]

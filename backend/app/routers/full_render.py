@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_current_user, get_db
-from app.models.edit_layer import EditLayer, LayerType
+from app.models.edit_layer import EditLayer
 from app.models.project import Project
 from app.models.user import User
 from app.schemas.edit_layer import EditLayerResponse
@@ -200,7 +200,6 @@ def run_full_render(
                 except Exception:
                     pass
         except Exception as exc:
-            import traceback
             error_msg = f"렌더링 스트림 오류: {exc}"
             yield f"data: {json.dumps({'error': error_msg, 'code': 'STREAM_ERROR'}, ensure_ascii=False)}\n\n"
             if not got_done:

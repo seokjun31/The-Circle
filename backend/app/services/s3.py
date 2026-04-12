@@ -10,14 +10,10 @@ S3 path convention:
   users/{user_id}/projects/{project_id}/thumbnail.jpg
   materials/{material_id}/tile.png
 """
-import io
 import logging
-import os
 import time
-import uuid
 from pathlib import Path
 from typing import Optional
-from urllib.parse import urljoin
 
 import boto3
 from botocore.exceptions import ClientError
