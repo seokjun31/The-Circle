@@ -266,32 +266,36 @@ def delete_project(
     db.commit()
 
 
-# ── POST /projects/{id}/apply-material — AI 자재 적용 ─────────────────────────
+# ── POST /projects/{id}/apply-material — Qwen Edit 자재 교체 ─────────────────
 
 
 class ApplyMaterialRequest(BaseModel):
-    layer_id: int = Field(
-        ..., description="마스크 레이어 ID (POST /projects/{id}/masks로 생성)"
+    mask_data: str = Field(
+        ..., description="SAM 마스크 — PNG base64 또는 data URL (흰색=변경 영역)"
     )
-    material_id: int = Field(..., description="적용할 자재 ID")
-    custom_prompt: Optional[str] = Field(
-        None, max_length=300, description="추가 텍스트 프롬프트 (선택)"
+    material_image: str = Field(
+        ..., description="자재 텍스처 이미지 — base64 또는 data URL"
     )
-    ipadapter_weight: float = Field(0.80, ge=0.0, le=1.0)
-    controlnet_weight: float = Field(0.90, ge=0.0, le=1.0)
-    denoise: float = Field(0.60, ge=0.3, le=0.9)
+    region_label: Optional[str] = Field(
+        None,
+        description=(
+            "표면 유형 지정 (wall/floor/ceiling/door/cabinet). "
+            "None이면 ADE20K로 자동 분류."
+        ),
+    )
 
 
 class ApplyMaterialResponse(BaseModel):
     result_url: str
     layer_id: int
     elapsed_s: float
+    region_label: str
 
 
 @router.post(
     "/{project_id}/apply-material",
     response_model=ApplyMaterialResponse,
-    summary="AI 자재 적용 — IP-Adapter + ControlNet Depth + Inpainting",
+    summary="Qwen Edit 2511 fp8 자재 교체 — 마스크 + 자재 이미지 직접 업로드",
 )
 async def apply_material(
     project_id: int,
@@ -300,24 +304,21 @@ async def apply_material(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Apply a material texture to a masked region of a project image.
+    SAM 마스크 영역에 사용자가 업로드한 자재 이미지를 Qwen Edit 2511 fp8으로 적용합니다.
 
-    Uses IP-Adapter (texture fidelity) + ControlNet Depth (perspective-aware placement)
-    + VAEEncodeForInpaint (restricts changes to the masked area).
-
-    Expected response time: 15–30 s (RunPod Scale-to-Zero cold start included).
-    Costs 1 credit per area.
+    - region_label 미지정 시 ADE20K 자동 분류 (wall/floor/ceiling/door/cabinet)
+    - 자동 분류 실패 시 REGION_UNCLASSIFIED 에러 반환 → 클라이언트가 사용자에게 선택 요청
+    - 1 크레딧 차감
     """
     from app.models.credit_transaction import CreditTransaction, CreditType
     from app.services.material import material_service as material_apply_service
+    from app.services.material import RegionUnclassifiedError
     from app.services.comfyui.runpod_client import RunPodError
 
     CREDITS_PER_MATERIAL_APPLY = 1
 
-    # Verify ownership first (fast, before the slow RunPod call)
     _get_owned_project(project_id, current_user, db)
 
-    # Deduct credit before starting the job
     if current_user.credit_balance < CREDITS_PER_MATERIAL_APPLY:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
@@ -332,7 +333,7 @@ async def apply_material(
         user_id=current_user.id,
         amount=-CREDITS_PER_MATERIAL_APPLY,
         type=CreditType.usage,
-        description="[material_apply] 자재 적용",
+        description="[material_apply] 자재 교체 (Qwen Edit)",
         feature_used="material_apply",
     )
     db.add(credit_tx)
@@ -342,15 +343,21 @@ async def apply_material(
     try:
         result = await material_apply_service.apply_material(
             project_id=project_id,
-            layer_id=body.layer_id,
-            material_id=body.material_id,
             user_id=current_user.id,
             db=db,
-            custom_prompt=body.custom_prompt,
-            ipadapter_weight=body.ipadapter_weight,
-            controlnet_weight=body.controlnet_weight,
-            denoise=body.denoise,
+            mask_data=body.mask_data,
+            material_image=body.material_image,
+            region_label=body.region_label,
         )
+    except RegionUnclassifiedError as exc:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": str(exc), "code": "REGION_UNCLASSIFIED"},
+        ) from exc
     except ValueError as exc:
         try:
             db.rollback()
@@ -383,6 +390,7 @@ async def apply_material(
         result_url=result.result_url,
         layer_id=result.layer_id,
         elapsed_s=result.elapsed_s,
+        region_label=result.region_label,
     )
 
 

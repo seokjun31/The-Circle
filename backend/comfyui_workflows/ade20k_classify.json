@@ -1,0 +1,36 @@
+{
+  "1": {
+    "inputs": {
+      "image": "PLACEHOLDER_ROOM_IMAGE_B64"
+    },
+    "class_type": "ETN_LoadImageBase64",
+    "_meta": {
+      "title": "Room Image (base64)"
+    }
+  },
+  "2": {
+    "inputs": {
+      "resolution": 1024,
+      "image": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "OneFormer-ADE20K-SemSegPreprocessor",
+    "_meta": {
+      "title": "ADE20K Semantic Segmentation"
+    }
+  },
+  "3": {
+    "inputs": {
+      "images": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "ETN_SendImageWebSocket",
+    "_meta": {
+      "title": "Send ADE20K Map via WebSocket"
+    }
+  }
+}

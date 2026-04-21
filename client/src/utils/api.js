@@ -95,20 +95,20 @@ export async function saveMask(projectId, payload) {
 }
 
 /**
- * Apply a material to a masked region via AI (IP-Adapter + ControlNet Depth).
+ * Apply a material texture to a masked region via Qwen Edit 2511 fp8.
  * @param {number} projectId
- * @param {{ layerId: number, materialId: number, customPrompt?: string }} payload
- * @returns {{ result_url, layer_id, elapsed_s }}
+ * @param {{ maskData: string, materialImage: string, regionLabel?: string }} payload
+ * @returns {{ result_url, layer_id, elapsed_s, region_label }}
  */
 export async function applyMaterial(projectId, payload) {
   const { data } = await api.post(
     `/v1/projects/${projectId}/apply-material`,
     {
-      layer_id:    payload.layerId,
-      material_id: payload.materialId,
-      custom_prompt: payload.customPrompt,
+      mask_data:      payload.maskData,
+      material_image: payload.materialImage,
+      region_label:   payload.regionLabel ?? null,
     },
-    { timeout: 120_000 },
+    { timeout: 150_000 },
   );
   return data;
 }

@@ -1,190 +1,257 @@
 {
-  "_comment": "The Circle — Material Apply Workflow (API format)",
-  "_description": [
-    "Pipeline: SDXL Base + IP-Adapter Advanced (texture style) + ControlNet Depth (perspective) + Inpainting",
-    "SAM mask is pre-computed by the frontend (Transformers.js SAM) or backend SAM node,",
-    "then passed in as base64 via ETN_LoadMaskBase64.",
-    "",
-    "Runtime injections (WorkflowManager.build_material_workflow):",
-    "  Node 2   image           — room photo base64 (ETN_LoadImageBase64)",
-    "  Node 3   mask            — SAM mask base64 (ETN_LoadMaskBase64, white=inpaint area)",
-    "  Node 4   image           — material texture base64 (ETN_LoadImageBase64)",
-    "  Node 5   ipadapter_file  — IP-Adapter model name",
-    "  Node 7   weight          — IP-Adapter weight (0.4–0.7)",
-    "  Node 10  text            — positive prompt",
-    "  Node 11  text            — negative prompt",
-    "  Node 12  strength        — ControlNet Depth strength",
-    "  Node 14  seed/steps/cfg/denoise — KSampler params",
-    "  Node 100 width/height    — SDXL-optimal dimensions from calc_sdxl_size()"
-  ],
   "1": {
-    "class_type": "CheckpointLoaderSimple",
-    "_label": "Load SDXL Base",
     "inputs": {
-      "ckpt_name": "sd_xl_base_1.0.safetensors"
-    }
-  },
-  "25": {
-    "class_type": "VAELoader",
-    "_label": "Load SDXL VAE (improved colour fidelity)",
-    "inputs": {
-      "vae_name": "sdxl_vae.safetensors"
+      "unet_name": "Qwen-Image-Edit-2511-FP8_e4m3fn.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Qwen Edit 2511 fp8"
     }
   },
   "2": {
-    "class_type": "ETN_LoadImageBase64",
-    "_label": "Load Room Image",
     "inputs": {
-      "image": ""
-    }
-  },
-  "100": {
-    "class_type": "ImageScale",
-    "_label": "Scale to SDXL-optimal resolution",
-    "inputs": {
-      "image":          ["2", 0],
-      "upscale_method": "lanczos",
-      "width":          1024,
-      "height":         1024,
-      "crop":           "disabled"
+      "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load CLIP"
     }
   },
   "3": {
-    "class_type": "ETN_LoadMaskBase64",
-    "_label": "Load SAM Mask (white = inpaint area)",
     "inputs": {
-      "mask": ""
+      "vae_name": "qwen_image_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
     }
   },
   "4": {
-    "class_type": "ETN_LoadImageBase64",
-    "_label": "Load Material Texture (IP-Adapter reference)",
     "inputs": {
-      "image": ""
+      "lora_name": "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+      "strength_model": 1,
+      "model": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "Lightning 4-step LoRA"
     }
   },
   "5": {
-    "class_type": "IPAdapterModelLoader",
-    "_label": "Load IP-Adapter SDXL Plus ViT-H",
     "inputs": {
-      "ipadapter_file": "IP-Adapter-Plus_SDXL.safetensors"
+      "shift": 3.1,
+      "model": [
+        "4",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "ModelSamplingAuraFlow"
     }
   },
   "6": {
-    "class_type": "CLIPVisionLoader",
-    "_label": "Load CLIP Vision Encoder (ViT-H-14)",
     "inputs": {
-      "clip_name": "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors"
-    }
-  },
-  "7": {
-    "class_type": "IPAdapterAdvanced",
-    "_label": "Apply IP-Adapter Advanced (material texture → style reference)",
-    "inputs": {
-      "model":          ["1", 0],
-      "ipadapter":      ["5", 0],
-      "image":          ["4", 0],
-      "clip_vision":    ["6", 0],
-      "weight":         0.55,
-      "weight_type":    "linear",
-      "combine_embeds": "concat",
-      "start_at":       0.0,
-      "end_at":         0.85,
-      "embeds_scaling": "K+V"
-    }
-  },
-  "8": {
-    "class_type": "ControlNetLoader",
-    "_label": "Load ControlNet Depth SDXL",
-    "inputs": {
-      "control_net_name": "controlnet-depth-sdxl-1.0.safetensors"
-    }
-  },
-  "22": {
-    "class_type": "DownloadAndLoadDepthAnythingV2Model",
-    "_label": "Load Depth Anything V2 Model",
-    "inputs": {
-      "model":     "depth_anything_v2_vitl_fp32.safetensors",
-      "precision": "auto"
-    }
-  },
-  "9": {
-    "class_type": "DepthAnythingV2",
-    "_label": "Generate Depth Map (room perspective)",
-    "inputs": {
-      "da_model": ["22", 0],
-      "images":   ["100", 0]
+      "strength": 1,
+      "model": [
+        "5",
+        0
+      ]
+    },
+    "class_type": "CFGNorm",
+    "_meta": {
+      "title": "CFGNorm"
     }
   },
   "10": {
-    "class_type": "CLIPTextEncode",
-    "_label": "Positive Prompt",
     "inputs": {
-      "clip": ["1", 1],
-      "text": "photorealistic interior, architectural photography, high-end material finish, seamless texture, perfect lighting, 8k resolution"
+      "image": "PLACEHOLDER_ROOM_IMAGE_B64"
+    },
+    "class_type": "ETN_LoadImageBase64",
+    "_meta": {
+      "title": "Room Image (base64)"
     }
   },
   "11": {
-    "class_type": "CLIPTextEncode",
-    "_label": "Negative Prompt",
     "inputs": {
-      "clip": ["1", 1],
-      "text": "people, person, human, text, watermark, logo, blurry, low quality, artifacts, distorted, oversaturated, cartoon, anime, illustration, painting, unrealistic, dark, gloomy"
+      "image": "PLACEHOLDER_MATERIAL_IMAGE_B64"
+    },
+    "class_type": "ETN_LoadImageBase64",
+    "_meta": {
+      "title": "Material Image (base64)"
+    }
+  },
+  "30": {
+    "inputs": {
+      "mask": "PLACEHOLDER_MASK_B64"
+    },
+    "class_type": "ETN_LoadMaskBase64",
+    "_meta": {
+      "title": "Mask (base64)"
     }
   },
   "12": {
-    "class_type": "ControlNetApplyAdvanced",
-    "_label": "Apply ControlNet Depth (preserve room perspective & structure)",
     "inputs": {
-      "positive":      ["10", 0],
-      "negative":      ["11", 0],
-      "control_net":   ["8",  0],
-      "image":         ["9",  0],
-      "strength":      0.65,
-      "start_percent": 0.0,
-      "end_percent":   0.8
+      "upscale_method": "lanczos",
+      "megapixels": 1,
+      "resolution_steps": 1,
+      "image": [
+        "10",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "Resize Room Image (1MP)"
     }
   },
   "13": {
-    "class_type": "VAEEncodeForInpaint",
-    "_label": "Encode for Inpainting (mask → latent noise mask)",
     "inputs": {
-      "pixels":       ["100", 0],
-      "vae":          ["25",  0],
-      "mask":         ["3",   0],
-      "grow_mask_by": 6
+      "upscale_method": "lanczos",
+      "megapixels": 1,
+      "resolution_steps": 1,
+      "image": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "Resize Material Image (1MP)"
     }
   },
   "14": {
-    "class_type": "KSampler",
-    "_label": "KSampler (inpainting — material texture generation)",
     "inputs": {
-      "model":        ["7",  0],
-      "positive":     ["12", 0],
-      "negative":     ["12", 1],
-      "latent_image": ["13", 0],
-      "seed":         42,
-      "steps":        28,
-      "cfg":          7.5,
-      "sampler_name": "dpmpp_2m",
-      "scheduler":    "karras",
-      "denoise":      0.88
+      "prompt": "PLACEHOLDER_PROMPT",
+      "clip": [
+        "2",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ],
+      "image1": [
+        "12",
+        0
+      ],
+      "image2": [
+        "13",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "Positive Prompt"
     }
   },
   "15": {
-    "class_type": "VAEDecode",
-    "_label": "Decode Latent → Image",
     "inputs": {
-      "samples": ["14", 0],
-      "vae":     ["25", 0]
+      "prompt": "",
+      "clip": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "Negative Prompt"
     }
   },
   "16": {
-    "class_type": "SaveImage",
-    "_label": "Save Result",
     "inputs": {
-      "images":          ["15", 0],
-      "filename_prefix": "material_apply"
+      "pixels": [
+        "12",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE Encode"
+    }
+  },
+  "17": {
+    "inputs": {
+      "samples": [
+        "16",
+        0
+      ],
+      "mask": [
+        "30",
+        0
+      ]
+    },
+    "class_type": "SetLatentNoiseMask",
+    "_meta": {
+      "title": "Set Mask Region"
+    }
+  },
+  "18": {
+    "inputs": {
+      "seed": 0,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "6",
+        0
+      ],
+      "positive": [
+        "14",
+        0
+      ],
+      "negative": [
+        "15",
+        0
+      ],
+      "latent_image": [
+        "17",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler (4 steps, CFG 1.0)"
+    }
+  },
+  "19": {
+    "inputs": {
+      "samples": [
+        "18",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "20": {
+    "inputs": {
+      "images": [
+        "19",
+        0
+      ]
+    },
+    "class_type": "ETN_SendImageWebSocket",
+    "_meta": {
+      "title": "Send Result via WebSocket"
     }
   }
 }
