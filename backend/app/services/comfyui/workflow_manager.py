@@ -96,6 +96,35 @@ _CN_DEPTH_SDXL = "controlnet-depth-sdxl-1.0.safetensors"
 _CN_CANNY_SDXL = "controlnet-canny-sdxl-1.0.safetensors"
 _UPSCALER = "RealESRGAN_x2plus.pth"
 
+# ── Qwen Edit material prompts (per surface type) ────────────────────────────
+_MATERIAL_PROMPTS: dict[str, str] = {
+    "wall": (
+        "Change the masked wall area in image 1 to the material texture shown in image 2. "
+        "Keep the room lighting and perspective exactly the same. "
+        "Only replace the wall surface within the masked region. Realistic photograph."
+    ),
+    "floor": (
+        "Change the masked floor area in image 1 to the material texture shown in image 2. "
+        "Keep the room lighting and perspective exactly the same. "
+        "Only replace the floor surface within the masked region. Realistic photograph."
+    ),
+    "ceiling": (
+        "Change the masked ceiling area in image 1 to the material texture shown in image 2. "
+        "Keep the room lighting and perspective exactly the same. "
+        "Only replace the ceiling surface within the masked region. Realistic photograph."
+    ),
+    "door": (
+        "Change the masked door area in image 1 to the material texture shown in image 2. "
+        "Keep the room lighting and perspective exactly the same. "
+        "Only replace the door surface within the masked region. Realistic photograph."
+    ),
+    "cabinet": (
+        "Change the masked cabinet area in image 1 to the material texture shown in image 2. "
+        "Keep the room lighting and perspective exactly the same. "
+        "Only replace the cabinet surface within the masked region. Realistic photograph."
+    ),
+}
+
 # ── Standard negative prompt ──────────────────────────────────────────────────
 _NEGATIVE_BASE = (
     "people, person, human, text, watermark, logo, blurry, low quality, "
@@ -431,70 +460,70 @@ class WorkflowManager:
             "mood", injections, optional_nodes=optional
         )
 
-    async def build_material_workflow(
+    def build_ade20k_classify_workflow(
+        self,
+        image_url: Union[str, bytes],
+    ) -> dict[str, Any]:
+        """
+        Build the ADE20K semantic segmentation workflow.
+
+        Runs the room image through OneFormer-ADE20K and returns the full
+        colour-coded segmentation map via ETN_SendImageWebSocket.  The caller
+        then analyses which ADE20K colours dominate the user's mask region to
+        determine the surface type (wall / floor / ceiling / door / cabinet).
+
+        Args:
+            image_url: Room photo (URL, data-URL, /uploads/ path, or raw b64).
+
+        Returns:
+            ComfyUI API-format workflow dict.
+        """
+        img_b64 = _ensure_base64(image_url)
+        return self.load_and_inject_workflow(
+            "ade20k_classify",
+            {"1": {"image": img_b64}},
+        )
+
+    def build_material_workflow(
         self,
         image_url: Union[str, bytes],
         mask_data: Union[str, bytes],
-        material_texture_url: Union[str, bytes],
-        prompt: str = (
-            "photorealistic interior, architectural photography, high-end material finish, "
-            "seamless texture, perfect lighting, 8k resolution"
-        ),
-        negative_prompt: str = _NEGATIVE_BASE,
-        ipadapter_weight: float = 0.55,
-        controlnet_strength: float = 0.65,
-        denoise: float = 0.88,
-        steps: int = 28,
-        cfg: float = 7.5,
+        material_image_url: Union[str, bytes],
+        region_label: str,
         seed: Optional[int] = None,
     ) -> dict[str, Any]:
         """
-        Apply a material texture to the masked surface area.
+        Apply a material texture to a masked surface area using Qwen Edit 2511 fp8.
 
-        Pipeline: IP-Adapter (material style) + ControlNet Depth (perspective)
-        + VAEEncodeForInpaint (masked inpainting).
+        Pipeline: ETN_LoadImageBase64 (room) + ETN_LoadMaskBase64 (SAM mask) +
+        ETN_LoadImageBase64 (material) → TextEncodeQwenImageEditPlus →
+        KSampler (4 steps, Lightning LoRA) → ETN_SendImageWebSocket.
 
         Args:
-            image_url:            Original room photo.
-            mask_data:            White/black mask (white = area to retexture).
-            material_texture_url: Seamless tile image (512×512+ recommended).
-            prompt:               Positive prompt describing the desired material.
-            negative_prompt:      Negative conditioning.
-            ipadapter_weight:     IP-Adapter strength (0.4–0.7 recommended).
-            controlnet_strength:  ControlNet depth strength (0.5–0.8).
-            denoise:              Inpaint denoise strength (0.8–1.0).
-            steps:                KSampler steps.
-            cfg:                  CFG scale.
-            seed:                 Fixed seed; None = random.
+            image_url:          Original room photo.
+            mask_data:          SAM mask (white = area to retexture).
+            material_image_url: Material texture image.
+            region_label:       Surface type: wall / floor / ceiling / door / cabinet.
+            seed:               Fixed seed; None = random.
 
         Returns:
             ComfyUI API-format workflow dict.
         """
         img_b64 = _ensure_base64(image_url)
         mask_b64 = _ensure_base64(mask_data)
-        mat_b64 = _ensure_base64(material_texture_url)
+        mat_b64 = _ensure_base64(material_image_url)
         seed = seed if seed is not None else _rand_seed()
-        w, h = _image_size_from_b64(img_b64)
-        nw, nh = self.calc_sdxl_size(w, h)
+
+        prompt = _MATERIAL_PROMPTS.get(region_label, _MATERIAL_PROMPTS["wall"])
 
         return self.load_and_inject_workflow(
             "material",
             {
-                "2": {"image": img_b64},
-                "3": {"mask": mask_b64},
-                "4": {"image": mat_b64},
-                "5": {"ipadapter_file": _IPADAPTER_SDXL},
-                "7": {"weight": ipadapter_weight},
-                "10": {"text": prompt},
-                "11": {"text": negative_prompt},
-                "12": {"strength": controlnet_strength},
-                "14": {
-                    "seed": seed,
-                    "steps": steps,
-                    "cfg": cfg,
-                    "denoise": denoise,
-                },
-                "100": {"width": nw, "height": nh},
+                "10": {"image": img_b64},
+                "11": {"image": mat_b64},
+                "30": {"mask": mask_b64},
+                "14": {"prompt": prompt},
+                "18": {"seed": seed},
             },
         )
 

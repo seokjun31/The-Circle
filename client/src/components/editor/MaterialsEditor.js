@@ -6,11 +6,11 @@
  *   [TopNav h-16] [AreaSubBar h-12]
  *   [LeftNav 208px | LeftPanel 280px | Center flex | RightPanel 320px]
  */
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
 import RoomCanvas from './RoomCanvas';
 import ProcessingOverlay from './ProcessingOverlay';
-import { getMaterialList, applyMaterial } from '../../utils/api';
+import { applyMaterial } from '../../utils/api';
 import { roomSegmenter } from '../../lib/segmentation/semanticSegmentation';
 
 /* ── Static data ─────────────────────────────────────────────────── */
@@ -31,20 +31,12 @@ const INPUT_MODES = [
   { id: 'brush', label: 'Brush', icon: 'brush',                   enabled: false },
 ];
 
-const CATEGORIES = [
-  { id: 'wallpaper', label: 'Wallpaper' },
-  { id: 'flooring',  label: 'Floor'     },
-  { id: 'tile',      label: 'Tile'      },
-  { id: 'paint',     label: 'Paint'     },
-  { id: 'upload',    label: '내 자재'   },
-];
-
-const STYLE_FILTERS = [
-  { id: '',          label: 'All'     },
-  { id: 'modern',    label: 'Modern'  },
-  { id: 'classic',   label: 'Classic' },
-  { id: 'nordic',    label: 'Nordic'  },
-  { id: 'natural',   label: 'Natural' },
+const REGION_OPTIONS = [
+  { id: 'wall',    label: '벽',  icon: 'wall' },
+  { id: 'floor',   label: '바닥', icon: 'floor' },
+  { id: 'ceiling', label: '천장', icon: 'roofing' },
+  { id: 'door',    label: '문',  icon: 'door_front' },
+  { id: 'cabinet', label: '가구', icon: 'chair' },
 ];
 
 const NAV_TOOLS = [
@@ -80,16 +72,12 @@ export default function MaterialsEditor({
   const [canvasMode,     setCanvasMode]     = useState('point');
   const [canvasSegments, setCanvasSegments] = useState([]);
 
-  const [matCategory,    setMatCategory]    = useState('wallpaper');
-  const [matFilter,      setMatFilter]      = useState('');
-  const [matSearch,      setMatSearch]      = useState('');
-  const [matSearchInput, setMatSearchInput] = useState('');
-  const [materials,      setMaterials]      = useState([]);
-  const [loadingMats,    setLoadingMats]    = useState(false);
   const [selectedMat,    setSelectedMat]    = useState(null);
+  const [uploadedMats,   setUploadedMats]   = useState([]);
   const [applyLoading,   setApplyLoading]   = useState(false);
 
-  const [uploadedMats,   setUploadedMats]   = useState([]);
+  // REGION_UNCLASSIFIED 오류 시 사용자 선택 UI 표시
+  const [pendingRegionSelect, setPendingRegionSelect] = useState(false);
 
   const uploadRef = useRef(null);
 
@@ -97,16 +85,6 @@ export default function MaterialsEditor({
     if (isEncoding) setProcessing?.(true, 'SAM 이미지 분석 중...');
     else if (!isAnalyzing) setProcessing?.(false);
   }, [setProcessing, isAnalyzing]);
-
-  /* ── Fetch material catalog ── */
-  useEffect(() => {
-    if (matCategory === 'upload') return;
-    setLoadingMats(true);
-    getMaterialList({ category: matCategory, style: matFilter, search: matSearch, pageSize: 20 })
-      .then(d => setMaterials(d.materials || []))
-      .catch(() => setMaterials([]))
-      .finally(() => setLoadingMats(false));
-  }, [matCategory, matFilter, matSearch]);
 
   /* ── Area quick-select via semantic segmentation ── */
   const handleAreaPreset = useCallback((areaId) => {
@@ -119,18 +97,20 @@ export default function MaterialsEditor({
   }, []);
 
   /* ── Apply material ── */
-  const handleApply = useCallback(async () => {
-    if (!selectedMat)           { toast.error('자재를 선택해주세요.');    return; }
-    if (!canvasSegments.length) { toast.error('영역을 먼저 선택해주세요.'); return; }
+  const handleApply = useCallback(async (regionLabel = null) => {
+    if (!selectedMat)           { toast.error('자재 이미지를 업로드해주세요.'); return; }
+    if (!canvasSegments.length) { toast.error('영역을 먼저 선택해주세요.');     return; }
     const isFree = (freeRetries ?? 0) > 0;
-    if (!isFree && (creditBalance ?? 0) < 3) { toast.error(`크레딧 부족 (잔액: ${creditBalance ?? 0})`); return; }
+    if (!isFree && (creditBalance ?? 0) < 1) { toast.error(`크레딧 부족 (잔액: ${creditBalance ?? 0})`); return; }
+
     setApplyLoading(true);
+    setPendingRegionSelect(false);
     try {
-      const mask   = canvasSegments[0];
+      const mask = canvasSegments[0];
       const result = await applyMaterial(projectId, {
-        material_id:  selectedMat.id,
-        layer_id:     mask.layerId,
-        mask_data:    mask.pngDataUrl,
+        maskData:      mask.pngDataUrl,
+        materialImage: selectedMat.thumbnail_url,
+        regionLabel:   regionLabel,
       });
       if (typeof setFreeRetries === 'function') {
         if ((freeRetries ?? 0) === 0) { setFreeRetries(3); toast.success('3회 무료 변경이 적용됩니다!'); }
@@ -138,7 +118,13 @@ export default function MaterialsEditor({
       }
       onResult?.(result);
     } catch (err) {
-      toast.error('자재 적용 실패: ' + err.message);
+      const code = err?.response?.data?.detail?.code;
+      if (code === 'REGION_UNCLASSIFIED') {
+        setPendingRegionSelect(true);
+        toast('영역 유형을 선택해주세요.', { icon: 'ℹ️' });
+      } else {
+        toast.error('자재 적용 실패: ' + (err?.response?.data?.detail?.message || err.message));
+      }
     } finally {
       setApplyLoading(false);
     }
@@ -153,17 +139,10 @@ export default function MaterialsEditor({
       const mat = { id: `upload_${Date.now()}`, name: file.name, thumbnail_url: url, isCustom: true };
       setUploadedMats(prev => [mat, ...prev]);
       setSelectedMat(mat);
-      if (typeof setFreeRetries === 'function' && (freeRetries ?? 0) < 3) {
-        setFreeRetries(3);
-        toast('새 이미지 업로드 — 무료 변경 3회 리셋!', { icon: '🎁' });
-      } else {
-        toast.success('자재 이미지가 추가되었습니다!');
-      }
+      toast.success('자재 이미지가 추가되었습니다!');
     };
     reader.readAsDataURL(file);
-  }, [freeRetries, setFreeRetries]);
-
-  const displayMats = matCategory === 'upload' ? uploadedMats : materials;
+  }, []);
 
   /* ── Embedded render (inside EditorPage shell) ── */
   if (embedded) {
@@ -316,7 +295,7 @@ export default function MaterialsEditor({
                     <span className="material-symbols-outlined text-sm">add_photo_alternate</span>레이아웃 추가
                   </button>
                 )}
-                <button onClick={handleApply} disabled={applyLoading}
+                <button onClick={() => handleApply()} disabled={applyLoading}
                   className="flex-1 px-3 py-1.5 rounded-full text-[10px] font-bold active:scale-95 transition-all shadow-lg disabled:opacity-50"
                   style={{ background: 'linear-gradient(135deg, #bd9dff, #8a4cfc)', color: '#3c0089' }}>
                   {applyLoading ? 'Applying…' : 'Render'}
@@ -324,111 +303,58 @@ export default function MaterialsEditor({
               </div>
             </header>
 
-            <div className="px-4 py-3 flex gap-3 overflow-x-auto"
-              style={{ borderBottom: '1px solid rgba(72,72,73,0.1)' }}>
-              {CATEGORIES.map(cat => (
-                <button key={cat.id}
-                  className="text-xs font-bold pb-1.5 flex-shrink-0 transition-colors"
-                  style={matCategory === cat.id
-                    ? { color: '#ffffff', borderBottom: '2px solid #bd9dff' }
-                    : { color: '#adaaab', borderBottom: '2px solid transparent' }}
-                  onClick={() => setMatCategory(cat.id)}>
-                  {cat.label}
-                </button>
-              ))}
-            </div>
+            <div className="flex flex-col flex-1 overflow-y-auto p-4 gap-4">
+              {/* Upload zone */}
+              <input ref={uploadRef} type="file" accept="image/*" className="hidden"
+                onChange={e => handleUploadFile(e.target.files[0])} />
+              <div className="border-2 border-dashed rounded-xl p-4 flex flex-col items-center gap-2 cursor-pointer transition-all"
+                style={{ borderColor: 'rgba(189,157,255,0.3)' }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = '#bd9dff'}
+                onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(189,157,255,0.3)'}
+                onClick={() => uploadRef.current?.click()}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => { e.preventDefault(); handleUploadFile(e.dataTransfer.files[0]); }}>
+                <span className="material-symbols-outlined text-3xl" style={{ color: '#bd9dff' }}>upload_file</span>
+                <span className="text-xs font-semibold text-white">자재 이미지 업로드</span>
+                <span className="text-[10px] text-center" style={{ color: '#767576' }}>PNG, JPG — 텍스처 이미지</span>
+              </div>
 
-            <div className="flex flex-col flex-1 overflow-y-auto p-4">
-              {/* Style filters */}
-              {matCategory !== 'upload' && (
-                <div className="flex flex-wrap gap-1 mb-3">
-                  {STYLE_FILTERS.map(f => (
-                    <button key={f.id}
-                      className="px-2 py-0.5 rounded-full text-[10px] font-bold transition-all"
-                      style={matFilter === f.id
-                        ? { background: '#bd9dff', color: '#000' }
-                        : { background: '#201f21', color: '#adaaab', border: '1px solid rgba(72,72,73,0.2)' }}
-                      onClick={() => setMatFilter(f.id)}>
-                      {f.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {/* Search */}
-              {matCategory !== 'upload' && (
-                <div className="flex gap-2 mb-3">
-                  <input
-                    className="flex-1 px-3 py-1.5 rounded-lg text-xs"
-                    style={{ background: '#201f21', border: '1px solid rgba(72,72,73,0.3)', color: '#ffffff' }}
-                    placeholder="Search material name..."
-                    value={matSearchInput}
-                    onChange={e => setMatSearchInput(e.target.value)}
-                  />
-                  <button className="px-3 py-1.5 rounded-lg text-xs font-bold"
-                    style={{ background: 'linear-gradient(135deg, #bd9dff, #8a4cfc)', color: '#3c0089' }}
-                    onClick={() => setMatSearch(matSearchInput)}>Search</button>
-                </div>
-              )}
-
-              {/* Upload tab */}
-              {matCategory === 'upload' ? (
-                <div className="flex flex-col gap-3">
-                  <input ref={uploadRef} type="file" accept="image/*" className="hidden"
-                    onChange={e => handleUploadFile(e.target.files[0])} />
-                  <div className="border-2 border-dashed rounded-xl p-4 flex flex-col items-center gap-2 cursor-pointer transition-all"
-                    style={{ borderColor: 'rgba(189,157,255,0.3)' }}
-                    onMouseEnter={e => e.currentTarget.style.borderColor = '#bd9dff'}
-                    onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(189,157,255,0.3)'}
-                    onClick={() => uploadRef.current?.click()}
-                    onDragOver={e => e.preventDefault()}
-                    onDrop={e => { e.preventDefault(); handleUploadFile(e.dataTransfer.files[0]); }}>
-                    <span className="material-symbols-outlined text-3xl" style={{ color: '#bd9dff' }}>upload_file</span>
-                    <span className="text-xs font-semibold" style={{ color: '#adaaab' }}>자재 이미지 업로드</span>
-                    <span className="text-[10px] text-center" style={{ color: '#767576' }}>PNG, JPG — 최대 10MB</span>
-                  </div>
-                  {uploadedMats.length > 0 && (
-                    <div className="grid grid-cols-2 gap-2">
-                      {uploadedMats.map((mat, i) => (
-                        <button key={i}
-                          className="p-2 rounded-xl transition-all text-left"
-                          style={selectedMat?.id === mat.id
-                            ? { background: 'rgba(189,157,255,0.15)', border: '1px solid #bd9dff' }
-                            : { background: '#201f21', border: '1px solid rgba(72,72,73,0.2)' }}
-                          onClick={() => setSelectedMat(mat)}>
-                          <img src={mat.thumbnail_url || mat.tile_image_url} alt={mat.name}
-                            className="w-full aspect-square object-cover rounded-lg mb-1" />
-                          <p className="text-[10px] font-semibold text-white truncate">{mat.name}</p>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ) : loadingMats ? (
-                <div className="flex justify-center py-8">
-                  <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#bd9dff', borderTopColor: 'transparent' }} />
-                </div>
-              ) : displayMats.length === 0 ? (
-                <div className="flex flex-col items-center py-8 gap-2">
-                  <span className="material-symbols-outlined text-3xl" style={{ color: '#767576' }}>texture</span>
-                  <p className="text-sm font-semibold" style={{ color: '#adaaab' }}>No materials found.</p>
-                  <p className="text-[10px] text-center" style={{ color: '#767576' }}>Try adjusting filters or upload a custom material.</p>
-                </div>
-              ) : (
+              {/* Uploaded materials grid */}
+              {uploadedMats.length > 0 && (
                 <div className="grid grid-cols-2 gap-2">
-                  {displayMats.map(mat => (
-                    <button key={mat.id}
+                  {uploadedMats.map((mat, i) => (
+                    <button key={i}
                       className="p-2 rounded-xl transition-all text-left"
                       style={selectedMat?.id === mat.id
                         ? { background: 'rgba(189,157,255,0.15)', border: '1px solid #bd9dff' }
                         : { background: '#201f21', border: '1px solid rgba(72,72,73,0.2)' }}
                       onClick={() => setSelectedMat(mat)}>
-                      <img src={mat.thumbnail_url || mat.tile_image_url} alt={mat.name}
+                      <img src={mat.thumbnail_url} alt={mat.name}
                         className="w-full aspect-square object-cover rounded-lg mb-1" />
                       <p className="text-[10px] font-semibold text-white truncate">{mat.name}</p>
-                      {mat.brand && <p className="text-[9px]" style={{ color: '#adaaab' }}>{mat.brand}</p>}
                     </button>
                   ))}
+                </div>
+              )}
+
+              {/* Region unclassified — ask user */}
+              {pendingRegionSelect && (
+                <div className="p-3 rounded-xl" style={{ background: 'rgba(189,157,255,0.08)', border: '1px solid rgba(189,157,255,0.3)' }}>
+                  <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: '#bd9dff' }}>영역 유형 선택</p>
+                  <p className="text-[10px] mb-3" style={{ color: '#adaaab' }}>영역을 자동으로 분류하지 못했습니다. 직접 선택해주세요.</p>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {REGION_OPTIONS.map(opt => (
+                      <button key={opt.id}
+                        className="flex flex-col items-center gap-1 p-2 rounded-lg text-[10px] font-bold transition-all"
+                        style={{ background: '#201f21', border: '1px solid rgba(72,72,73,0.3)', color: '#ffffff' }}
+                        onMouseEnter={e => e.currentTarget.style.borderColor = '#bd9dff'}
+                        onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(72,72,73,0.3)'}
+                        onClick={() => handleApply(opt.id)}>
+                        <span className="material-symbols-outlined text-base" style={{ color: '#bd9dff' }}>{opt.icon}</span>
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -437,12 +363,12 @@ export default function MaterialsEditor({
             <div className="p-4" style={{ borderTop: '1px solid rgba(72,72,73,0.1)' }}>
               <div className="rounded-xl overflow-hidden aspect-square mb-2"
                 style={{ background: '#0a0a0b', border: '1px solid rgba(72,72,73,0.2)' }}>
-                {selectedMat?.tile_image_url || selectedMat?.thumbnail_url ? (
-                  <img src={selectedMat.tile_image_url || selectedMat.thumbnail_url} alt="미리보기" className="w-full h-full object-cover" />
+                {selectedMat?.thumbnail_url ? (
+                  <img src={selectedMat.thumbnail_url} alt="미리보기" className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex flex-col items-center justify-center gap-1">
                     <span className="material-symbols-outlined text-2xl" style={{ color: '#767576' }}>preview</span>
-                    <p className="text-[10px]" style={{ color: '#767576' }}>영역을 선택하면 미리보기가 표시됩니다</p>
+                    <p className="text-[10px]" style={{ color: '#767576' }}>자재를 업로드하면 미리보기가 표시됩니다</p>
                   </div>
                 )}
               </div>
@@ -511,7 +437,7 @@ export default function MaterialsEditor({
               Save
             </button>
             <button
-              onClick={handleApply}
+              onClick={() => handleApply()}
               disabled={applyLoading}
               className="px-4 py-1.5 rounded-full text-xs font-bold active:scale-95 transition-all shadow-lg disabled:opacity-50"
               style={{
@@ -800,179 +726,71 @@ export default function MaterialsEditor({
             )}
           </header>
 
-          {/* Category tabs */}
-          <div className="px-6 py-4 flex gap-4 overflow-x-auto"
-            style={{ borderBottom: '1px solid rgba(72,72,73,0.1)' }}>
-            {CATEGORIES.map(cat => (
-              <button key={cat.id}
-                className="text-xs font-bold pb-2 flex-shrink-0 transition-colors"
-                style={matCategory === cat.id
-                  ? { color: '#ffffff', borderBottom: '2px solid #bd9dff' }
-                  : { color: '#adaaab', borderBottom: '2px solid transparent' }
-                }
-                onClick={() => setMatCategory(cat.id)}
-              >
-                {cat.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Upload Tab content */}
-          {matCategory === 'upload' ? (
-            <div className="flex flex-col flex-1 p-4 gap-4 overflow-y-auto">
-              {/* Upload zone */}
-              <input ref={uploadRef} type="file" accept="image/*" className="hidden"
-                onChange={e => handleUploadFile(e.target.files[0])} />
-              <div
-                className="border-2 border-dashed rounded-xl p-6 flex flex-col items-center gap-3 cursor-pointer transition-all"
-                style={{ borderColor: 'rgba(189,157,255,0.3)' }}
-                onMouseEnter={e => e.currentTarget.style.borderColor = '#bd9dff'}
-                onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(189,157,255,0.3)'}
-                onClick={() => uploadRef.current?.click()}
-                onDragOver={e => e.preventDefault()}
-                onDrop={e => { e.preventDefault(); handleUploadFile(e.dataTransfer.files[0]); }}
-              >
-                <span className="material-symbols-outlined text-4xl" style={{ color: '#bd9dff' }}>
-                  upload_file
-                </span>
-                <div className="text-center">
-                  <p className="text-sm font-bold text-white">자재 이미지 업로드</p>
-                  <p className="text-[11px] mt-1" style={{ color: '#adaaab' }}>
-                    PNG, JPG 파일 — 텍스처 이미지를 업로드하면 선택 영역에 적용합니다
-                  </p>
-                </div>
-              </div>
-
-              {/* Uploaded materials grid */}
-              {uploadedMats.length > 0 ? (
-                <div className="grid grid-cols-3 gap-2">
-                  {uploadedMats.map(mat => (
-                    <button key={mat.id}
-                      className="relative rounded-lg overflow-hidden aspect-square border-2 transition-all"
-                      style={{ borderColor: selectedMat?.id === mat.id ? '#bd9dff' : 'transparent' }}
-                      onClick={() => setSelectedMat(mat)}
-                    >
-                      <img src={mat.thumbnail_url} alt={mat.name}
-                        className="w-full h-full object-cover" />
-                      {selectedMat?.id === mat.id && (
-                        <div className="absolute inset-0 flex items-center justify-center"
-                          style={{ background: 'rgba(189,157,255,0.3)' }}>
-                          <span className="material-symbols-outlined text-white"
-                            style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-                        </div>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-[11px] text-center" style={{ color: '#adaaab' }}>
-                  업로드한 자재가 없습니다
+          {/* Upload zone */}
+          <div className="flex flex-col flex-1 p-4 gap-4 overflow-y-auto">
+            <input ref={uploadRef} type="file" accept="image/*" className="hidden"
+              onChange={e => handleUploadFile(e.target.files[0])} />
+            <div
+              className="border-2 border-dashed rounded-xl p-6 flex flex-col items-center gap-3 cursor-pointer transition-all"
+              style={{ borderColor: 'rgba(189,157,255,0.3)' }}
+              onMouseEnter={e => e.currentTarget.style.borderColor = '#bd9dff'}
+              onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(189,157,255,0.3)'}
+              onClick={() => uploadRef.current?.click()}
+              onDragOver={e => e.preventDefault()}
+              onDrop={e => { e.preventDefault(); handleUploadFile(e.dataTransfer.files[0]); }}
+            >
+              <span className="material-symbols-outlined text-4xl" style={{ color: '#bd9dff' }}>upload_file</span>
+              <div className="text-center">
+                <p className="text-sm font-bold text-white">자재 이미지 업로드</p>
+                <p className="text-[11px] mt-1" style={{ color: '#adaaab' }}>
+                  PNG, JPG — 텍스처 이미지를 업로드하면 선택 영역에 적용합니다
                 </p>
-              )}
+              </div>
             </div>
-          ) : (
-            <>
-              {/* Filters */}
-              <div className="p-4 flex flex-wrap gap-2">
-                {STYLE_FILTERS.map(f => (
-                  <button key={f.id}
-                    className="px-3 py-1 rounded-full text-[10px] font-bold transition-all"
-                    style={matFilter === f.id
-                      ? { background: '#201f21', border: '1px solid rgba(72,72,73,0.5)', color: '#ffffff' }
-                      : { border: '1px solid rgba(72,72,73,0.2)', color: '#adaaab' }
-                    }
-                    onMouseEnter={e => { if (matFilter !== f.id) e.currentTarget.style.background = '#201f21'; }}
-                    onMouseLeave={e => { if (matFilter !== f.id) e.currentTarget.style.background = ''; }}
-                    onClick={() => setMatFilter(f.id)}
+
+            {/* Uploaded materials grid */}
+            {uploadedMats.length > 0 && (
+              <div className="grid grid-cols-3 gap-2">
+                {uploadedMats.map(mat => (
+                  <button key={mat.id}
+                    className="relative rounded-lg overflow-hidden aspect-square border-2 transition-all"
+                    style={{ borderColor: selectedMat?.id === mat.id ? '#bd9dff' : 'transparent' }}
+                    onClick={() => setSelectedMat(mat)}
                   >
-                    {f.label}
+                    <img src={mat.thumbnail_url} alt={mat.name} className="w-full h-full object-cover" />
+                    {selectedMat?.id === mat.id && (
+                      <div className="absolute inset-0 flex items-center justify-center"
+                        style={{ background: 'rgba(189,157,255,0.3)' }}>
+                        <span className="material-symbols-outlined text-white"
+                          style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+                      </div>
+                    )}
                   </button>
                 ))}
               </div>
+            )}
 
-              {/* Search */}
-              <div className="px-4 mb-2">
-                <div className="relative flex items-center">
-                  <input
-                    className="w-full h-10 rounded-lg text-xs pr-16 pl-4 outline-none focus:ring-1"
-                    style={{
-                      background: '#000000',
-                      border: 'none',
-                      color: '#ffffff',
-                      '--tw-ring-color': '#bd9dff',
-                    }}
-                    placeholder="Search material name..."
-                    value={matSearchInput}
-                    onChange={e => setMatSearchInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') setMatSearch(matSearchInput); }}
-                  />
-                  <button
-                    className="absolute right-1 top-1 bottom-1 px-3 rounded-md text-[10px] font-bold"
-                    style={{ background: '#bd9dff', color: '#3c0089' }}
-                    onClick={() => setMatSearch(matSearchInput)}
-                  >
-                    Search
-                  </button>
+            {/* Region unclassified — ask user */}
+            {pendingRegionSelect && (
+              <div className="p-4 rounded-xl" style={{ background: 'rgba(189,157,255,0.08)', border: '1px solid rgba(189,157,255,0.3)' }}>
+                <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: '#bd9dff' }}>영역 유형 선택</p>
+                <p className="text-[11px] mb-3" style={{ color: '#adaaab' }}>영역을 자동으로 분류하지 못했습니다. 직접 선택해주세요.</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {REGION_OPTIONS.map(opt => (
+                    <button key={opt.id}
+                      className="flex flex-col items-center gap-1 p-2 rounded-lg text-[10px] font-bold transition-all"
+                      style={{ background: '#201f21', border: '1px solid rgba(72,72,73,0.3)', color: '#ffffff' }}
+                      onMouseEnter={e => e.currentTarget.style.borderColor = '#bd9dff'}
+                      onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(72,72,73,0.3)'}
+                      onClick={() => handleApply(opt.id)}>
+                      <span className="material-symbols-outlined text-base" style={{ color: '#bd9dff' }}>{opt.icon}</span>
+                      {opt.label}
+                    </button>
+                  ))}
                 </div>
               </div>
-
-              {/* Material grid */}
-              <div className="flex-1 overflow-y-auto px-4 pb-4">
-                {loadingMats ? (
-                  <div className="flex items-center justify-center h-32">
-                    <div className="w-6 h-6 rounded-full border-2 border-t-transparent animate-spin"
-                      style={{ borderColor: '#bd9dff', borderTopColor: 'transparent' }} />
-                  </div>
-                ) : displayMats.length > 0 ? (
-                  <div className="grid grid-cols-3 gap-2">
-                    {displayMats.map(mat => (
-                      <button key={mat.id}
-                        className="relative rounded-lg overflow-hidden border-2 transition-all"
-                        style={{
-                          aspectRatio: '1',
-                          borderColor: selectedMat?.id === mat.id ? '#bd9dff' : 'transparent',
-                        }}
-                        onClick={() => setSelectedMat(mat)}
-                      >
-                        {mat.thumbnail_url || mat.tile_image_url ? (
-                          <img src={mat.thumbnail_url || mat.tile_image_url} alt={mat.name}
-                            className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center"
-                            style={{ background: '#201f21' }}>
-                            <span className="material-symbols-outlined" style={{ color: '#adaaab' }}>texture</span>
-                          </div>
-                        )}
-                        {selectedMat?.id === mat.id && (
-                          <div className="absolute inset-0 flex items-center justify-center"
-                            style={{ background: 'rgba(189,157,255,0.3)' }}>
-                            <span className="material-symbols-outlined text-white"
-                              style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-                          </div>
-                        )}
-                        <div className="absolute bottom-0 left-0 right-0 p-1"
-                          style={{ background: 'linear-gradient(transparent, rgba(0,0,0,0.8))' }}>
-                          <p className="text-[9px] font-medium truncate text-white">{mat.name}</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  /* Empty state */
-                  <div className="flex flex-col items-center justify-center h-40 text-center">
-                    <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
-                      style={{ background: '#201f21' }}>
-                      <span className="material-symbols-outlined text-3xl" style={{ color: '#767576' }}>texture</span>
-                    </div>
-                    <h5 className="text-sm font-bold text-white mb-2">No materials found.</h5>
-                    <p className="text-[11px] max-w-[180px]" style={{ color: '#adaaab' }}>
-                      Try adjusting filters or upload a custom material.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </>
-          )}
+            )}
+          </div>
 
           {/* Footer */}
           <div className="p-4 flex justify-between items-center text-[10px] font-bold uppercase tracking-widest"
