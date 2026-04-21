@@ -9,6 +9,6 @@ backend/uploads/
 client/public/models/
 *.onnx
 
-# 로컬 ComfyUI 노드 ID 매핑 (개인 환경마다 다름)
-backend/comfyui_workflows/*.config.json
+# 로컬 ComfyUI 노드 ID 매핑은 mood.config.json만 버전관리
+# (mood.json 노드 ID 기준으로 고정)
 *.wasm
