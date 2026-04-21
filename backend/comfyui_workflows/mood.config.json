@@ -2,13 +2,13 @@
   "_comment": "로컬 ComfyUI 워크플로우 노드 ID 매핑. workflow_manager.py의 기본값을 오버라이드합니다.",
   "_comment2": "RunPod 배포 시에는 이 파일을 삭제하거나 기본값으로 되돌리세요.",
 
-  "source_image":     "1",
-  "reference_image":  "2",
-  "positive_prompt":  "4",
-  "negative_prompt":  "5",
+  "source_image":     "21",
+  "reference_image":  "23",
+  "positive_prompt":  "8",
+  "negative_prompt":  "9",
   "depth_controlnet": "10",
   "canny_controlnet": "13",
-  "ipadapter_loader": "14",
-  "ksampler":         "17",
-  "ipadapter":        "24"
+  "ipadapter_loader": "2",
+  "ksampler":         "12",
+  "ipadapter":        "5"
 }
